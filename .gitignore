@@ -1,0 +1,45 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# Build artifacts
+/build/
+/dist/
+/out/
+*.o
+*.elf
+*.bin
+*.hex
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# MATLAB / Octave
+*.asv
+*.m~
+slprj/
+
+# CAD / EDA (generic)
+*.autosave
+*.bak
+*.bck
+*.~*
+*.lck
+
+# Logs and temp files
+*.log
+*.cache
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
