@@ -1,4 +1,4 @@
-# megadroid
+# Megadroid
 
 **Megadroid** is an open-hardware humanoid robot project aimed at developing a **Hubo/ASIMO–class bipedal platform** that can be built, studied, and iterated on by advanced hobbyists and independent researchers, with a rigorous emphasis on **cost minimization, mechanical simplicity, and incremental capability growth**.
 
