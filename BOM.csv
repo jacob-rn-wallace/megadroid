@@ -1,0 +1,15 @@
+Subsystem,Item,Quantity,UnitCostUSD,ExtendedCostUSD,CostIncluded,Notes
+Actuation,775 Brushed DC Motor,9,18,162,Yes,Identical motor used for all actuated joints
+Actuation,20:1 Planetary Gearbox (775 compatible),9,25,225,Yes,Standardized gearbox class reused across joints
+Actuation,Secondary Belt Reduction Components,6,12,72,Yes,Used for hip pitch/roll and knee pitch joints
+Sensors,Absolute Joint Encoder,9,8,72,Yes,Joint-mounted output encoders only
+Control,Waveshare RP2350-CAN Controller,3,22,66,Yes,Left leg, right leg, torso
+Control,Raspberry Pi (Linux SBC),1,45,45,Yes,High-level control and supervision
+Power,60V to 24V DC/DC Converter (≥50A),1,85,85,Yes,Centralized power conversion
+Power,Main Fuse and Power Distribution Hardware,1,25,25,Yes,60V rail protection and wiring
+Structure,Aluminum Plate Stock (Legs + Torso),1,120,120,Yes,Twin-rail box-bulkhead construction
+Structure,Bearings, Shafts, Fasteners (Bulk),1,110,110,Yes,Shared across joints and structure
+Feet,Deformable Ball Foot Assembly,2,30,60,Yes,Passive compliance, MIT Cheetah–style
+Feet,6-DOF Force/Torque Sensor,2,0,0,No,Required mechanically but excluded from cost target
+Power,Toro 88675 Battery Pack,1,0,0,No,Excluded from cost target per SPEC
+TOTAL,,,,,,
