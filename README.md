@@ -46,7 +46,7 @@ megadroid/
 ├── README.md            # Project overview and vision
 ├── SPEC.md              # System-level specification (authoritative)
 ├── MECH.md              # Mechanical design documentation (authoritative)
-├── BOM.xlsx             # Bill of materials and cost tracking
+├── BOM.csv              # Bill of materials and cost tracking
 ├── firmware/            # Low-level control software
 ├── software/            # High-level control, tools, and simulation
 └── docs/                # Supporting documentation and notes
