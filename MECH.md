@@ -1,0 +1,239 @@
+# Megadroid — Mechanical Design (MECH)
+
+**Status:** Authoritative (MVS)  
+**Scope:** Mechanical implementation details for the Minimum Viable System  
+**Last updated:** 2026-01-17
+
+---
+
+## 1. Purpose
+
+This document defines the **authoritative mechanical design** of the Megadroid humanoid robot for the Minimum Viable System (MVS).
+
+It specifies *how* the system described in **SPEC.md** is physically realized, including joint layout, structural concepts, actuator placement, and load paths. Any mechanical implementation must conform to this document unless explicitly revised here.
+
+---
+
+## 2. Overall Mechanical Architecture
+
+### 2.1 Structural Philosophy
+
+Megadroid adopts a **mechanically conservative, inspection-friendly architecture** based on:
+- Explicit load paths
+- Double-shear joints wherever possible
+- Proximal motor placement
+- Reuse of structural and actuation patterns
+
+The robot is organized around three primary structural modules:
+- **Torso module** (houses power electronics and torso actuators)
+- **Left leg module**
+- **Right leg module**
+
+Arms and active ankles are excluded from the MVS.
+
+---
+
+## 3. Leg Architecture (MVS)
+
+### 3.1 Degrees of Freedom per Leg
+
+Each leg implements **three actuated DOF**:
+- Hip pitch
+- Hip roll
+- Knee pitch
+
+The ankle joint exists structurally but is **passive or locked** in the MVS.
+
+---
+
+## 4. Leg Structural Construction
+
+### 4.1 Twin-Rail / Box-Bulkhead Construction
+
+Each leg segment (thigh and shank) is constructed as a **stiff boxed structure** using **twin longitudinal side rails** connected by **transverse bulkheads**, rather than a single tube or cosmetic shell.
+
+- Rails are flat plates (e.g., aluminum or steel) arranged in parallel
+- Bulkheads act as:
+  - Structural diaphragms
+  - Shaft and bearing mounting points
+  - Load-transfer elements between rails
+
+This architecture provides:
+- High bending stiffness
+- Good torsional rigidity when skinned
+- Tolerance to fabrication variability
+- Clear, inspectable load paths
+
+Where beneficial, thin cover plates or printed skins may be added to form a closed box section and improve torsional stiffness.
+
+---
+
+### 4.2 Thigh Segment
+
+- Length (hip → knee): **300 mm** (center-to-center)
+- Contains:
+  - Hip pitch output shaft
+  - Hip roll output shaft
+  - Proximal portion of knee actuator (if applicable)
+
+Motors are mounted as proximally as possible to reduce distal inertia.
+
+---
+
+### 4.3 Shank Segment
+
+- Length (knee → ankle): **300 mm** (center-to-center)
+- Contains:
+  - Knee pitch output shaft
+  - Passive ankle structure
+
+No active ankle actuation is present in the MVS.
+
+---
+
+## 5. Joint Design
+
+### 5.1 General Joint Requirements
+
+All joints must:
+- Use **joint-mounted absolute encoders**
+- Measure true output angle
+- Be serviceable and inspectable
+- Carry primary loads in double shear
+
+Motor-mounted encoders are explicitly disallowed.
+
+---
+
+### 5.2 Hip Joint Assembly
+
+The hip consists of **two orthogonal rotational axes**:
+
+- **Hip roll** (lateral balance)
+- **Hip pitch** (sagittal plane motion)
+
+Key characteristics:
+- Motors mounted proximally (pelvis or upper thigh)
+- Gearboxes coupled directly to joint output shafts
+- Bearings sized for combined radial and moment loads
+
+Hip yaw is structurally present but **locked** in the MVS.
+
+---
+
+### 5.3 Knee Joint Assembly
+
+- Single-axis revolute joint (pitch)
+- Actuator mounted proximally in the thigh
+- Torque transmitted across the joint via a rigid shaft
+- Bearings sized primarily for bending loads from stance phase
+
+---
+
+### 5.4 Ankle and Foot Interface
+
+#### 5.4.1 Ankle Joint
+
+- Structurally present
+- Passive or locked
+- Provides a mounting interface for the foot and force/torque sensor
+
+#### 5.4.2 Foot
+
+- **Deformable ball foot**
+- Passive compliance only
+- No active articulation
+
+---
+
+## 6. End-of-Limb Force/Torque Sensor Integration
+
+- One **6-DOF force/torque sensor per foot**
+- Sensor form factor: cylindrical, Ø107 mm × 56 mm
+- Mounted between ankle structure and foot
+- Structural design must:
+  - Avoid imposing bending moments on the sensor body
+  - Transfer loads axially through the sensor
+
+F/T sensors are mechanically required but **excluded from cost accounting**.
+
+---
+
+## 7. Actuator Integration
+
+### 7.1 Motors
+
+- All actuators use **775 brushed DC motors**
+- Motors mounted proximally where feasible
+- Motors mechanically isolated from bending loads
+
+---
+
+### 7.2 Gearboxes
+
+- Modular gearbox designs reused across joints
+- Only a small number of gearbox ratios permitted
+- No joint-specific one-off gearbox designs
+
+Exact gearbox ratios and part selections are documented in **BOM.xlsx**.
+
+---
+
+## 8. Torso Mechanical Design
+
+### 8.1 Degrees of Freedom
+
+The torso implements **three actuated DOF**:
+- Pitch
+- Roll
+- Yaw
+
+---
+
+### 8.2 Structural Role
+
+The torso structure:
+- Serves as the primary load path between legs
+- Houses power electronics and controllers
+- Provides mounting for torso actuators
+
+The torso must maintain stiffness sufficient to prevent coupling between leg motions through structural flex.
+
+---
+
+## 9. Materials and Fabrication
+
+### 9.1 Preferred Materials
+
+- Aluminum plate for primary structure
+- Steel shafts and fasteners
+- Polymer or printed parts only where loads are low
+
+Pultruded carbon tubes are explicitly excluded from the MVS.
+
+---
+
+### 9.2 Fabrication Philosophy
+
+Designs should favor:
+- Flat plate machining or waterjet
+- Off-the-shelf bearings and fasteners
+- Minimal custom machining
+- Tolerance-insensitive assemblies
+
+---
+
+## 10. Mechanical Constraints
+
+- Must fit through standard residential doorways
+- Must tolerate quasi-static stair climbing loads
+- Must support conservative gait speeds
+
+---
+
+## 11. Authority
+
+This document is **authoritative** for the mechanical design of the Megadroid MVS.
+
+Any mechanical change that violates this document must be accompanied by an explicit revision here and corresponding updates to **SPEC.md**.
+
