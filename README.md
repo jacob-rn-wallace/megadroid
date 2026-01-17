@@ -41,13 +41,15 @@ This repository contains the canonical design documents for Megadroid:
 
 ```
 megadroid/
-├── README.md        # Project overview and vision
-├── SPEC.md          # System-level specification (authoritative)
-├── MECH.md          # Mechanical design documentation (authoritative)
-├── BOM.xlsx         # Bill of materials and cost tracking
-├── firmware/        # Low-level control software
-├── software/        # High-level control, tools, and simulation
-└── docs/            # Supporting documentation and notes
+├── LICENSE              # Apache License 2.0 (software)
+├── LICENSE-HARDWARE     # CERN-OHL-S v2 (hardware)
+├── README.md            # Project overview and vision
+├── SPEC.md              # System-level specification (authoritative)
+├── MECH.md              # Mechanical design documentation (authoritative)
+├── BOM.xlsx             # Bill of materials and cost tracking
+├── firmware/            # Low-level control software
+├── software/            # High-level control, tools, and simulation
+└── docs/                # Supporting documentation and notes
 ```
 
 **SPEC.md and MECH.md are authoritative.** Any design detail that matters should live there, not in this README.
