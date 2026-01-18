@@ -44,9 +44,13 @@ The MVS is intended to:
 
 **Total actuated DOF:** **9**
 
-### 3.2 Non-Actuated / Passive Joints (MVS)
-- Ankle pitch and roll (structurally present, locked or passive)
-- Arms (not installed in MVS)
+### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
+
+The robot supports modular lower-leg assemblies. The MVS uses a simplified calf/foot module that omits active ankle joints to reduce cost and complexity. A future module may add actuated ankles and alternate feet without requiring redesign of the pelvis, thigh, knee, or control stack.
+
+### 3.3 Non-Actuated / Out-of-Scope (MVS)
+- Ankles: not actuated in the MVS; implemented via a simplified calf/foot module (no ankle joints).
+- Arms: not installed in the MVS.
 
 ---
 
@@ -62,8 +66,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 
 ## 5. Feet and Ground Contact
 
-- Foot type: **Deformable ball foot**
-- Inspiration: MIT Cheetah Mini
+- Foot type (MVS module): Deformable ball foot (MIT Cheetah Mini–inspired)
 - Function:
   - Passive compliance
   - Shock absorption
@@ -82,12 +85,15 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - All actuators use **775 brushed DC motors**
 - Nominal motor voltage: **24 V**
 - Motors mounted as proximally as possible to minimize distal inertia
+- Total motor count (MVS): **9**
 
 ### 6.2 Gear Reduction
 - Standardized gearbox classes reused across joints
 - No joint uses a bespoke, one-off gearbox design
 - Exact ratios are implementation details documented in MECH.md
-
+- All belt-driven transmission stages use **HTD 5M timing belts, 15 mm width**.
+- Belt pitch and width are standardized across all joints to minimize part count,
+  simplify sourcing, and improve serviceability.
 ---
 
 ## 7. Sensors
@@ -168,14 +174,14 @@ Stability and hardware protection are enforced through:
 - Explicit exclusions:
   - Battery
   - End-of-limb force/torque sensors
-- Cost tracking is maintained in `BOM.xlsx`
+- Cost tracking is maintained in `BOM.csv`
 
 ---
 
 ## 12. Explicit Exclusions (MVS)
 
 The following are intentionally excluded from the MVS:
-- Active ankle actuation
+- Active ankle actuation (MVS uses a simplified calf/foot module without ankle joints)
 - Arms or manipulators
 - Torque or impedance control
 - Motor current telemetry

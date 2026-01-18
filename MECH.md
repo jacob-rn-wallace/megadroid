@@ -10,7 +10,7 @@
 
 This document defines the **authoritative mechanical design** of the Megadroid humanoid robot for the Minimum Viable System (MVS).
 
-It specifies *how* the system described in **SPEC.md** is physically realized, including joint layout, structural concepts, actuator placement, and load paths. Any mechanical implementation must conform to this document unless explicitly revised here.
+It specifies _how_ the system described in **SPEC.md** is physically realized, including joint layout, structural concepts, actuator placement, and load paths. Any mechanical implementation must conform to this document unless explicitly revised here.
 
 ---
 
@@ -42,7 +42,7 @@ Each leg implements **three actuated DOF**:
 - Hip roll
 - Knee pitch
 
-The ankle joint exists structurally but is **passive or locked** in the MVS.
+The MVS uses a simplified lower-leg + foot module that omits actuated ankles. A future swappable module may add actuated ankles without redesigning the pelvis, thigh, or knee.
 
 ---
 
@@ -57,6 +57,7 @@ Each leg segment (thigh and shank) is constructed as a **stiff boxed structure**
   - Structural diaphragms
   - Shaft and bearing mounting points
   - Load-transfer elements between rails
+- Inner-face spacing between rails: **100 mm** (locked)
 
 This architecture provides:
 - High bending stiffness
@@ -86,8 +87,8 @@ Motors are mounted as proximally as possible to reduce distal inertia.
 - Contains:
   - Knee pitch output shaft
   - Passive ankle structure
-
-No active ankle actuation is present in the MVS.
+- Lower-leg module terminates in a foot interface for the F/T sensor + ball foot.
+- MVS lower-leg module omits actuated ankle joints; ankle actuation is reserved for post-MVS modular upgrades.
 
 ---
 
@@ -119,6 +120,8 @@ Key characteristics:
 
 Hip yaw is structurally present but **locked** in the MVS.
 
+Hip joint output shafts use **Ø12 mm** shafting (locked) to standardize bearings, hubs, and pulley bores.
+
 ---
 
 ### 5.3 Knee Joint Assembly
@@ -130,19 +133,11 @@ Hip yaw is structurally present but **locked** in the MVS.
 
 ---
 
-### 5.4 Ankle and Foot Interface
+### 5.4 Lower-Leg Module and Foot Interface (MVS)
 
-#### 5.4.1 Ankle Joint
+The MVS uses a simplified lower-leg module that does not include actuated ankles. The module provides a rigid, serviceable interface for mounting the end-of-limb F/T sensor and the deformable ball foot.
 
-- Structurally present
-- Passive or locked
-- Provides a mounting interface for the foot and force/torque sensor
-
-#### 5.4.2 Foot
-
-- **Deformable ball foot**
-- Passive compliance only
-- No active articulation
+A future lower-leg module may add actuated ankle pitch/roll and alternate feet while preserving the same knee-to-lower-leg mechanical interface and joint encoder strategy.
 
 ---
 
@@ -175,7 +170,13 @@ F/T sensors are mechanically required but **excluded from cost accounting**.
 - Only a small number of gearbox ratios permitted
 - No joint-specific one-off gearbox designs
 
-Exact gearbox ratios and part selections are documented in **BOM.xlsx**.
+Exact gearbox ratios and part selections are documented in `BOM.csv`.
+
+---
+
+### 7.3 Belt Reduction Standard (Locked)
+
+All belt reduction stages in Megadroid use **HTD 5M timing belts, 15 mm width**. Belt pitch/width are standardized across joints to minimize unique parts and simplify sourcing and spares.
 
 ---
 
