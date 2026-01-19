@@ -32,17 +32,22 @@ The MVS is intended to:
 
 ### 3.1 Actuated Degrees of Freedom (MVS)
 
+The following actuated degrees of freedom are derived directly from the
+authoritative joint model defined in `design/joints.yaml`.
+
+<!-- BEGIN AUTO-GENERATED: DOF -->
 **Legs (×2):**
-- Hip pitch
-- Hip roll
-- Knee pitch
+- Hip Pitch (pitch)
+- Hip Roll (roll)
+- Knee Pitch (pitch)
 
 **Torso:**
-- Pitch
-- Roll
-- Yaw
+- Torso Pitch (pitch)
+- Torso Roll (roll)
+- Torso Yaw (yaw)
 
 **Total actuated DOF:** **9**
+<!-- END AUTO-GENERATED: DOF -->
 
 ### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
 
