@@ -2,7 +2,7 @@
 
 **Status:** Authoritative  
 **Scope:** Minimum Viable System (MVS)  
-**Last updated:** 2026-01-17
+**Last updated:** 2026-01-19
 
 ---
 
@@ -90,7 +90,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 ### 6.2 Gear Reduction
 - Standardized gearbox classes reused across joints
 - No joint uses a bespoke, one-off gearbox design
-- Exact ratios are implementation details documented in MECH.md
+- Exact ratios are implementation details documented in `MECH.md`
 - All belt-driven transmission stages use **HTD 5M timing belts, 15 mm width**.
 - Belt pitch and width are standardized across all joints to minimize part count,
   simplify sourcing, and improve serviceability.
@@ -200,11 +200,116 @@ Megadroid prioritizes:
 - Incremental extensibility without redesign
 
 ---
+## 15. Change Control
 
-## 14. Authority
+### 15.1 Purpose
+
+This section defines the **formal process by which changes to the Megadroid system specification are proposed, reviewed, and adopted**.
+
+The intent is to:
+- Prevent uncontrolled design drift
+- Maintain consistency across `SPEC.md`, `MECH.md`, and `BOM.csv`
+- Ensure that all changes are intentional, documented, and traceable
+
+This process is intentionally lightweight and optimized for a small, fast-moving project.
+
+### 15.2 Change Authority
+
+- **`SPEC.md` is the highest authority** for the Megadroid MVS.
+- Any change that alters:
+    - system capabilities,
+    - degrees of freedom,
+    - architectural assumptions,
+    - control philosophy,
+    - or cost constraints
+      **must be reflected in `SPEC.md`.**
+
+`MECH.md` and `BOM.csv` **must not contradict `SPEC.md`**.
+
+### 15.3 Changes Requiring a SPEC Revision
+
+A modification **requires a `SPEC.md` update** if it affects any of the following:
+- Actuated or passive degrees of freedom
+- Joint limits or kinematic conventions
+- Control mode (e.g., position vs torque)
+- Power architecture or voltage levels
+- Sensor strategy (e.g., encoder placement, sensing modality)
+- Modularity assumptions (e.g., swappable lower-leg modules)
+- Explicit inclusions or exclusions in the MVS
+- Cost target or cost exclusions
+
+Pure implementation details that do **not** affect these constraints belong in `MECH.md` or `BOM.csv` only.
+
+### 15.4 Change Workflow
+
+All design changes follow this sequence:
+
+1. Proposal
+   - Identify the motivation for change (e.g., feasibility, cost, packaging, precedent)
+   - Articulate the proposed modification clearly
+2. Evaluation
+   - Assess impact on:
+       - mechanical design
+       - control strategy
+       - cost target
+       - future extensibility
+   - Compare against relevant prior art where applicable
+3. Specification Update
+	- Modify `SPEC.md` to reflect the new or revised constraint.
+    - Changes must be explicit and unambiguous.
+4. Propagation
+	- Update `MECH.md` and/or `BOM.csv` as required to conform to the new SPEC.
+    - No document may remain in conflict with `SPEC.md`.
+5. Commit
+	- Commit changes to the repository with a clear message describing:
+        - what changed
+        - why it changed
+        - what assumptions were updated or removed
+   
+### 15.5 Locked vs Revisable Decisions
+
+Design decisions fall into two categories:
+
+**Locked decisions**
+- Explicitly stated as "locked" in `SPEC.md` or `MECH.md`
+- Not revised without strong justification
+- Changes require a SPEC revision and a commit explaining the rationale
+
+**Revisable decisions**
+- Identified as implementation details
+- May evolve without changing `SPEC.md`
+- Must remain compliant with all locked constraints
+
+When in doubt, treat a decision as **locked**.
+
+### 15.6 Versioning and Tags
+
+- Git tags represent **stable design plateaus**, not incremental progress.
+- A tag should only be created when:
+    - `SPEC.md`, `MECH.md`, and `BOM.csv` and internally consistent
+    - No known contradictions exist between documents
+
+Tags serve as historical reference points and rollback anchors.
+
+### 15.7 Conversational and External Inputs
+
+Design discussions, simulations, analyses, and external references (including LLM-assisted reasoning) are **non-authoritative inputs**.
+
+A design decision becomes authoritative **only when it is written into `SPEC.md` and committed to the repository**.
+
+### 15.8 Guiding Principle
+
+> If a decision matters, it must be written down.
+> If it is written down, it must be respected.
+
+This change control process exists to ensure that Megadroid evolves deliberately, not accidentally.
+
+---
+
+## 16. Authority
 
 This document is **authoritative**.
 
 All mechanical, electrical, and software implementations must conform to this specification unless a revision is made here.
 
-Detailed mechanical implementation is defined in **MECH.md**.
+Detailed mechanical implementation is defined in `MECH.md`.
