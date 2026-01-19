@@ -1,0 +1,93 @@
+joints:
+  hip_pitch:
+    type: revolute
+    axis: pitch
+    location: hip
+    actuated: true
+    variants:
+      MVS: true
+      FULL: true
+    angle_reference: straight_leg
+    limits_deg:
+      min: -30
+      max: 110
+
+  hip_roll:
+    type: revolute
+    axis: roll
+    location: hip
+    actuated: true
+    variants:
+      MVS: true
+      FULL: true
+    limits_deg:
+      min: -30
+      max: 30
+
+  knee_pitch:
+    type: revolute
+    axis: pitch
+    location: knee
+    actuated: true
+    variants:
+      MVS: true
+      FULL: true
+    angle_reference: straight_leg
+    limits_deg:
+      min: 0
+      max: 140
+    nominal_stand_deg: 12
+
+  ankle_pitch:
+    type: revolute
+    axis: pitch
+    location: ankle
+    actuated: false
+    variants:
+      MVS: false
+      FULL: true
+
+  ankle_roll:
+    type: revolute
+    axis: roll
+    location: ankle
+    actuated: false
+    variants:
+      MVS: false
+      FULL: true
+             
+  torso_pitch:
+    type: revolute
+    axis: pitch
+    location: torso
+    actuated: true
+    variants:
+      MVS: true
+      FULL: true
+    limits_deg:
+      min: -30
+      max: 30
+
+  torso_roll:
+    type: revolute
+    axis: roll
+    location: torso
+    actuated: true
+    variants:
+      MVS: true
+      FULL: true
+    limits_deg:
+      min: -20
+      max: 20
+
+  torso_yaw:
+    type: revolute
+    axis: yaw
+    location: torso
+    actuated: true
+    variants:
+      MVS: true
+      FULL: true
+    limits_deg:
+      min: -45
+      max: 45
