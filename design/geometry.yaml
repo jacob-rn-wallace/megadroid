@@ -1,3 +1,57 @@
-# Megadroid authoritative design parameters
-# This file is a single source of truth.
-# Do not duplicate values in markdown documents.
+# Megadroid Authoritative Geometry Parameters
+# Scope: Minimum Viable System (MVS)
+# All dimensions in millimeters unless otherwise stated
+
+robot:
+  scale:
+    class: "Hubo / ASIMO sized humanoid"
+    doorway_compatible: true
+
+legs:
+  segments:
+    thigh:
+      length_mm: 300
+    shank:
+      length_mm: 300
+    ankle_to_sole_offset_mm: 80
+
+  structure:
+    rail_spacing_inner_mm: 100
+    construction: "twin-rail box-bulkhead"
+
+  joints:
+    hip:
+      dof:
+        - pitch
+        - roll
+      yaw_present: true
+      yaw_actuated_mvs: false
+      shaft_diameter_mm: 12
+
+    knee:
+      dof:
+        - pitch
+
+    ankle:
+      actuated_mvs: false
+      module_type: "simplified calf/foot"
+      future_upgrade_supported: true
+
+feet:
+  type: "deformable ball foot"
+  inspiration: "MIT Cheetah Mini"
+  ft_sensor:
+    diameter_mm: 107
+    height_mm: 56
+    load_path: "axial_only"
+
+torso:
+  dof:
+    - pitch
+    - roll
+    - yaw
+
+materials:
+  primary_structure: "6061-T6 aluminum plate"
+  shafts: "steel"
+  fasteners: "steel"
