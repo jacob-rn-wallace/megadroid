@@ -64,9 +64,9 @@ The robot supports modular lower-leg assemblies. The MVS uses a simplified calf/
 
 ## 4. Anthropometrics
 
-- Thigh length (hip → knee): **300 mm**
-- Shin length (knee → ankle): **300 mm**
-- Ankle-to-sole offset: **80 mm**
+- Thigh length (hip → knee): defined in `design/geometry.yaml`
+- Shin length (knee → ankle): defined in `design/geometry.yaml`
+- Ankle-to-sole offset: defined in `design/geometry.yaml`
 
 Overall body proportions are humanoid and sized to comfortably navigate residential environments (e.g., standard doorways, stairs).
 
@@ -82,7 +82,8 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 
 ### 5.1 End-of-Limb Sensing
 - Each foot includes a **6-DOF force/torque sensor**
-- Sensor form factor: cylindrical, Ø107 mm × 56 mm
+- Sensor form factor: defined in `design/geometry.yaml`
+- Sensor geometry is treated as a hard mechanical constraint
 - F/T sensors are **excluded from MVS cost accounting**
 
 ---
@@ -99,7 +100,8 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - Standardized gearbox classes reused across joints
 - No joint uses a bespoke, one-off gearbox design
 - Exact ratios are implementation details documented in `MECH.md`
-- All belt-driven transmission stages use **HTD 5M timing belts, 15 mm width**.
+- All belt-driven transmission stages use HTD 5M timing belts with standardized width
+  as defined in `design/geometry.yaml`.
 - Belt pitch and width are standardized across all joints to minimize part count,
   simplify sourcing, and improve serviceability.
 ---
