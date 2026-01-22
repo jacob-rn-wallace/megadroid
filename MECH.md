@@ -2,7 +2,10 @@
 
 **Status:** Authoritative (MVS)  
 **Scope:** Mechanical implementation details for the Minimum Viable System  
-**Last updated:** 2026-01-17
+**Last updated:** 2026-01-21
+
+> **Note:** This document is a derived view of authoritative mechanical design data
+> defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
 
 ---
 
@@ -10,7 +13,7 @@
 
 This document defines the **authoritative mechanical design** of the Megadroid humanoid robot for the Minimum Viable System (MVS).
 
-It specifies _how_ the system described in **SPEC.md** is physically realized, including joint layout, structural concepts, actuator placement, and load paths. Any mechanical implementation must conform to this document unless explicitly revised here.
+It specifies _how_ the system described in `SPEC.md` is physically realized, including joint layout, structural concepts, actuator placement, and load paths. Any mechanical implementation must conform to this document unless explicitly revised here.
 
 ---
 
@@ -57,7 +60,7 @@ Each leg segment (thigh and shank) is constructed as a **stiff boxed structure**
   - Structural diaphragms
   - Shaft and bearing mounting points
   - Load-transfer elements between rails
-- Inner-face spacing between rails: **100 mm** (locked)
+- Inner-face spacing between rails: defined in `design/geometry.yaml` (locked)
 
 This architecture provides:
 - High bending stiffness
@@ -71,7 +74,7 @@ Where beneficial, thin cover plates or printed skins may be added to form a clos
 
 ### 4.2 Thigh Segment
 
-- Length (hip → knee): **300 mm** (center-to-center)
+- Length (hip → knee): defined in `design/geometry.yaml`
 - Contains:
   - Hip pitch output shaft
   - Hip roll output shaft
@@ -83,7 +86,7 @@ Motors are mounted as proximally as possible to reduce distal inertia.
 
 ### 4.3 Shank Segment
 
-- Length (knee → ankle): **300 mm** (center-to-center)
+- Length (knee → ankle): defined in `design/geometry.yaml`
 - Contains:
   - Knee pitch output shaft
   - Passive ankle structure
@@ -120,7 +123,7 @@ Key characteristics:
 
 Hip yaw is structurally present but **locked** in the MVS.
 
-Hip joint output shafts use **Ø12 mm** shafting (locked) to standardize bearings, hubs, and pulley bores.
+Hip joint output shafts use standardized shafting as defined in `design/geometry.yaml` (locked) to standardize bearings, hubs, and pulley bores.
 
 ---
 
@@ -144,7 +147,7 @@ A future lower-leg module may add actuated ankle pitch/roll and alternate feet w
 ## 6. End-of-Limb Force/Torque Sensor Integration
 
 - One **6-DOF force/torque sensor per foot**
-- Sensor form factor: cylindrical, Ø107 mm × 56 mm
+- Sensor form factor: defined in `design/geometry.yaml`
 - Mounted between ankle structure and foot
 - Structural design must:
   - Avoid imposing bending moments on the sensor body
@@ -176,7 +179,7 @@ Exact gearbox ratios and part selections are documented in `BOM.csv`.
 
 ### 7.3 Belt Reduction Standard (Locked)
 
-All belt reduction stages in Megadroid use **HTD 5M timing belts, 15 mm width**. Belt pitch/width are standardized across joints to minimize unique parts and simplify sourcing and spares.
+All belt reduction stages in Megadroid use HTD 5M timing belts with standardized width as defined in `design/geometry.yaml`.
 
 ---
 
@@ -236,5 +239,5 @@ Designs should favor:
 
 This document is **authoritative** for the mechanical design of the Megadroid MVS.
 
-Any mechanical change that violates this document must be accompanied by an explicit revision here and corresponding updates to **SPEC.md**.
+Any mechanical change that violates this document must be accompanied by an explicit revision here and corresponding updates to `SPEC.md`.
 
