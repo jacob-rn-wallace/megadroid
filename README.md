@@ -63,7 +63,7 @@ megadroid/
 ```
 <!-- END AUTO-GENERATED: REPO-STRUCTURE -->
 
- **Authoritative design data lives in `design/\*.yaml`.**
+ **Authoritative design data lives in `design/*.yaml`.**
 
  `SPEC.md` and `MECH.md` are _derived views_ of that data, intended for human readability and review. Any design detail that matters must be represented in the authoritative YAML layer and propagated via the rehydration process.
 
@@ -84,7 +84,7 @@ Unless otherwise noted, files are licensed according to the category they fall u
 
 Megadroid is under active development. The architecture and implementation are expected to evolve as the project progresses.
 
-For current design decisions, constraints, and locked assumptions, refer to **SPEC.md** and **MECH.md**.
+For current design decisions, constraints, and locked assumptions, refer to **`SPEC.md`** and **`MECH.md`**.
 
 ---
 
