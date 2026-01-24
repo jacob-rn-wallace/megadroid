@@ -4,7 +4,6 @@ type: specification
 description: System-level specification defining design intent, architectural constraints, and locked assumptions for the Megadroid Minimum Viable System.
 authority: authoritative
 -->
----
 # Megadroid — System Specification (SPEC)
 
 **Status:** Authoritative  

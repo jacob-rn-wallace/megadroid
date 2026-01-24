@@ -4,7 +4,6 @@ type: mechanical-design
 description: Mechanical implementation details for the Megadroid MVS, including joint layout, structural concepts, actuator placement, and load paths.
 authority: authoritative
 -->
----
 # Megadroid — Mechanical Design (MECH)
 
 **Status:** Authoritative (MVS)  
