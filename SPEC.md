@@ -210,6 +210,7 @@ Megadroid prioritizes:
 - Incremental extensibility without redesign
 
 ---
+
 ## 15. Change Control
 
 ### 15.1 Purpose
