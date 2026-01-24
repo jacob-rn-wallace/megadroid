@@ -1,2 +1,7 @@
-description: Authoritative design parameters for Megadroid (single source of truth)
-authoritative: true
+name: design
+type: directory
+description: >
+  Authoritative design parameter definitions for Megadroid, including joints,
+  geometry, and other machine-readable constraints. Files in this directory
+  serve as the single source of truth for system configuration.
+authority: authoritative

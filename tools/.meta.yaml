@@ -1,2 +1,6 @@
-description: Validation, rehydration, and consistency enforcement scripts
-authoritative: false
+name: tools
+type: directory
+description: >
+  Validation, consistency-checking, and rehydration scripts that enforce design
+  constraints and keep derived documents synchronized with authoritative sources.
+authority: tooling

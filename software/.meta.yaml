@@ -1,2 +1,6 @@
-description: High-level control, planning, and tooling software
-authoritative: false
+name: software
+type: directory
+description: >
+  High-level control software, gait planning, supervisory logic, and development
+  tools, typically running on a Linux SBC such as a Raspberry Pi.
+authority: implementation

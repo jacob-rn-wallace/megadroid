@@ -1,2 +1,6 @@
-description: Supporting documentation and non-authoritative notes
-authoritative: false
+name: docs
+type: directory
+description: >
+  Supporting documentation, background notes, references, and non-authoritative
+  explanatory material related to the Megadroid project.
+authority: supporting
