@@ -1,0 +1,214 @@
+# Megadroid — System Specification (SPEC)
+
+**Status:** Authoritative  
+**Scope:** Minimum Viable System (MVS)  
+**Last updated:** {{ meta.last_updated }}
+
+> **Note:** This document is a derived view of authoritative design data
+> defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
+
+---
+
+## 1. Purpose
+
+This document defines the **authoritative system-level specification** for the Megadroid humanoid robot project.
+
+It captures **design intent, architectural constraints, and locked assumptions** for the Minimum Viable System (MVS). All implementation details must conform to this specification unless explicitly revised here.
+
+---
+
+## 2. Project Goals
+
+### 2.1 Ultimate Goal
+To develop a **fully featured bipedal humanoid robot** with actuated legs, arms, and torso that can be built and iterated on by non-institutional builders at a fraction of the cost of traditional research humanoids.
+
+### 2.2 Minimum Viable System (MVS) Goals
+The MVS is intended to:
+- Walk upright on flat ground
+- Ascend and descend residential stairs using conservative, quasi-static gaits
+- Maintain whole-body balance using limited actuation and software constraints
+- Serve as a mechanically and electrically conservative foundation for future expansion
+
+---
+
+## 3. System Overview
+
+### 3.1 Actuated Degrees of Freedom (MVS)
+
+The following actuated degrees of freedom are derived directly from the
+authoritative joint model defined in `design/joints.yaml`.
+
+<!-- BEGIN AUTO-GENERATED: DOF -->
+**Legs (×2):**
+{% for joint in joints.legs %}
+- {{ joint.name }} ({{ joint.axis }})
+{% endfor %}
+
+**Torso:**
+{% for joint in joints.torso %}
+- {{ joint.name }} ({{ joint.axis }})
+{% endfor %}
+
+**Total actuated DOF:** **{{ dof.total }}**
+<!-- END AUTO-GENERATED: DOF -->
+
+### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
+
+The robot supports modular lower-leg assemblies. The MVS uses a simplified calf/foot module that omits active ankle joints to reduce cost and complexity. A future module may add actuated ankles and alternate feet without requiring redesign of the pelvis, thigh, knee, or control stack.
+
+### 3.3 Non-Actuated / Out-of-Scope (MVS)
+- Ankles: not actuated in the MVS; implemented via a simplified calf/foot module (no ankle joints).
+- Arms: not installed in the MVS.
+
+---
+
+## 4. Anthropometrics
+
+- Thigh length (hip → knee): defined in `design/geometry.yaml`
+- Shin length (knee → ankle): defined in `design/geometry.yaml`
+- Ankle-to-sole offset: defined in `design/geometry.yaml`
+
+Overall body proportions are humanoid and sized to comfortably navigate residential environments (e.g., standard doorways, stairs).
+
+---
+
+## 5. Feet and Ground Contact
+
+- Foot type (MVS module): Deformable ball foot (MIT Cheetah Mini–inspired)
+- Function:
+  - Passive compliance
+  - Shock absorption
+  - Tolerance of foot placement errors
+
+### 5.1 End-of-Limb Sensing
+- Each foot includes a **6-DOF force/torque sensor**
+- Sensor form factor: defined in `design/geometry.yaml`
+- Sensor geometry is treated as a hard mechanical constraint
+- F/T sensors are **excluded from MVS cost accounting**
+
+---
+
+## 6. Actuation
+
+### 6.1 Motors
+- All actuators use **{{ actuation.motor_model }}**
+- Nominal motor voltage: **{{ actuation.motor_voltage }} V**
+- Motors mounted as proximally as possible to minimize distal inertia
+- Total motor count (MVS): **{{ actuation.motor_count_mvs }}**
+
+### 6.2 Gear Reduction
+- Standardized gearbox classes reused across joints
+- No joint uses a bespoke, one-off gearbox design
+- Exact ratios are implementation details documented in `MECH.md`
+- All belt-driven transmission stages use HTD 5M timing belts with standardized width
+  as defined in `design/geometry.yaml`.
+- Belt pitch and width are standardized across all joints to minimize part count,
+  simplify sourcing, and improve serviceability.
+---
+
+## 7. Sensors
+
+### 7.1 Joint Position Sensing
+- **Joint-mounted absolute encoders only**
+- Encoders measure **true joint output angle**
+- No motor-mounted encoders are permitted
+
+### 7.2 Motor Sensing
+- No motor current sensing
+- No motor-side velocity sensing
+
+---
+
+## 8. Control Architecture
+
+### 8.1 Control Mode
+- **Position-only control**
+- No torque control
+- No impedance control
+
+### 8.2 Software Constraints
+Stability and hardware protection are enforced through:
+- Joint velocity limits
+- Joint acceleration limits
+- Gait timing constraints
+- Brownout-aware behavior
+
+---
+
+## 9. Electrical Power System
+
+### 9.1 Battery (Excluded from Cost Target)
+- Model: **{{ power.battery.model }}**
+- Nominal voltage: **{{ power.battery.voltage }} V**
+- Capacity: **{{ power.battery.capacity_ah }} Ah**
+- Energy: **{{ power.battery.energy_wh }} Wh**
+
+### 9.2 Power Distribution
+- Single central DC/DC converter
+- Conversion: **{{ power.bus.input_voltage }} V → {{ power.bus.output_voltage }} V**
+- Continuous current capability: ≥ **{{ power.bus.current_a }} A**
+- 24 V bus distributed to all motor drivers
+
+### 9.3 Protection Philosophy
+- Hardware current limiting at motor drivers
+- Single main fuse on 60 V rail
+- No per-motor DC/DC converters
+
+---
+
+## 10. Control Hardware Stack
+
+### 10.1 High-Level Control
+- **Raspberry Pi (Linux SBC)**
+- Responsibilities:
+  - Gait state machine
+  - Trajectory generation
+  - Supervisory control
+  - Logging and debugging
+
+### 10.2 Real-Time Control
+- **3 × Waveshare RP2350-CAN boards**
+  - Left leg controller
+  - Right leg controller
+  - Torso controller
+
+### 10.3 Communications
+- CAN bus
+- Nominal bitrate: **500 kbps**
+
+---
+
+## 11. Cost Constraints
+
+- **Target total system cost:** < **$1000 USD**
+- Explicit exclusions:
+  - Battery
+  - End-of-limb force/torque sensors
+- Cost tracking is maintained in `BOM.csv`
+
+---
+
+## 12. Explicit Exclusions (MVS)
+
+The following are intentionally excluded from the MVS:
+- Active ankle actuation (MVS uses a simplified calf/foot module without ankle joints)
+- Arms or manipulators
+- Torque or impedance control
+- Motor current telemetry
+- High-bandwidth force feedback loops
+- Aesthetic-driven enclosure geometry
+
+---
+
+## 13. Design Philosophy
+
+Megadroid prioritizes:
+- Mechanical conservatism
+- Electrical simplicity
+- Software-enforced safety and stability
+- Clear load paths and inspectable structures
+- Incremental extensibility without redesign
+
+---
+
+{{ change_control }}
