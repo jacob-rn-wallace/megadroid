@@ -2,9 +2,9 @@
 
 **Status:** Authoritative (MVS)  
 **Scope:** Mechanical implementation details for the Minimum Viable System  
-**Last updated:** 2026-01-21
+**Last updated:** 2026-01-23
 
-> **Note:** This document is a derived view of authoritative mechanical design data
+> **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
 
 ---
@@ -240,4 +240,3 @@ Designs should favor:
 This document is **authoritative** for the mechanical design of the Megadroid MVS.
 
 Any mechanical change that violates this document must be accompanied by an explicit revision here and corresponding updates to `SPEC.md`.
-
