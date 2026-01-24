@@ -1,99 +1,135 @@
 #!/usr/bin/env python3
 
+import re
 import yaml
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-README = ROOT / "README.md"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+README_PATH = REPO_ROOT / "README.md"
 
-START = "<!-- BEGIN AUTO-GENERATED: REPO-STRUCTURE -->"
-END   = "<!-- END AUTO-GENERATED: REPO-STRUCTURE -->"
+BEGIN = "<!-- BEGIN AUTO-GENERATED: REPO-STRUCTURE -->"
+END = "<!-- END AUTO-GENERATED: REPO-STRUCTURE -->"
 
+LICENSE_MAP = {
+    "LICENSE": "Apache License 2.0 (software)",
+    "LICENSE.txt": "Apache License 2.0 (software)",
+    "LICENSE-HARDWARE": "CERN-OHL-S v2 (hardware)",
+    "LICENSE-HARDWARE.txt": "CERN-OHL-S v2 (hardware)",
+}
 
-def load_yaml(path: Path):
-    with open(path, "r") as f:
+# ---------- Metadata loaders ----------
+
+def load_dir_meta(path: Path):
+    meta = path / ".meta.yaml"
+    if not meta.exists():
+        return None
+    with open(meta, "r") as f:
         return yaml.safe_load(f)
 
 
-def crawl():
+def load_file_meta(path: Path):
     """
-    Returns:
-      files: list of (name, metadata)
-      dirs:  list of (name, metadata)
+    Only accept an explicit HTML comment metadata block.
+    Ignore markdown blockquotes and any non key:value lines.
     """
-    files = []
-    dirs = []
+    try:
+        text = path.read_text()
+    except Exception:
+        return None
 
-    # --- Top-level files via .meta/*.yaml ---
-    meta_root = ROOT / ".meta"
-    if meta_root.exists():
-        for meta in sorted(meta_root.glob("*.yaml")):
-            data = load_yaml(meta)
-            files.append((data["name"], data))
+    m = re.match(r"\s*<!--(.*?)-->", text, re.DOTALL)
+    if not m:
+        return None
 
-    # --- Top-level directories via <dir>/.meta.yaml ---
-    for item in sorted(ROOT.iterdir()):
-        if not item.is_dir():
+    meta = {}
+    for line in m.group(1).splitlines():
+        line = line.strip()
+        if not line or line.startswith(">"):
             continue
-        if item.name.startswith("."):
+        if ":" not in line:
             continue
+        k, v = line.split(":", 1)
+        meta[k.strip()] = v.strip()
 
-        meta_file = item / ".meta.yaml"
-        if meta_file.exists():
-            data = load_yaml(meta_file)
-            dirs.append((item.name, data))
-
-    return files, dirs
+    return meta if meta else None
 
 
-def generate_block(files, dirs):
-    """
-    Generate a tree-style ASCII repository structure block.
-    """
-    lines = []
-    lines.append("megadroid/")
+# ---------- Tree assembly ----------
 
-    def normalize(desc: str) -> str:
-        return " ".join(desc.split())
-
+def collect_entries():
     entries = []
 
-    # Files first
-    for name, meta in files:
-        entries.append((name, normalize(meta["description"])))
+    for item in sorted(REPO_ROOT.iterdir(), key=lambda p: p.name):
+        if item.name.startswith("."):
+            continue
+        if item.name == "README.md":
+            continue
 
-    # Then directories
-    for name, meta in dirs:
-        entries.append((name + "/", normalize(meta["description"])))
+        if item.is_file():
+            if item.name in LICENSE_MAP:
+                entries.append({
+                    "name": item.name,
+                    "desc": LICENSE_MAP[item.name],
+                })
+            else:
+                meta = load_file_meta(item)
+                entries.append({
+                    "name": item.name,
+                    "desc": meta.get("description") if meta else None,
+                })
 
-    for i, (name, desc) in enumerate(entries):
-        prefix = "└──" if i == len(entries) - 1 else "├──"
-        lines.append(f"{prefix} {name:<20} # {desc}")
+        elif item.is_dir():
+            meta = load_dir_meta(item)
+            entries.append({
+                "name": item.name + "/",
+                "desc": meta.get("description") if meta else None,
+            })
 
-    return "```" + "\n" + "\n".join(lines) + "\n```"
+    return entries
+
+
+# ---------- Rendering ----------
+
+def render(entries):
+    lines = ["megadroid/"]
+
+    for i, e in enumerate(entries):
+        branch = "└── " if i == len(entries) - 1 else "├── "
+        name = f"{e['name']:<20}"
+        if e["desc"]:
+            lines.append(f"{branch}{name} # {e['desc']}")
+        else:
+            lines.append(f"{branch}{name}")
+
+    return "\n".join(line.rstrip() for line in lines)
+
+
+# ---------- README update ----------
+
+def update_readme(tree):
+    text = README_PATH.read_text()
+
+    if BEGIN not in text or END not in text:
+        raise RuntimeError("README.md missing repo-structure markers")
+
+    before, rest = text.split(BEGIN, 1)
+    _, after = rest.split(END, 1)
+
+    block = (
+        f"{BEGIN}\n"
+        "```\n"
+        f"{tree}\n"
+        "```\n"
+        f"{END}"
+    )
+
+    README_PATH.write_text(before + block + after)
 
 
 def main():
-    files, dirs = crawl()
-    block = generate_block(files, dirs)
-
-    text = README.read_text()
-
-    if START not in text or END not in text:
-        raise RuntimeError("README.md missing auto-generated repo structure markers")
-
-    before, rest = text.split(START)
-    _, after = rest.split(END)
-
-    README.write_text(
-        before
-        + START + "\n"
-        + block + "\n"
-        + END
-        + after
-    )
-
-    print("README repository structure successfully rehydrated.")
+    tree = render(collect_entries())
+    update_readme(tree)
+    print("README repository structure rehydrated cleanly.")
 
 
 if __name__ == "__main__":

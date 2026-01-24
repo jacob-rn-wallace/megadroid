@@ -1,3 +1,9 @@
+<!--
+name: BOM.csv
+type: data
+description: Bill of materials and cost tracking for the Megadroid Minimum Viable System.
+authority: derived
+-->
 Subsystem,Item,Quantity,UnitCostUSD,ExtendedCostUSD,CostIncluded,Notes
 Actuation,775 Brushed DC Motor,9,18,162,Yes,Identical motor used for all actuated joints
 Actuation,20:1 Planetary Gearbox (775 compatible),9,25,225,Yes,Standardized gearbox class reused across joints

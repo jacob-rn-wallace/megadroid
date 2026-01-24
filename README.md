@@ -1,3 +1,9 @@
+<!--
+name: README.md
+type: documentation
+description: Top-level project overview for Megadroid, describing the project’s goals, scope, repository structure, and how authoritative design documents relate to one another.
+authority: derived (rehydrated from repository structure and design metadata)
+-->
 # Megadroid
 
 **Megadroid** is an open-hardware humanoid robot project aimed at developing a **Hubo/ASIMO–class bipedal platform** that can be built, studied, and iterated on by advanced hobbyists and independent researchers.
@@ -39,18 +45,23 @@ These principles are intended to remain stable even as the underlying implementa
 
 This repository contains the canonical design documents for Megadroid:
 
+<!-- BEGIN AUTO-GENERATED: REPO-STRUCTURE -->
 ```
 megadroid/
+├── BOM.csv              # Bill of materials and cost tracking for the Megadroid Minimum Viable System.
 ├── LICENSE              # Apache License 2.0 (software)
-├── LICENSE-HARDWARE     # CERN-OHL-S v2 (hardware)
-├── README.md            # Project overview and vision
-├── SPEC.md              # System-level specification (authoritative)
-├── MECH.md              # Mechanical design documentation (authoritative)
-├── BOM.csv              # Bill of materials and cost tracking
-├── firmware/            # Low-level control software
-├── software/            # High-level control, tools, and simulation
-└── docs/                # Supporting documentation and notes
+├── LICENSE-HARDWARE.txt # CERN-OHL-S v2 (hardware)
+├── MECH.md              # Mechanical implementation details for the Megadroid MVS, including joint layout, structural concepts, actuator placement, and load paths.
+├── REHYDRATE.md         # Defines the rehydration process used to generate derived Markdown documents (e.g., SPEC.md, MECH.md, README.md) from authoritative design data and repository metadata.
+├── SPEC.md              # System-level specification defining design intent, architectural constraints, and locked assumptions for the Megadroid Minimum Viable System.
+├── design/              # Authoritative design parameter definitions for Megadroid, including joints, geometry, and other machine-readable constraints. Files in this directory serve as the single source of truth for system configuration.
+├── docs/                # Supporting documentation, background notes, references, and non-authoritative explanatory material related to the Megadroid project.
+├── firmware/            # Embedded firmware for real-time motor, joint, and low-level hardware control, intended to run on RP2350-CAN boards or equivalent MCUs.
+├── software/            # High-level control software, gait planning, supervisory logic, and development tools, typically running on a Linux SBC such as a Raspberry Pi.
+├── templates/           # Jinja templates used to rehydrate derived documentation (e.g., SPEC.md, MECH.md) from authoritative YAML design data.
+└── tools/               # Validation, consistency-checking, and rehydration scripts that enforce design constraints and keep derived documents synchronized with authoritative sources.
 ```
+<!-- END AUTO-GENERATED: REPO-STRUCTURE -->
 
 **SPEC.md and MECH.md are authoritative.** Any design detail that matters should live there, not in this README.
 
