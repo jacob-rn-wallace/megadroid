@@ -63,7 +63,9 @@ megadroid/
 ```
 <!-- END AUTO-GENERATED: REPO-STRUCTURE -->
 
-**SPEC.md and MECH.md are authoritative.** Any design detail that matters should live there, not in this README.
+ **Authoritative design data lives in `design/\*.yaml`.******
+
+ `SPEC.md` and `MECH.md` are _derived views_ of that data, intended for human readability and review. Any design detail that matters must be represented in the authoritative YAML layer and propagated via the rehydration process.
 
 ---
 
