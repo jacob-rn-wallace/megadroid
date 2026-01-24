@@ -52,6 +52,7 @@ megadroid/
 ├── LICENSE              # Apache License 2.0 (software)
 ├── LICENSE-HARDWARE.txt # CERN-OHL-S v2 (hardware)
 ├── MECH.md              # Mechanical implementation details for the Megadroid MVS, including joint layout, structural concepts, actuator placement, and load paths.
+├── PROCESS.md           # Defines the formal yet lightweight development workflow used to evolve Megadroid from concept through Minimum Viable System (MVS) completion and beyond, ensuring traceability, consistency, and controlled iteration.
 ├── REHYDRATE.md         # Defines the rehydration process used to generate derived Markdown documents (e.g., SPEC.md, MECH.md, README.md) from authoritative design data and repository metadata.
 ├── SPEC.md              # System-level specification defining design intent, architectural constraints, and locked assumptions for the Megadroid Minimum Viable System.
 ├── design/              # Authoritative design parameter definitions for Megadroid, including joints, geometry, and other machine-readable constraints. Files in this directory serve as the single source of truth for system configuration.
