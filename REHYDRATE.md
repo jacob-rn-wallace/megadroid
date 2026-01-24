@@ -1,3 +1,9 @@
+<!--
+name: REHYDRATE.md
+type: documentation
+description: Defines the rehydration process used to generate derived Markdown documents (e.g., SPEC.md, MECH.md, README.md) from authoritative design data and repository metadata.
+authority: authoritative (process definition)
+-->
 # Megadroid Design Rehydration Process
 
 This document defines how authoritative design data is propagated through the

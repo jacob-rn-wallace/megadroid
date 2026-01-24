@@ -1,8 +1,15 @@
+<!--
+name: MECH.md
+type: mechanical-design
+description: Mechanical implementation details for the Megadroid MVS, including joint layout, structural concepts, actuator placement, and load paths.
+authority: authoritative
+-->
+---
 # Megadroid — Mechanical Design (MECH)
 
 **Status:** Authoritative (MVS)  
 **Scope:** Mechanical implementation details for the Minimum Viable System  
-**Last updated:** 2026-01-23
+**Last updated:** 2026-01-24
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
