@@ -1,57 +1,111 @@
-# Megadroid Authoritative Geometry Parameters
-# Scope: Minimum Viable System (MVS)
-# All dimensions in millimeters unless otherwise stated
+# Megadroid authoritative geometry parameters
+# This file defines physical geometry and packaging constraints for the MVS.
+# It is a single source of truth for dimensions used across SPEC and MECH.
+# Do not duplicate numeric values from this file in markdown documents.
 
-robot:
-  scale:
-    class: "Hubo / ASIMO sized humanoid"
-    doorway_compatible: true
+meta:
+  scope: "MVS geometry"
+  freeze_candidate: true
+  notes: >
+    Geometry values in this file are considered stable for the Minimum Viable
+    System unless explicitly revised via SPEC.md change control.
 
-legs:
-  segments:
-    thigh:
-      length_mm: 300
-    shank:
-      length_mm: 300
-    ankle_to_sole_offset_mm: 80
+units:
+  length: "mm"
+  angle: "degrees"
 
-  structure:
-    rail_spacing_inner_mm: 100
-    construction: "twin-rail box-bulkhead"
+conventions:
+  angle_reference:
+    default: "neutral_upright"
+    description: >
+      Zero degrees corresponds to the neutral upright pose unless explicitly
+      overridden in a joint definition.
+  coordinate_system:
+    handedness: "right"
+    vertical_axis: "z"
 
-  joints:
-    hip:
-      dof:
-        - pitch
-        - roll
-      yaw_present: true
-      yaw_actuated_mvs: false
-      shaft_diameter_mm: 12
+anthropometrics:
+  thigh_length_mm: 300
+  shin_length_mm: 300
+  ankle_to_sole_offset_mm: 80
+  notes: >
+    Segment lengths are center-to-center joint distances and exclude joint
+    housing thickness and end-effector stackups.
 
-    knee:
-      dof:
-        - pitch
+leg_structure:
+  twin_rail:
+    inner_face_spacing_mm: 100
+    rationale: >
+      Matches Hubo-style twin-rail spacing to provide high bending stiffness,
+      clear load paths, and compatibility with box-bulkhead construction.
 
-    ankle:
-      actuated_mvs: false
-      module_type: "simplified calf/foot"
-      future_upgrade_supported: true
+joints:
+  shafting:
+    standard_diameter_mm: 12
+    material: "steel"
+    rationale: >
+      Standard shaft diameter used for all primary joint outputs to simplify
+      bearing selection, hub design, and pulley bores.
 
-feet:
-  type: "deformable ball foot"
-  inspiration: "MIT Cheetah Mini"
+  bearing_support:
+    preferred_configuration: "double_shear"
+    allow_single_shear: false
+
+transmission:
+  belts:
+    standard:
+      type: "HTD"
+      pitch_mm: 5
+      width_mm: 15
+      rationale: >
+        Single standardized belt pitch and width used across all joints to
+        minimize part variety, simplify sourcing, and improve serviceability.
+
+lower_leg_module:
+  interface:
+    knee_to_module:
+      mechanical_standard: true
+      preserves_joint_axis: true
+      preserves_joint_encoder: true
+    compatibility:
+      mvs:
+        ankle_actuated: false
+      future:
+        ankle_pitch_supported: true
+        ankle_roll_supported: true
+  notes: >
+    Lower-leg modules are swappable without redesigning pelvis, thigh, or knee
+    assemblies.
+
+foot_stack:
+  order:
+    - knee_output
+    - lower_leg_module
+    - ft_sensor
+    - foot
+  constraints:
+    ft_sensor_load_path: "axial_only"
+    bending_moments_allowed: false
+  notes: >
+    Stack order and constraints ensure force/torque sensors are not subjected
+    to parasitic bending moments.
+
+end_of_limb_sensing:
   ft_sensor:
-    diameter_mm: 107
-    height_mm: 56
-    load_path: "axial_only"
+    form_factor:
+      shape: "cylindrical"
+      diameter_mm: 107
+      height_mm: 56
+    mechanical_constraint: "hard"
+    cost_accounting: "excluded"
+    notes: >
+      Sensor geometry is treated as a fixed mechanical constraint and must be
+      accommodated by the ankle and foot interface design.
 
 torso:
-  dof:
-    - pitch
-    - roll
-    - yaw
-
-materials:
-  primary_structure: "6061-T6 aluminum plate"
-  shafts: "steel"
-  fasteners: "steel"
+  structure:
+    role: "primary load path between legs"
+    stiffness_requirement:
+      description: >
+        Structural stiffness must be sufficient to prevent measurable coupling
+        between left and right leg motions during quasi-static gait.
