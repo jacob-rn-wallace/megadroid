@@ -2,6 +2,7 @@
 
 import yaml
 from pathlib import Path
+from datetime import date
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 
@@ -24,7 +25,7 @@ def main():
     geometry_yaml = load_yaml(DESIGN / "geometry.yaml")
 
     # ---------------------------
-    # Build joint lists
+    # Build joint lists (MVS only)
     # ---------------------------
     joints = joints_yaml["joints"]
 
@@ -50,10 +51,10 @@ def main():
     dof_total = 2 * len(leg_joints) + len(torso_joints)
 
     # ---------------------------
-    # Static config blocks
+    # Dynamic metadata (Option B)
     # ---------------------------
     meta = {
-        "last_updated": "2026-01-21"
+        "last_updated": date.today().isoformat()
     }
 
     actuation = {
@@ -77,7 +78,7 @@ def main():
     }
 
     # ---------------------------
-    # Load change control verbatim
+    # Preserve Change Control section verbatim
     # ---------------------------
     spec_text = OUTPUT.read_text()
     cc_start = spec_text.index("## 15. Change Control")
