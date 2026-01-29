@@ -54,7 +54,7 @@ def main():
     # Dynamic metadata (Option B)
     # ---------------------------
     meta = {
-        "last_updated": date.today().isoformat()
+        "last_rehydrated": date.today().isoformat()
     }
 
     actuation = {
