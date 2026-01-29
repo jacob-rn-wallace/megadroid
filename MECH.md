@@ -8,7 +8,7 @@ authority: authoritative
 
 **Status:** Authoritative (MVS)  
 **Scope:** Mechanical implementation details for the Minimum Viable System  
-**Last updated:** 2026-01-26
+**Last rehydrated:** 2026-01-29
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -76,8 +76,6 @@ This architecture provides:
 
 Where beneficial, thin cover plates or printed skins may be added to form a closed box section and improve torsional stiffness.
 
----
-
 ### 4.2 Thigh Segment
 
 - Length (hip → knee): defined in `design/geometry.yaml`
@@ -87,8 +85,6 @@ Where beneficial, thin cover plates or printed skins may be added to form a clos
   - Proximal portion of knee actuator (if applicable)
 
 Motors are mounted as proximally as possible to reduce distal inertia.
-
----
 
 ### 4.3 Shank Segment
 
@@ -113,8 +109,6 @@ All joints must:
 
 Motor-mounted encoders are explicitly disallowed.
 
----
-
 ### 5.2 Hip Joint Assembly
 
 The hip consists of **two orthogonal rotational axes**:
@@ -131,16 +125,12 @@ Hip yaw is structurally present but **locked** in the MVS.
 
 Hip joint output shafts use standardized shafting as defined in `design/geometry.yaml` (locked) to standardize bearings, hubs, and pulley bores.
 
----
-
 ### 5.3 Knee Joint Assembly
 
 - Single-axis revolute joint (pitch)
 - Actuator mounted proximally in the thigh
 - Torque transmitted across the joint via a rigid shaft
 - Bearings sized primarily for bending loads from stance phase
-
----
 
 ### 5.4 Lower-Leg Module and Foot Interface (MVS)
 
@@ -171,8 +161,6 @@ F/T sensors are mechanically required but **excluded from cost accounting**.
 - Motors mounted proximally where feasible
 - Motors mechanically isolated from bending loads
 
----
-
 ### 7.2 Gearboxes
 
 - Modular gearbox designs reused across joints
@@ -180,8 +168,6 @@ F/T sensors are mechanically required but **excluded from cost accounting**.
 - No joint-specific one-off gearbox designs
 
 Exact gearbox ratios and part selections are documented in `BOM.csv`.
-
----
 
 ### 7.3 Belt Reduction Standard (Locked)
 
@@ -197,8 +183,6 @@ The torso implements **three actuated DOF**:
 - Pitch
 - Roll
 - Yaw
-
----
 
 ### 8.2 Structural Role
 
@@ -220,8 +204,6 @@ The torso must maintain stiffness sufficient to prevent coupling between leg mot
 - Polymer or printed parts only where loads are low
 
 Pultruded carbon tubes are explicitly excluded from the MVS.
-
----
 
 ### 9.2 Fabrication Philosophy
 

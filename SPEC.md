@@ -8,7 +8,7 @@ authority: authoritative
 
 **Status:** Authoritative  
 **Scope:** Minimum Viable System (MVS)  
-**Last updated:** 2026-01-26
+**Last rehydrated:** 2026-01-29
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
