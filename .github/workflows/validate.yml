@@ -1,0 +1,46 @@
+name: Validate Design Consistency
+
+on:
+  push:
+    paths:
+      - design/**
+      - templates/**
+      - tools/**
+      - SPEC.md
+      - MECH.md
+      - README.md
+  pull_request:
+    paths:
+      - design/**
+      - templates/**
+      - tools/**
+      - SPEC.md
+      - MECH.md
+      - README.md
+
+jobs:
+  validate:
+    name: Run design validators
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml jinja2
+
+      - name: Validate DOF consistency
+        run: |
+          python3 tools/validate_dof_consistency.py
+
+      - name: Validate absence of geometry literals
+        run: |
+          python3 tools/validate_no_geometry_literals.py
