@@ -1,0 +1,58 @@
+name: Check Rehydrated Documents Are Up To Date
+
+on:
+  push:
+    paths:
+      - design/**
+      - templates/**
+      - tools/rehydrate_*.py
+      - README.md
+      - SPEC.md
+      - MECH.md
+  pull_request:
+    paths:
+      - design/**
+      - templates/**
+      - tools/rehydrate_*.py
+      - README.md
+      - SPEC.md
+      - MECH.md
+
+jobs:
+  rehydration-check:
+    name: Verify rehydrated documents are clean
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml jinja2
+
+      - name: Rehydrate SPEC.md
+        run: |
+          python3 tools/rehydrate_spec.py
+
+      - name: Rehydrate MECH.md
+        run: |
+          python3 tools/rehydrate_mech.py
+
+      - name: Rehydrate README.md
+        run: |
+          python3 tools/rehydrate_readme_structure.py
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --quiet; then
+            echo "ERROR: Rehydration produced changes. Commit regenerated files."
+            git diff
+            exit 1
+          fi
