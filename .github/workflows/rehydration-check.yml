@@ -26,8 +26,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2  # Need previous commit to detect changes
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,75 +37,54 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyyaml jinja2
 
-      - name: Detect changed files
-        id: changes
-        run: |
-          # Check what files changed in this push/PR
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
-            HEAD="${{ github.event.pull_request.head.sha }}"
-          else
-            BASE="${{ github.event.before }}"
-            HEAD="${{ github.sha }}"
-          fi
-          
-          # Get list of changed files
-          CHANGED=$(git diff --name-only $BASE $HEAD)
-          
-          # Determine which rehydration scripts need to run
-          REHYDRATE_SPEC=false
-          REHYDRATE_MECH=false
-          REHYDRATE_README=false
-          
-          # SPEC.md dependencies
-          if echo "$CHANGED" | grep -qE '^(design/joints\.yaml|design/geometry\.yaml|templates/SPEC\.md\.j2|tools/rehydrate_spec\.py)$'; then
-            REHYDRATE_SPEC=true
-          fi
-          
-          # MECH.md dependencies
-          if echo "$CHANGED" | grep -qE '^(design/geometry\.yaml|design/joints\.yaml|templates/MECH\.md\.j2|tools/rehydrate_mech\.py)$'; then
-            REHYDRATE_MECH=true
-          fi
-          
-          # README.md dependencies
-          if echo "$CHANGED" | grep -qE '^(tools/rehydrate_readme_structure\.py|.*\.meta\.yaml)$'; then
-            REHYDRATE_README=true
-          fi
-          
-          echo "rehydrate_spec=$REHYDRATE_SPEC" >> $GITHUB_OUTPUT
-          echo "rehydrate_mech=$REHYDRATE_MECH" >> $GITHUB_OUTPUT
-          echo "rehydrate_readme=$REHYDRATE_README" >> $GITHUB_OUTPUT
-          
-          echo "Will check:"
-          echo "  SPEC.md: $REHYDRATE_SPEC"
-          echo "  MECH.md: $REHYDRATE_MECH"
-          echo "  README.md: $REHYDRATE_README"
-
       - name: Rehydrate SPEC.md
-        if: steps.changes.outputs.rehydrate_spec == 'true'
         run: |
+          cp SPEC.md SPEC.md.before
           python3 tools/rehydrate_spec.py
-
-      - name: Rehydrate MECH.md
-        if: steps.changes.outputs.rehydrate_mech == 'true'
+          
+      - name: Check SPEC.md (content only, ignore timestamp)
         run: |
-          python3 tools/rehydrate_mech.py
-
-      - name: Rehydrate README.md
-        if: steps.changes.outputs.rehydrate_readme == 'true'
-        run: |
-          python3 tools/rehydrate_readme_structure.py
-
-      - name: Check for uncommitted changes
-        run: |
-          if ! git diff --quiet; then
-            echo "ERROR: Rehydration produced changes. Commit regenerated files."
-            echo ""
-            echo "Changed files:"
-            git diff --name-only
-            echo ""
-            echo "Diff:"
-            git diff
+          # Compare SPEC.md ignoring the "Last rehydrated:" line
+          if ! diff <(grep -v "Last rehydrated:" SPEC.md.before) <(grep -v "Last rehydrated:" SPEC.md) >/dev/null 2>&1; then
+            echo "ERROR: SPEC.md has content changes after rehydration"
+            echo "Diff (excluding timestamp):"
+            diff <(grep -v "Last rehydrated:" SPEC.md.before) <(grep -v "Last rehydrated:" SPEC.md) || true
             exit 1
           fi
+          echo "✓ SPEC.md content is up to date (timestamp may differ)"
+
+      - name: Rehydrate MECH.md
+        run: |
+          cp MECH.md MECH.md.before
+          python3 tools/rehydrate_mech.py
+
+      - name: Check MECH.md (content only, ignore timestamp)
+        run: |
+          # Compare MECH.md ignoring the "Last rehydrated:" line
+          if ! diff <(grep -v "Last rehydrated:" MECH.md.before) <(grep -v "Last rehydrated:" MECH.md) >/dev/null 2>&1; then
+            echo "ERROR: MECH.md has content changes after rehydration"
+            echo "Diff (excluding timestamp):"
+            diff <(grep -v "Last rehydrated:" MECH.md.before) <(grep -v "Last rehydrated:" MECH.md) || true
+            exit 1
+          fi
+          echo "✓ MECH.md content is up to date (timestamp may differ)"
+
+      - name: Rehydrate README.md
+        run: |
+          cp README.md README.md.before
+          python3 tools/rehydrate_readme_structure.py
+
+      - name: Check README.md
+        run: |
+          if ! diff README.md.before README.md >/dev/null 2>&1; then
+            echo "ERROR: README.md changed after rehydration"
+            echo "Diff:"
+            diff README.md.before README.md || true
+            exit 1
+          fi
+          echo "✓ README.md is up to date"
+
+      - name: Summary
+        run: |
           echo "✓ All rehydrated documents are up to date"
+          echo "  (timestamps in SPEC.md and MECH.md are allowed to differ)"
