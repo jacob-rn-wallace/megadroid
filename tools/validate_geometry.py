@@ -4,13 +4,13 @@ import sys
 import yaml
 
 REQUIRED_PATHS = [
-    ("legs", "segments", "thigh", "length_mm"),
-    ("legs", "segments", "shank", "length_mm"),
-    ("legs", "segments", "ankle_to_sole_offset_mm"),
-    ("legs", "structure", "rail_spacing_inner_mm"),
-    ("legs", "joints", "hip", "shaft_diameter_mm"),
-    ("feet", "ft_sensor", "diameter_mm"),
-    ("feet", "ft_sensor", "height_mm"),
+    ("anthropometrics", "thigh_length_mm"),
+    ("anthropometrics", "shin_length_mm"),
+    ("anthropometrics", "ankle_to_sole_offset_mm"),
+    ("leg_structure", "twin_rail", "inner_face_spacing_mm"),
+    ("joints", "shafting", "standard_diameter_mm"),
+    ("end_of_limb_sensing", "ft_sensor", "form_factor", "diameter_mm"),
+    ("end_of_limb_sensing", "ft_sensor", "form_factor", "height_mm"),
 ]
 
 def main():
