@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit to detect changes
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,15 +39,62 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyyaml jinja2
 
+      - name: Detect changed files
+        id: changes
+        run: |
+          # Check what files changed in this push/PR
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+          
+          # Get list of changed files
+          CHANGED=$(git diff --name-only $BASE $HEAD)
+          
+          # Determine which rehydration scripts need to run
+          REHYDRATE_SPEC=false
+          REHYDRATE_MECH=false
+          REHYDRATE_README=false
+          
+          # SPEC.md dependencies
+          if echo "$CHANGED" | grep -qE '^(design/joints\.yaml|design/geometry\.yaml|templates/SPEC\.md\.j2|tools/rehydrate_spec\.py)$'; then
+            REHYDRATE_SPEC=true
+          fi
+          
+          # MECH.md dependencies
+          if echo "$CHANGED" | grep -qE '^(design/geometry\.yaml|design/joints\.yaml|templates/MECH\.md\.j2|tools/rehydrate_mech\.py)$'; then
+            REHYDRATE_MECH=true
+          fi
+          
+          # README.md dependencies
+          if echo "$CHANGED" | grep -qE '^(tools/rehydrate_readme_structure\.py|.*\.meta\.yaml)$'; then
+            REHYDRATE_README=true
+          fi
+          
+          echo "rehydrate_spec=$REHYDRATE_SPEC" >> $GITHUB_OUTPUT
+          echo "rehydrate_mech=$REHYDRATE_MECH" >> $GITHUB_OUTPUT
+          echo "rehydrate_readme=$REHYDRATE_README" >> $GITHUB_OUTPUT
+          
+          echo "Will check:"
+          echo "  SPEC.md: $REHYDRATE_SPEC"
+          echo "  MECH.md: $REHYDRATE_MECH"
+          echo "  README.md: $REHYDRATE_README"
+
       - name: Rehydrate SPEC.md
+        if: steps.changes.outputs.rehydrate_spec == 'true'
         run: |
           python3 tools/rehydrate_spec.py
 
       - name: Rehydrate MECH.md
+        if: steps.changes.outputs.rehydrate_mech == 'true'
         run: |
           python3 tools/rehydrate_mech.py
 
       - name: Rehydrate README.md
+        if: steps.changes.outputs.rehydrate_readme == 'true'
         run: |
           python3 tools/rehydrate_readme_structure.py
 
@@ -53,6 +102,12 @@ jobs:
         run: |
           if ! git diff --quiet; then
             echo "ERROR: Rehydration produced changes. Commit regenerated files."
+            echo ""
+            echo "Changed files:"
+            git diff --name-only
+            echo ""
+            echo "Diff:"
             git diff
             exit 1
           fi
+          echo "✓ All rehydrated documents are up to date"
