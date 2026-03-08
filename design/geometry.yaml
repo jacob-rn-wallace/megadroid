@@ -3,6 +3,12 @@
 # It is a single source of truth for dimensions used across SPEC and MECH.
 # Do not duplicate numeric values from this file in markdown documents.
 
+# GEOMETRY FREEZE STATUS:
+# This file defines authoritative mechanical geometry for the Megadroid MVS.
+# Values marked as STRUCTURAL are frozen and define load paths, envelopes,
+# and mechanical interfaces. Changes require SPEC.md revision and a new tag.
+# Values marked as NOMINAL_MVS are valid for the MVS but may evolve post-MVS.
+
 meta:
   scope: "MVS geometry"
   freeze_candidate: true
@@ -25,16 +31,16 @@ conventions:
     vertical_axis: "z"
 
 anthropometrics:
-  thigh_length_mm: 300
-  shin_length_mm: 300
-  ankle_to_sole_offset_mm: 80
+  thigh_length_mm: 300          # STRUCTURAL — hip↔knee kinematic reach
+  shin_length_mm: 300           # STRUCTURAL — knee↔ankle kinematic reach
+  ankle_to_sole_offset_mm: 80   # NOMINAL_MVS — valid for ball-foot MVS module
   notes: >
     Segment lengths are center-to-center joint distances and exclude joint
     housing thickness and end-effector stackups.
 
 leg_structure:
   twin_rail:
-    inner_face_spacing_mm: 100
+    inner_face_spacing_mm: 100  # STRUCTURAL — defines load path & gearbox envelope
     rationale: >
       Matches Hubo-style twin-rail spacing to provide high bending stiffness,
       clear load paths, and compatibility with box-bulkhead construction.
@@ -73,9 +79,23 @@ lower_leg_module:
       future:
         ankle_pitch_supported: true
         ankle_roll_supported: true
+
+  definition: >
+    The lower-leg module is the complete shank structural assembly from the knee
+    output interface down to its distal termination bulkhead (twin rails, bulkheads,
+    and any skins/brackets rigidly part of the shank). The distal termination bulkhead
+    provides the mounting face for the end-of-limb F/T sensor, such that the sensor is
+    located immediately proximal to the foot/end-effector.
+
+  boundaries:
+    proximal_boundary: knee_output_interface
+    distal_boundary: ft_sensor_mounting_face
+
   notes: >
     Lower-leg modules are swappable without redesigning pelvis, thigh, or knee
-    assemblies.
+    assemblies. In the MVS, the module omits actuated ankles; in future variants,
+    the module may incorporate ankle pitch/roll while preserving the knee-to-module
+    mechanical standard and encoder strategy.
 
 foot_stack:
   order:
@@ -94,13 +114,19 @@ end_of_limb_sensing:
   ft_sensor:
     form_factor:
       shape: "cylindrical"
-      diameter_mm: 107
-      height_mm: 56
+      diameter_mm: 107          # STRUCTURAL — mechanical envelope constraint
+      height_mm: 56             # STRUCTURAL — mechanical envelope constraint
+    mounting_location: distal_face_of_lower_leg_module
     mechanical_constraint: "hard"
     cost_accounting: "excluded"
+    load_path_requirement: >
+      Ground reaction forces must pass axially through the sensor before entering
+      the lower-leg module structure.
     notes: >
-      Sensor geometry is treated as a fixed mechanical constraint and must be
-      accommodated by the ankle and foot interface design.
+      The F/T sensor is mounted directly to the distal termination bulkhead of the
+      lower-leg module and immediately proximal to the foot/end-effector.
+      Its geometry is treated as a fixed structural envelope and must be fully
+      accommodated by the shank design.
 
 torso:
   structure:
@@ -109,3 +135,8 @@ torso:
       description: >
         Structural stiffness must be sufficient to prevent measurable coupling
         between left and right leg motions during quasi-static gait.
+
+# NOTE:
+# Lower-leg internal geometry may change for FULL-system variants,
+# but knee interface geometry and structural dimensions above must
+# remain compatible unless SPEC.md is explicitly revised.
