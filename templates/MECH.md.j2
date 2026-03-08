@@ -86,14 +86,23 @@ Where beneficial, thin cover plates or printed skins may be added to form a clos
 
 Motors are mounted as proximally as possible to reduce distal inertia.
 
-### 4.3 Shank Segment
+### 4.3 Lower-Leg Module (Shank)
 
-- Length (knee → ankle): defined in `design/geometry.yaml`
-- Contains:
-  - Knee pitch output shaft
-  - Passive ankle structure
-- Lower-leg module terminates in a foot interface for the F/T sensor + ball foot.
-- MVS lower-leg module omits actuated ankle joints; ankle actuation is reserved for post-MVS modular upgrades.
+The lower-leg module consists of the complete shank structural assembly from the knee output interface down to its distal termination bulkhead.
+
+**Structural stack (proximal → distal):**
+1. Knee output interface
+2. Shank twin rails (length defined in `design/geometry.yaml`)
+3. Distal termination bulkhead
+4. F/T sensor (mounted to distal bulkhead face)
+5. Ball foot (MVS) or ankle/foot assembly (future)
+
+**Key characteristics:**
+- Modular: swappable at knee interface without redesigning pelvis, thigh, or knee
+- MVS configuration: no actuated ankle joints
+- Future configurations: may incorporate ankle pitch/roll while preserving knee-to-module interface
+- Contains knee pitch output shaft
+- Distal bulkhead provides mounting face for end-of-limb F/T sensor
 
 ---
 
@@ -134,21 +143,44 @@ Hip joint output shafts use standardized shafting as defined in `design/geometry
 
 ### 5.4 Lower-Leg Module and Foot Interface (MVS)
 
-The MVS uses a simplified lower-leg module that does not include actuated ankles. The module provides a rigid, serviceable interface for mounting the end-of-limb F/T sensor and the deformable ball foot.
+The MVS lower-leg module is a simplified design that omits actuated ankles while preserving the mechanical interface for future upgrades.
 
-A future lower-leg module may add actuated ankle pitch/roll and alternate feet while preserving the same knee-to-lower-leg mechanical interface and joint encoder strategy.
+**Module definition:**
+The lower-leg module includes the shank twin rails, all bulkheads, and the distal termination bulkhead that serves as the mounting face for the F/T sensor.
+
+**Structural boundaries:**
+- Proximal: knee output interface
+- Distal: F/T sensor mounting face (distal termination bulkhead)
+
+**MVS configuration:**
+- No actuated ankle joints
+- Rigid connection from knee to F/T sensor
+- Ball foot mounted distal to F/T sensor
+
+**Future compatibility:**
+A future lower-leg module may add actuated ankle pitch/roll while preserving:
+- Same knee-to-module mechanical interface
+- Same joint encoder strategy
+- Compatibility with pelvis, thigh, and knee assemblies
 
 ---
 
 ## 6. End-of-Limb Force/Torque Sensor Integration
 
-- One **6-DOF force/torque sensor per foot**
-- Sensor form factor: defined in `design/geometry.yaml`
-- Mounted between ankle structure and foot
-- Structural design must:
-  - Avoid imposing bending moments on the sensor body
-  - Transfer loads axially through the sensor
+Each foot has one **6-DOF force/torque sensor** that measures ground reaction forces and moments.
 
+**Mounting and integration:**
+- Sensor is mounted directly to the distal termination bulkhead of the lower-leg module
+- Located immediately proximal to the foot/end-effector
+- Form factor (cylindrical shape, diameter, height): defined in `design/geometry.yaml`
+- Mechanical constraint: treated as hard structural envelope
+
+**Load path requirements:**
+- Ground reaction forces must pass axially through the sensor
+- Structural design must avoid imposing parasitic bending moments on sensor body
+- Sensor sits between distal bulkhead and foot in the structural stack
+
+**Cost accounting:**
 F/T sensors are mechanically required but **excluded from cost accounting**.
 
 ---
@@ -228,4 +260,3 @@ Designs should favor:
 This document is **authoritative** for the mechanical design of the Megadroid MVS.
 
 Any mechanical change that violates this document must be accompanied by an explicit revision here and corresponding updates to `SPEC.md`.
-
