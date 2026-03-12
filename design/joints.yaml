@@ -20,6 +20,7 @@ joints:
     limits_deg:
       min: -30
       max: 110
+    nominal_stand_deg: 0
 
   hip_roll:
     type: revolute
@@ -32,6 +33,7 @@ joints:
     limits_deg:
       min: -30
       max: 30
+    nominal_stand_deg: 0
 
   knee_pitch:
     type: revolute
@@ -79,6 +81,7 @@ joints:
     limits_deg:
       min: -30
       max: 30
+    nominal_stand_deg: 0
 
   torso_roll:
     type: revolute
@@ -92,6 +95,7 @@ joints:
     limits_deg:
       min: -20
       max: 20
+    nominal_stand_deg: 0
 
   torso_yaw:
     type: revolute
@@ -105,3 +109,4 @@ joints:
     limits_deg:
       min: -45
       max: 45
+    nominal_stand_deg: 0

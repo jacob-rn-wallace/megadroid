@@ -1,0 +1,62 @@
+# Megadroid authoritative kinematic conventions
+# This file defines coordinate frames, axis orientations, and kinematic reference standards.
+
+meta:
+  scope: "MVS kinematics"
+  freeze_candidate: true
+
+conventions:
+  coordinate_system:
+    handedness: "right"
+    vertical_axis: "z"
+    forward_axis: "x"
+    lateral_axis: "y"
+    notes: >
+      Standard robotics convention: Z-up, X-forward, Y-left (right-hand rule).
+      
+  angle_units: "radians"  # for computation; degrees in human-readable docs
+  
+  rotation_sign_convention:
+    description: >
+      Positive rotations follow right-hand rule around the joint axis.
+      Looking along the positive axis direction, positive rotation is counterclockwise.
+
+base_frame:
+  name: "pelvis_center"
+  description: >
+    Robot base frame is located at the geometric center of the pelvis structure
+    in the nominal standing pose, with axes aligned to the global coordinate system.
+  location:
+    description: "Midpoint between left and right hip roll joint centers"
+  orientation:
+    description: "Aligned with global frame in nominal standing pose"
+
+joint_axes:
+  hip_pitch:
+    axis_direction: "y"  # rotation around lateral axis
+    positive_direction: "forward leg swing"
+    
+  hip_roll:
+    axis_direction: "x"  # rotation around forward-back axis  
+    positive_direction: "leg abduction (away from body midline)"
+    
+  knee_pitch:
+    axis_direction: "y"  # rotation around lateral axis
+    positive_direction: "leg flexion (heel toward buttock)"
+    
+  torso_pitch:
+    axis_direction: "y"
+    positive_direction: "torso forward lean"
+    
+  torso_roll:
+    axis_direction: "x"
+    positive_direction: "torso lean to left"
+    
+  torso_yaw:
+    axis_direction: "z"
+    positive_direction: "torso rotation to left"
+
+notes: >
+  These conventions establish a consistent reference for all kinematic modeling,
+  simulation, and control work. Joint angle measurements and control commands
+  must respect these sign conventions.
