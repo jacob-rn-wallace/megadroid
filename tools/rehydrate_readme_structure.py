@@ -59,7 +59,14 @@ def load_file_meta(path: Path):
 def collect_entries():
     entries = []
 
-    for item in sorted(REPO_ROOT.iterdir(), key=lambda p: p.name):
+    # Sort with stable key: (is_directory, lowercase_name)
+    # This ensures consistent ordering across platforms
+    items = sorted(
+        REPO_ROOT.iterdir(),
+        key=lambda p: (p.is_dir(), p.name.lower())
+    )
+
+    for item in items:
         if item.name.startswith("."):
             continue
         if item.name == "README.md":
