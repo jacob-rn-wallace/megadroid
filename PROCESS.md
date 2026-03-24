@@ -1,7 +1,7 @@
 <!--
 name: Megadroid Development Process  
 type: Process Specification  
-description: Defines the formal yet lightweight development workflow used to evolve Megadroid from concept through Minimum Viable System (MVS) completion and beyond, ensuring traceability, consistency, and controlled iteration.  
+description: Development workflow and V-model process definition
 authority: informative (governs workflow; does not override `SPEC.md`)
 -->
 # Megadroid — Development Process (PROCESS)

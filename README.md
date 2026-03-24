@@ -52,7 +52,7 @@ megadroid/
 ├── LICENSE              # Apache License 2.0 (software)
 ├── LICENSE-HARDWARE.txt # CERN-OHL-S v2 (hardware)
 ├── MECH.md              # Mechanical design: joints, structure, actuators, loads
-├── PROCESS.md           # Defines the formal yet lightweight development workflow used to evolve Megadroid from concept through Minimum Viable System (MVS) completion and beyond, ensuring traceability, consistency, and controlled iteration.
+├── PROCESS.md           # Development workflow and V-model process definition
 ├── REHYDRATE.md         # Doc generation process from authoritative YAML data
 ├── SPEC.md              # System specification: design intent and constraints
 ├── design/              # Authoritative YAML design parameters (source of truth)
