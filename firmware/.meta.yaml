@@ -1,6 +1,4 @@
 name: firmware
 type: directory
-description: >
-  Embedded firmware for real-time motor, joint, and low-level hardware control,
-  intended to run on RP2350-CAN boards or equivalent MCUs.
+description: Embedded motor/joint control for RP2350-CAN boards
 authority: implementation

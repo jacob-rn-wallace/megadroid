@@ -1,7 +1,7 @@
 <!--
 name: BOM.csv
 type: data
-description: Bill of materials and cost tracking for the Megadroid Minimum Viable System.
+description: Bill of materials and cost tracking for MVS
 authority: derived
 -->
 Subsystem,Item,Quantity,UnitCostUSD,ExtendedCostUSD,CostIncluded,Notes

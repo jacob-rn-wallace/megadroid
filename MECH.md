@@ -1,7 +1,7 @@
 <!--
 name: MECH.md
 type: mechanical-design
-description: Mechanical implementation details for the Megadroid MVS, including joint layout, structural concepts, actuator placement, and load paths.
+description: Mechanical design: joints, structure, actuators, loads
 authority: authoritative
 -->
 # Megadroid — Mechanical Design (MECH)

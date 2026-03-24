@@ -1,6 +1,4 @@
 name: templates
 type: directory
-description: >
-  Jinja templates used to rehydrate derived documentation (e.g., SPEC.md, MECH.md)
-  from authoritative YAML design data.
+description: Jinja templates for generating derived documentation
 authority: tooling

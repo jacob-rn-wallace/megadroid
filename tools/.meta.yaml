@@ -1,6 +1,4 @@
 name: tools
 type: directory
-description: >
-  Validation, consistency-checking, and rehydration scripts that enforce design
-  constraints and keep derived documents synchronized with authoritative sources.
+description: Validators and rehydration scripts
 authority: tooling
