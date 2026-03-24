@@ -71,6 +71,8 @@ def collect_entries():
             continue
         if item.name == "README.md":
             continue
+        if item.name.endswith(".before"):
+            continue
 
         if item.is_file():
             if item.name in LICENSE_MAP:
