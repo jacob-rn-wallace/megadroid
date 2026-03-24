@@ -48,19 +48,19 @@ This repository contains the canonical design documents for Megadroid:
 <!-- BEGIN AUTO-GENERATED: REPO-STRUCTURE -->
 ```
 megadroid/
-├── BOM.csv              # Bill of materials and cost tracking for the Megadroid Minimum Viable System.
+├── BOM.csv              # Bill of materials and cost tracking for MVS
 ├── LICENSE              # Apache License 2.0 (software)
 ├── LICENSE-HARDWARE.txt # CERN-OHL-S v2 (hardware)
-├── MECH.md              # Mechanical implementation details for the Megadroid MVS, including joint layout, structural concepts, actuator placement, and load paths.
+├── MECH.md              # Mechanical design: joints, structure, actuators, loads
 ├── PROCESS.md           # Defines the formal yet lightweight development workflow used to evolve Megadroid from concept through Minimum Viable System (MVS) completion and beyond, ensuring traceability, consistency, and controlled iteration.
-├── REHYDRATE.md         # Defines the rehydration process used to generate derived Markdown documents (e.g., SPEC.md, MECH.md, README.md) from authoritative design data and repository metadata.
-├── SPEC.md              # System-level specification defining design intent, architectural constraints, and locked assumptions for the Megadroid Minimum Viable System.
-├── design/              # Authoritative design parameter definitions for Megadroid, including joints, geometry, and other machine-readable constraints. Files in this directory serve as the single source of truth for system configuration.
-├── docs/                # Supporting documentation, background notes, references, and non-authoritative explanatory material related to the Megadroid project.
-├── firmware/            # Embedded firmware for real-time motor, joint, and low-level hardware control, intended to run on RP2350-CAN boards or equivalent MCUs.
-├── software/            # High-level control software, gait planning, supervisory logic, and development tools, typically running on a Linux SBC such as a Raspberry Pi.
-├── templates/           # Jinja templates used to rehydrate derived documentation (e.g., SPEC.md, MECH.md) from authoritative YAML design data.
-└── tools/               # Validation, consistency-checking, and rehydration scripts that enforce design constraints and keep derived documents synchronized with authoritative sources.
+├── REHYDRATE.md         # Doc generation process from authoritative YAML data
+├── SPEC.md              # System specification: design intent and constraints
+├── design/              # Authoritative YAML design parameters (source of truth)
+├── docs/                # Supporting documentation and background references
+├── firmware/            # Embedded motor/joint control for RP2350-CAN boards
+├── software/            # High-level control, gait planning, dev tools
+├── templates/           # Jinja templates for generating derived documentation
+└── tools/               # Validators and rehydration scripts
 ```
 <!-- END AUTO-GENERATED: REPO-STRUCTURE -->
 
