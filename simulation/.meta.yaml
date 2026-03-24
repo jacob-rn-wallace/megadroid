@@ -1,0 +1,3 @@
+name: simulation
+type: directory
+description: Kinematic models and simulation artifacts for validation
