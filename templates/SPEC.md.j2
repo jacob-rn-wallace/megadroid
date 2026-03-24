@@ -1,7 +1,7 @@
 <!--
 name: SPEC.md
 type: specification
-description: System-level specification defining design intent, architectural constraints, and locked assumptions for the Megadroid Minimum Viable System.
+description: System specification: design intent and constraints
 authority: authoritative
 -->
 # Megadroid — System Specification (SPEC)
