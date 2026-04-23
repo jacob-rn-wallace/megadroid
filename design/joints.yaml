@@ -7,6 +7,9 @@
 # - variants.MVS / variants.FULL: whether the joint is installed and active
 #   in that configuration
 
+meta:
+  mvs_dof_total: 11    # declared expected total; validator checks counted value against this
+
 joints:
   hip_pitch:
     type: revolute
@@ -53,11 +56,15 @@ joints:
     type: revolute
     axis: pitch
     location: ankle
-    actuated: false
+    actuated: true
     variants:
-      MVS: false
+      MVS: true
       FULL: true
-    limits_deg: null
+    angle_reference: foot_flat
+    limits_deg:
+      min: -30    # plantarflexion; 2× functional walking minimum of 15° (orthofixar.com)
+      max: 30     # dorsiflexion; covers 15–20° functional walking + stair requirement (blkpn.com)
+    nominal_stand_deg: 0
 
   ankle_roll:
     type: revolute

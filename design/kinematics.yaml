@@ -43,6 +43,10 @@ joint_axes:
   knee_pitch:
     axis_direction: "y"  # rotation around lateral axis
     positive_direction: "leg flexion (heel toward buttock)"
+
+  ankle_pitch:
+    axis_direction: "y"  # rotation around lateral axis, same as hip_pitch and knee_pitch
+    positive_direction: "dorsiflexion (shin moves forward over foot)"
     
   torso_pitch:
     axis_direction: "y"
