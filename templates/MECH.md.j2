@@ -2,7 +2,7 @@
 name: MECH.md
 type: mechanical-design
 description: Mechanical design: joints, structure, actuators, loads
-authority: authoritative
+authority: derived
 -->
 # Megadroid — Mechanical Design (MECH)
 
@@ -38,7 +38,7 @@ The robot is organized around three primary structural modules:
 - **Left leg module**
 - **Right leg module**
 
-Arms and active ankles are excluded from the MVS.
+Arms and ankle roll are excluded from the MVS. Ankle pitch is included.
 
 ---
 
@@ -46,12 +46,13 @@ Arms and active ankles are excluded from the MVS.
 
 ### 3.1 Degrees of Freedom per Leg
 
-Each leg implements **three actuated DOF**:
+Each leg implements **four actuated DOF**:
 - Hip pitch
 - Hip roll
 - Knee pitch
+- Ankle pitch
 
-The MVS uses a simplified lower-leg + foot module that omits actuated ankles. A future swappable module may add actuated ankles without redesigning the pelvis, thigh, or knee.
+A future swappable lower-leg module may add ankle roll without redesigning the pelvis, thigh, knee, or ankle pitch assembly.
 
 ---
 
@@ -93,14 +94,15 @@ The lower-leg module consists of the complete shank structural assembly from the
 **Structural stack (proximal → distal):**
 1. Knee output interface
 2. Shank twin rails (length defined in `design/geometry.yaml`)
-3. Distal termination bulkhead
-4. F/T sensor (mounted to distal bulkhead face)
-5. Ball foot (MVS) or ankle/foot assembly (future)
+3. Ankle pitch joint assembly
+4. Distal termination bulkhead
+5. F/T sensor (mounted to distal bulkhead face)
+6. Ball foot (MVS)
 
 **Key characteristics:**
 - Modular: swappable at knee interface without redesigning pelvis, thigh, or knee
-- MVS configuration: no actuated ankle joints
-- Future configurations: may incorporate ankle pitch/roll while preserving knee-to-module interface
+- MVS configuration: includes actuated ankle pitch; ankle roll omitted
+- Future configurations: may incorporate ankle roll while preserving knee-to-module interface
 - Contains knee pitch output shaft
 - Distal bulkhead provides mounting face for end-of-limb F/T sensor
 
@@ -143,22 +145,22 @@ Hip joint output shafts use standardized shafting as defined in `design/geometry
 
 ### 5.4 Lower-Leg Module and Foot Interface (MVS)
 
-The MVS lower-leg module is a simplified design that omits actuated ankles while preserving the mechanical interface for future upgrades.
+The MVS lower-leg module includes actuated ankle pitch while preserving the mechanical interface for future upgrades.
 
 **Module definition:**
-The lower-leg module includes the shank twin rails, all bulkheads, and the distal termination bulkhead that serves as the mounting face for the F/T sensor.
+The lower-leg module includes the shank twin rails, ankle pitch joint assembly, all bulkheads, and the distal termination bulkhead that serves as the mounting face for the F/T sensor.
 
 **Structural boundaries:**
 - Proximal: knee output interface
 - Distal: F/T sensor mounting face (distal termination bulkhead)
 
 **MVS configuration:**
-- No actuated ankle joints
-- Rigid connection from knee to F/T sensor
+- Ankle pitch actuated
+- Ankle roll omitted
 - Ball foot mounted distal to F/T sensor
 
 **Future compatibility:**
-A future lower-leg module may add actuated ankle pitch/roll while preserving:
+A future lower-leg module may add ankle roll while preserving:
 - Same knee-to-module mechanical interface
 - Same joint encoder strategy
 - Compatibility with pelvis, thigh, and knee assemblies
@@ -257,6 +259,6 @@ Designs should favor:
 
 ## 11. Authority
 
-This document is **authoritative** for the mechanical design of the Megadroid MVS.
+This document is a **derived view** of the authoritative design data in `design/*.yaml` and `SPEC.md`.
 
-Any mechanical change that violates this document must be accompanied by an explicit revision here and corresponding updates to `SPEC.md`.
+Any mechanical change must first be reflected in the appropriate YAML files and `SPEC.md`, then propagated here via rehydration.

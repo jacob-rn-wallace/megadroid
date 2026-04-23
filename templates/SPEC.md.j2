@@ -60,10 +60,10 @@ authoritative joint model defined in `design/joints.yaml`.
 
 ### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
 
-The robot supports modular lower-leg assemblies. The MVS uses a simplified calf/foot module that omits active ankle joints to reduce cost and complexity. A future module may add actuated ankles and alternate feet without requiring redesign of the pelvis, thigh, knee, or control stack.
+The robot supports modular lower-leg assemblies. The MVS lower-leg module includes actuated ankle pitch. A future module may add ankle roll and alternate feet without requiring redesign of the pelvis, thigh, knee, or control stack.
 
 ### 3.3 Non-Actuated / Out-of-Scope (MVS)
-- Ankles: not actuated in the MVS; implemented via a simplified calf/foot module (no ankle joints).
+- Ankle roll: not actuated in the MVS.
 - Arms: not installed in the MVS.
 
 ---
@@ -186,7 +186,11 @@ Stability and hardware protection are enforced through:
 
 ## 11. Cost Constraints
 
-- **Target total system cost:** < **$1000 USD**
+- **Target total system cost:** Comparable to a capable hobbyist desktop PC —
+  approximately **$800–$1,500 USD** as of 2026
+- The constraint is hobbyist accessibility, not a specific dollar figure. The
+  question to ask of any component choice is: could an individual hobbyist
+  justify this purchase without it being a significant financial decision?
 - Explicit exclusions:
   - Battery
   - End-of-limb force/torque sensors
@@ -197,7 +201,7 @@ Stability and hardware protection are enforced through:
 ## 12. Explicit Exclusions (MVS)
 
 The following are intentionally excluded from the MVS:
-- Active ankle actuation (MVS uses a simplified calf/foot module without ankle joints)
+- Ankle roll (MVS includes ankle pitch; ankle roll is post-MVS)
 - Arms or manipulators
 - Torque or impedance control
 - Motor current telemetry
@@ -214,6 +218,9 @@ Megadroid prioritizes:
 - Software-enforced safety and stability
 - Clear load paths and inspectable structures
 - Incremental extensibility without redesign
+
+For the full rationale behind these principles and the project's design
+decisions, see `PHILOSOPHY.md`.
 
 ---
 
