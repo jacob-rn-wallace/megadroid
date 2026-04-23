@@ -52,6 +52,7 @@ megadroid/
 ├── LICENSE              # Apache License 2.0 (software)
 ├── LICENSE-HARDWARE.txt # CERN-OHL-S v2 (hardware)
 ├── MECH.md              # Mechanical design: joints, structure, actuators, loads
+├── PHILOSOPHY.md        # Project vision, goals, design philosophy, and document authority hierarchy
 ├── PROCESS.md           # Development workflow and V-model process definition
 ├── REHYDRATE.md         # Doc generation process from authoritative YAML data
 ├── SPEC.md              # System specification: design intent and constraints
