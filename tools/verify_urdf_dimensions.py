@@ -46,31 +46,26 @@ def parse_urdf_joints(urdf_path):
 def compute_leg_length(joints, side):
     """Compute total leg length from URDF joint transforms."""
     prefix = side.lower()
-    
-    # Get the Z offsets (vertical distances) for each joint
-    thigh_joint_offset = joints.get(f'{prefix}_thigh_joint', {}).get('xyz', np.zeros(3))
-    knee_joint_offset = joints.get(f'{prefix}_knee_joint', {}).get('xyz', np.zeros(3))
-    shin_joint_offset = joints.get(f'{prefix}_shin_joint', {}).get('xyz', np.zeros(3))
-    foot_joint_offset = joints.get(f'{prefix}_foot_joint', {}).get('xyz', np.zeros(3))
-    
-    # Individual segment lengths
-    thigh_length = abs(knee_joint_offset[2])
-    shin_length = abs(foot_joint_offset[2]) - abs(knee_joint_offset[2]) if knee_joint_offset[2] < 0 else abs(foot_joint_offset[2])
-    
-    # Actually, foot_joint_offset is relative to shin, so:
-    # - knee_joint is relative to thigh (thigh length)
-    # - foot_joint is relative to shin (shin + ankle length combined)
-    
-    thigh_length = abs(knee_joint_offset[2])
-    shin_to_foot = abs(foot_joint_offset[2])
-    
-    # Total leg length
-    total_length = thigh_length + shin_to_foot
-    
+
+    # Hip pitch joint origin is relative to hip_roll_link (which sits at pelvis)
+    # — its xyz offset is (0,0,0) so it contributes no vertical displacement.
+    # Knee pitch joint origin is relative to thigh — z offset = thigh length.
+    knee_joint_xyz  = joints.get(f'{prefix}_knee_pitch_joint',  {}).get('xyz', np.zeros(3))
+
+    # Ankle pitch joint origin is relative to shin — z offset = shin length.
+    ankle_joint_xyz = joints.get(f'{prefix}_ankle_pitch_joint', {}).get('xyz', np.zeros(3))
+
+    # Foot joint origin is relative to ankle — z offset = ankle_to_sole_offset.
+    foot_joint_xyz  = joints.get(f'{prefix}_foot_joint',        {}).get('xyz', np.zeros(3))
+
+    thigh_length = abs(knee_joint_xyz[2])
+    shin_length  = abs(ankle_joint_xyz[2])
+    ankle_offset = abs(foot_joint_xyz[2])
+
     return {
-        'thigh_length': thigh_length,
-        'shin_to_foot': shin_to_foot,
-        'total_length': total_length
+        'thigh_length':  thigh_length,
+        'shin_to_foot':  shin_length + ankle_offset,
+        'total_length':  thigh_length + shin_length + ankle_offset,
     }
 
 

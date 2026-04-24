@@ -4,60 +4,102 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.2 0.3 0.15"/>
+        <box size="0.20 0.30 0.15"/>
       </geometry>
       <material name="grey">
-        <color rgba="0.5 0.5 0.5 1"/>
+        <color rgba="0.5 0.5 0.5 1.0"/>
       </material>
     </visual>
   </link>
+  <link name="torso_pitch_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.20 0.05"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="torso_pitch_joint" type="revolute">
+    <parent link="pelvis"/>
+    <child link="torso_pitch_link"/>
+    <origin xyz="0 0 0.075" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="100.0" velocity="1.0"/>
+  </joint>
+  <link name="torso_roll_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.20 0.05"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="torso_roll_joint" type="revolute">
+    <parent link="torso_pitch_link"/>
+    <child link="torso_roll_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.3490658503988659" upper="0.3490658503988659" effort="100.0" velocity="1.0"/>
+  </joint>
   <link name="torso">
     <visual>
-      <origin xyz="0 0 0.3" rpy="0 0 0"/>
+      <origin xyz="0 0 0.2" rpy="0 0 0"/>
       <geometry>
-        <box size="0.15 0.25 0.4"/>
+        <box size="0.15 0.25 0.40"/>
       </geometry>
       <material name="grey">
-        <color rgba="0.5 0.5 0.5 1"/>
+        <color rgba="0.5 0.5 0.5 1.0"/>
       </material>
     </visual>
   </link>
-  <joint name="pelvis_to_torso" type="fixed">
-    <parent link="pelvis"/>
+  <joint name="torso_yaw_joint" type="revolute">
+    <parent link="torso_roll_link"/>
     <child link="torso"/>
-    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.7853981633974483" upper="0.7853981633974483" effort="100.0" velocity="1.0"/>
   </joint>
-  <link name="left_hip"/>
-  <joint name="left_hip_joint" type="revolute">
+  <link name="left_hip_roll_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="orange">
+        <color rgba="0.8 0.4 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="left_hip_roll_joint" type="revolute">
     <parent link="pelvis"/>
-    <child link="left_hip"/>
-    <origin xyz="0 0.15 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-0.5235983333333333" upper="1.9198605555555557" effort="100" velocity="1.0"/>
+    <child link="left_hip_roll_link"/>
+    <origin xyz="0 0.05 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="100.0" velocity="1.0"/>
   </joint>
   <link name="left_thigh">
     <visual>
       <origin xyz="0 0 -0.15" rpy="0 0 0"/>
       <geometry>
-        <cylinder radius="0.04" length="0.3"/>
+        <cylinder radius="0.040" length="0.3"/>
       </geometry>
       <material name="blue">
-        <color rgba="0.2 0.2 0.8 1"/>
+        <color rgba="0.2 0.2 0.8 1.0"/>
       </material>
     </visual>
   </link>
-  <joint name="left_thigh_joint" type="fixed">
-    <parent link="left_hip"/>
+  <joint name="left_hip_pitch_joint" type="revolute">
+    <parent link="left_hip_roll_link"/>
     <child link="left_thigh"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="left_knee"/>
-  <joint name="left_knee_joint" type="revolute">
-    <parent link="left_thigh"/>
-    <child link="left_knee"/>
-    <origin xyz="0 0 -0.3" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
-    <limit lower="0.0" upper="2.443458888888889" effort="100" velocity="1.0"/>
+    <limit lower="-0.5235987755982988" upper="1.9198621771937625" effort="100.0" velocity="1.0"/>
   </joint>
   <link name="left_shin">
     <visual>
@@ -66,62 +108,86 @@
         <cylinder radius="0.035" length="0.3"/>
       </geometry>
       <material name="blue">
-        <color rgba="0.2 0.2 0.8 1"/>
+        <color rgba="0.2 0.2 0.8 1.0"/>
       </material>
     </visual>
   </link>
-  <joint name="left_shin_joint" type="fixed">
-    <parent link="left_knee"/>
+  <joint name="left_knee_pitch_joint" type="revolute">
+    <parent link="left_thigh"/>
     <child link="left_shin"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 -0.3" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0.0" upper="2.443460952792061" effort="100.0" velocity="1.0"/>
+  </joint>
+  <link name="left_ankle">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.025"/>
+      </geometry>
+      <material name="orange">
+        <color rgba="0.8 0.4 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="left_ankle_pitch_joint" type="revolute">
+    <parent link="left_shin"/>
+    <child link="left_ankle"/>
+    <origin xyz="0 0 -0.3" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="100.0" velocity="1.0"/>
   </joint>
   <link name="left_foot">
     <visual>
-      <origin xyz="0.05 0 -0.04" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="0.15 0.08 0.04"/>
       </geometry>
       <material name="black">
-        <color rgba="0.1 0.1 0.1 1"/>
+        <color rgba="0.1 0.1 0.1 1.0"/>
       </material>
     </visual>
   </link>
   <joint name="left_foot_joint" type="fixed">
-    <parent link="left_shin"/>
+    <parent link="left_ankle"/>
     <child link="left_foot"/>
-    <origin xyz="0 0 -0.38" rpy="0 0 0"/>
+    <origin xyz="0.05 0 -0.08" rpy="0 0 0"/>
   </joint>
-  <link name="right_hip"/>
-  <joint name="right_hip_joint" type="revolute">
+  <link name="right_hip_roll_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="orange">
+        <color rgba="0.8 0.4 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="right_hip_roll_joint" type="revolute">
     <parent link="pelvis"/>
-    <child link="right_hip"/>
-    <origin xyz="0 -0.15 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-0.5235983333333333" upper="1.9198605555555557" effort="100" velocity="1.0"/>
+    <child link="right_hip_roll_link"/>
+    <origin xyz="0 -0.05 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="100.0" velocity="1.0"/>
   </joint>
   <link name="right_thigh">
     <visual>
       <origin xyz="0 0 -0.15" rpy="0 0 0"/>
       <geometry>
-        <cylinder radius="0.04" length="0.3"/>
+        <cylinder radius="0.040" length="0.3"/>
       </geometry>
       <material name="blue">
-        <color rgba="0.2 0.2 0.8 1"/>
+        <color rgba="0.2 0.2 0.8 1.0"/>
       </material>
     </visual>
   </link>
-  <joint name="right_thigh_joint" type="fixed">
-    <parent link="right_hip"/>
+  <joint name="right_hip_pitch_joint" type="revolute">
+    <parent link="right_hip_roll_link"/>
     <child link="right_thigh"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="right_knee"/>
-  <joint name="right_knee_joint" type="revolute">
-    <parent link="right_thigh"/>
-    <child link="right_knee"/>
-    <origin xyz="0 0 -0.3" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
-    <limit lower="0.0" upper="2.443458888888889" effort="100" velocity="1.0"/>
+    <limit lower="-0.5235987755982988" upper="1.9198621771937625" effort="100.0" velocity="1.0"/>
   </joint>
   <link name="right_shin">
     <visual>
@@ -130,29 +196,49 @@
         <cylinder radius="0.035" length="0.3"/>
       </geometry>
       <material name="blue">
-        <color rgba="0.2 0.2 0.8 1"/>
+        <color rgba="0.2 0.2 0.8 1.0"/>
       </material>
     </visual>
   </link>
-  <joint name="right_shin_joint" type="fixed">
-    <parent link="right_knee"/>
+  <joint name="right_knee_pitch_joint" type="revolute">
+    <parent link="right_thigh"/>
     <child link="right_shin"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 0 -0.3" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0.0" upper="2.443460952792061" effort="100.0" velocity="1.0"/>
+  </joint>
+  <link name="right_ankle">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.025"/>
+      </geometry>
+      <material name="orange">
+        <color rgba="0.8 0.4 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="right_ankle_pitch_joint" type="revolute">
+    <parent link="right_shin"/>
+    <child link="right_ankle"/>
+    <origin xyz="0 0 -0.3" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="100.0" velocity="1.0"/>
   </joint>
   <link name="right_foot">
     <visual>
-      <origin xyz="0.05 0 -0.04" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
         <box size="0.15 0.08 0.04"/>
       </geometry>
       <material name="black">
-        <color rgba="0.1 0.1 0.1 1"/>
+        <color rgba="0.1 0.1 0.1 1.0"/>
       </material>
     </visual>
   </link>
   <joint name="right_foot_joint" type="fixed">
-    <parent link="right_shin"/>
+    <parent link="right_ankle"/>
     <child link="right_foot"/>
-    <origin xyz="0 0 -0.38" rpy="0 0 0"/>
+    <origin xyz="0.05 0 -0.08" rpy="0 0 0"/>
   </joint>
 </robot>
