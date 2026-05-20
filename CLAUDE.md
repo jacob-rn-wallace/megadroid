@@ -1,7 +1,7 @@
-# CLAUDE.md — Megadroid AI Assistant Context
+# CLAUDE.md — Megadroid Claude Code Context
 
 This file tells Claude Code what it needs to know to work on this repository
-effectively. Read it before touching any file.
+effectively. Read it before making any changes.
 
 ---
 
@@ -113,7 +113,6 @@ Commit 2: SPEC.md MECH.md README.md  ← rehydrated derived docs
 - Edit `SPEC.md`, `MECH.md`, or `README.md` directly
 - Add a numeric design value to a derived doc
 - Commit derived docs ahead of the YAML that produced them
-- Assume a file has been changed or a command has been run — ask the user to confirm
 
 ---
 
