@@ -49,6 +49,7 @@ This repository contains the canonical design documents for Megadroid:
 ```
 megadroid/
 ├── BOM.csv              # Bill of materials and cost tracking for MVS
+├── CLAUDE.md
 ├── LICENSE              # Apache License 2.0 (software)
 ├── LICENSE-HARDWARE.txt # CERN-OHL-S v2 (hardware)
 ├── MECH.md              # Mechanical design: joints, structure, actuators, loads
