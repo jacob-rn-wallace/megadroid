@@ -219,10 +219,12 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
                              pos=f"0.05 0 {-ankle_off:.4f}")
         ixx, iyy, izz = box_inertia(masses["foot"], 0.075, 0.040, 0.020)
         add_inertial(foot, masses["foot"], (0, 0, 0), ixx, iyy, izz)
+        # pos z=+0.020 raises geom center above foot body origin so the
+        # bottom face of the foot sits at the body origin (sole contact point).
         ET.SubElement(foot, "geom",
                       name=f"{s}_foot_geom", type="box",
                       size="0.075 0.040 0.020",
-                      pos="0 0 0",
+                      pos="0 0 0.020",
                       rgba="0.1 0.1 0.1 1")
 
     add_leg(pelvis, "left",  +1.0)
