@@ -2,6 +2,9 @@
 
 import sys
 import yaml
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 REQUIRED_PATHS = [
     ("anthropometrics", "thigh_length_mm"),
@@ -14,7 +17,7 @@ REQUIRED_PATHS = [
 ]
 
 def main():
-    with open("design/geometry.yaml", "r") as f:
+    with open(REPO_ROOT / "design" / "geometry.yaml", "r") as f:
         data = yaml.safe_load(f)
 
     errors = []

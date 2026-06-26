@@ -28,8 +28,11 @@ def count_mvs_dof(joints: dict) -> int:
             total += 1
     return total
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
 def main():
-    joints_path = Path("design/joints.yaml")
+    joints_path = REPO_ROOT / "design" / "joints.yaml"
     if not joints_path.exists():
         print("ERROR: design/joints.yaml not found", file=sys.stderr)
         sys.exit(1)

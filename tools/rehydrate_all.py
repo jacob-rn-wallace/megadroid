@@ -68,10 +68,6 @@ def main():
     print("Next steps:")
     print("  git add SPEC.md MECH.md README.md")
     print("  git commit -m 'Docs: rehydrate from updated sources'")
-    print()
-    print("Or if you have other changes:")
-    print("  git add -A")
-    print("  git commit -m 'Your commit message'")
 
 if __name__ == "__main__":
     main()

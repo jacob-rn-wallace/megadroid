@@ -1,7 +1,9 @@
 import yaml
 import sys
+from pathlib import Path
 
-JOINTS_FILE = "design/joints.yaml"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+JOINTS_FILE = REPO_ROOT / "design" / "joints.yaml"
 EXPECTED_MVS_DOF = 11
 
 

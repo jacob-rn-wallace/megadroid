@@ -102,29 +102,43 @@ unless the user explicitly initiates a design revision.
 
 ---
 
+## Common Tasks (Quick Reference)
+
+| Task | Command |
+|------|---------|
+| Pre-commit check (rehydrate + validate + status) | `python3 tools/preflight.py` |
+| Regenerate all derived docs | `python3 tools/rehydrate_all.py` |
+| Run all validators | `python3 tools/validate_all.py` |
+| Regenerate URDF | `python3 tools/generate_urdf.py` |
+| Verify URDF dimensions | `python3 tools/verify_urdf_dimensions.py` |
+| Visualize robot structure | `python3 tools/visualize_urdf.py` |
+| Analyze joint workspace | `python3 tools/analyze_workspace.py` |
+| Print DOF summary | `python3 tools/generate_spec_dof.py` |
+
+All tools can be run from any directory — they locate the repo root via
+`Path(__file__).resolve()`.
+
+---
+
 ## Mandatory Workflow
 
 ### Before committing any change
 
 1. **Edit only `design/*.yaml`** for any design change.
-2. **Run rehydration** to regenerate derived docs:
+2. **Run preflight** — rehydrates docs, runs all validators, and shows what changed:
    ```bash
-   python3 tools/rehydrate_all.py
+   python3 tools/preflight.py
    ```
-   This regenerates `SPEC.md`, `MECH.md`, and `README.md` from YAML + templates.
-3. **Run validation** to catch consistency errors:
-   ```bash
-   python3 tools/validate_all.py
-   ```
-   (Runs `validate_geometry.py`, `validate_no_geometry_literals.py`, and
-   `validate_dof_consistency.py` in sequence. Run them individually if you need
-   to isolate a failure.)
-4. **If URDF-relevant geometry changed**, regenerate and verify the URDF:
+   Or run steps separately:
+   - Rehydrate: `python3 tools/rehydrate_all.py`
+   - Validate: `python3 tools/validate_all.py` (runs `validate_geometry.py`,
+     `validate_no_geometry_literals.py`, `validate_dof_consistency.py`)
+3. **If URDF-relevant geometry changed**, regenerate and verify the URDF:
    ```bash
    python3 tools/generate_urdf.py
    python3 tools/verify_urdf_dimensions.py
    ```
-5. **Commit YAML changes first**, derived docs second — never in the same commit.
+4. **Commit YAML changes first**, derived docs second — never in the same commit.
 
 ### Commit order (non-negotiable)
 
@@ -146,6 +160,7 @@ Commit 3: simulation/urdf/megadroid_mvs.urdf  ← if URDF was regenerated
 
 ```
 tools/
+  preflight.py                  Rehydrate + validate + show git status (run before every commit)
   rehydrate_all.py              Run all rehydrators (primary entry point)
   rehydrate_spec.py             Regenerate SPEC.md
   rehydrate_mech.py             Regenerate MECH.md

@@ -2,8 +2,10 @@
 
 import sys
 import re
+from pathlib import Path
 
-FILES = ["SPEC.md", "MECH.md"]
+REPO_ROOT = Path(__file__).resolve().parent.parent
+FILES = [str(REPO_ROOT / "SPEC.md"), str(REPO_ROOT / "MECH.md")]
 FORBIDDEN_PATTERN = re.compile(r"\b\d+(\.\d+)?\s+(mm|cm|m)\b", re.IGNORECASE)
 
 def main():

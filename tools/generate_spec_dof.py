@@ -1,11 +1,26 @@
-import yaml
+#!/usr/bin/env python3
+"""
+Generate a Markdown DOF table from joints.yaml.
 
-JOINTS_FILE = "design/joints.yaml"
+Utility for producing a human-readable DOF summary — useful when drafting
+or reviewing SPEC content. Output is printed to stdout; pipe or redirect
+as needed. This is not a rehydrator: it does not write to any file.
+
+Usage:
+    python3 tools/generate_spec_dof.py
+    python3 tools/generate_spec_dof.py > /tmp/dof_check.md
+"""
+
+import yaml
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+JOINTS_FILE = REPO_ROOT / "design" / "joints.yaml"
 VARIANT = "MVS"
 
 
 def main():
-    with open(JOINTS_FILE, "r") as f:
+    with open(str(JOINTS_FILE), "r") as f:
         data = yaml.safe_load(f)
 
     joints = data.get("joints", {})
