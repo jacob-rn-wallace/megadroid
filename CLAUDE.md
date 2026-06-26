@@ -20,6 +20,39 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
 
 ---
 
+## P3 Active Work — Read Before Starting Simulation Tasks
+
+**Simulation framework:** MuJoCo (installed: `pip install mujoco`).
+
+**What exists and works:**
+- `design/mass.yaml` — authoritative link mass estimates (8.90 kg total)
+- `tools/generate_mjcf.py` — generates `simulation/mujoco/megadroid_mvs.xml`
+- `tools/sim_load_test.py` — model loads cleanly (15 bodies, 11 actuators) ✓
+- `simulation/mujoco/megadroid_mvs.xml` — full MuJoCo scene with dynamics,
+  position actuators (kp=150), foot contact geometry, ground plane
+
+**Where work stopped:**
+`tools/sim_standing.py` exists but the standing test fails. Root cause:
+joint position control alone cannot balance a floating-base biped — the pelvis
+is free to tip in any direction and there is nothing correcting it.
+
+**Decision required before continuing:**
+Choose one of:
+
+1. **Fixed-base static test** (simpler, faster): add a weld/fixed constraint
+   from world to pelvis; verify joint torques and static load distribution.
+   Rename to `sim_static_pose.py`. Valid P3 milestone on its own.
+
+2. **ZMP ankle-pitch balance controller** (proper dynamic balance): implement
+   a proportional controller that adjusts ankle pitch to keep computed ZMP at
+   the target point (between feet). This is the real P3 deliverable for
+   quasi-static walking validation. More involved (~1–2 sessions).
+
+**Key file:** `tools/sim_standing.py` — geometry and initialization are correct;
+only the control strategy is missing.
+
+---
+
 ## Licensing
 
 - **Software** (code, firmware, tools): Apache License 2.0 (`LICENSE`)
@@ -49,6 +82,7 @@ numeric design value anywhere except `design/*.yaml`.
 | `README.md` | Derived repository overview | **No — rehydrate only** |
 | `BOM.csv` | Derived cost/parts list | **No — rehydrate only** |
 | `simulation/urdf/megadroid_mvs.urdf` | Generated URDF model | **No — regenerate only** |
+| `simulation/mujoco/megadroid_mvs.xml` | Generated MuJoCo scene | **No — regenerate only** |
 | `PHILOSOPHY.md` | Static — project philosophy | **No — static artifact** |
 | `PROCESS.md` | Static — workflow definition | **No — static artifact** |
 | `REHYDRATE.md` | Static — rehydration process description | **No — static artifact** |
@@ -69,6 +103,7 @@ design/
   joints.yaml       Joint definitions, limits, nominal poses, MVS flags
   geometry.yaml     Structural constants (link lengths, shaft diameters, etc.)
   kinematics.yaml   Axis directions, sign conventions, angle references
+  mass.yaml         Link mass estimates for simulation (nominal; verified in P6)
   actuation.yaml    Motor and drivetrain parameters (stub — not yet populated)
   power.yaml        Power system parameters (stub — not yet populated)
   .meta.yaml        Schema/metadata for the design directory
@@ -111,6 +146,9 @@ unless the user explicitly initiates a design revision.
 | Run all validators | `python3 tools/validate_all.py` |
 | Regenerate URDF | `python3 tools/generate_urdf.py` |
 | Verify URDF dimensions | `python3 tools/verify_urdf_dimensions.py` |
+| Regenerate MuJoCo scene | `python3 tools/generate_mjcf.py` |
+| MuJoCo load test | `python3 tools/sim_load_test.py` |
+| P3 standing balance test | `python3 tools/sim_standing.py` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |
 | Print DOF summary | `python3 tools/generate_spec_dof.py` |
@@ -169,8 +207,11 @@ tools/
   validate_dof_consistency.py   Check DOF counts are consistent across YAML
   validate_no_geometry_literals.py  Catch hardcoded numbers in derived docs
   validate_geometry.py          Geometry-specific consistency checks
-  generate_urdf.py              Generate URDF from YAML
+  generate_urdf.py              Generate URDF from YAML (includes inertials via mass.yaml)
   verify_urdf_dimensions.py     Validate URDF dimensions against YAML
+  generate_mjcf.py              Generate MuJoCo MJCF scene from YAML
+  sim_load_test.py              MuJoCo load/sanity check (run after generate_mjcf.py)
+  sim_standing.py               P3 balance validation — in progress (see P3 Active Work)
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
   generate_spec_dof.py          Generate DOF table markdown from joints.yaml
@@ -188,9 +229,10 @@ Dependencies:
 | Rehydration and validation (required) | `pyyaml jinja2` |
 | URDF verification | `numpy` |
 | Visualization and workspace analysis | `matplotlib numpy` |
+| MuJoCo simulation | `mujoco` |
 
 ```bash
-pip install pyyaml jinja2 numpy matplotlib
+pip install pyyaml jinja2 numpy matplotlib mujoco
 ```
 
 ---
@@ -204,6 +246,7 @@ megadroid/
   tools/            Rehydration, validation, generation, visualization scripts
   simulation/
     urdf/           Generated URDF files (megadroid_mvs.urdf)
+    mujoco/         Generated MuJoCo scenes (megadroid_mvs.xml)
   docs/             Static milestone reports (e.g., P2_VALIDATION.md)
   firmware/         Embedded motor/joint control — RP2350-CAN boards (not yet populated)
   software/         High-level control, gait planning, dev tools (not yet populated)
