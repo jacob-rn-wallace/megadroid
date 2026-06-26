@@ -20,6 +20,14 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
 
 ---
 
+## Licensing
+
+- **Software** (code, firmware, tools): Apache License 2.0 (`LICENSE`)
+- **Hardware** (mechanical design, PCBs, schematics): CERN Open Hardware Licence
+  Version 2 — Strongly Reciprocal (`LICENSE-HARDWARE.txt`)
+
+---
+
 ## Authority Model — Read This First
 
 ### Single Source of Truth
@@ -40,8 +48,10 @@ numeric design value anywhere except `design/*.yaml`.
 | `MECH.md` | Derived mechanical description | **No — rehydrate only** |
 | `README.md` | Derived repository overview | **No — rehydrate only** |
 | `BOM.csv` | Derived cost/parts list | **No — rehydrate only** |
+| `simulation/urdf/megadroid_mvs.urdf` | Generated URDF model | **No — regenerate only** |
 | `PHILOSOPHY.md` | Static — project philosophy | **No — static artifact** |
 | `PROCESS.md` | Static — workflow definition | **No — static artifact** |
+| `REHYDRATE.md` | Static — rehydration process description | **No — static artifact** |
 | `docs/P2_VALIDATION.md` | Static — milestone report | **No — static artifact** |
 
 **`SPEC.md` is the highest authority for the MVS configuration.** `MECH.md` and
@@ -59,8 +69,8 @@ design/
   joints.yaml       Joint definitions, limits, nominal poses, MVS flags
   geometry.yaml     Structural constants (link lengths, shaft diameters, etc.)
   kinematics.yaml   Axis directions, sign conventions, angle references
-  actuation.yaml    Motor and drivetrain parameters
-  power.yaml        Power system parameters
+  actuation.yaml    Motor and drivetrain parameters (stub — not yet populated)
+  power.yaml        Power system parameters (stub — not yet populated)
   .meta.yaml        Schema/metadata for the design directory
 ```
 
@@ -81,6 +91,15 @@ design/
 coordinate conventions, base frame, control mode, motor type, or sensor strategy
 unless the user explicitly initiates a design revision.
 
+### Coordinate Conventions (from `kinematics.yaml`)
+
+- **Handedness:** right-hand rule
+- **Axes:** Z-up, X-forward, Y-left (standard robotics convention)
+- **Base frame:** `pelvis_center` — geometric midpoint between left and right hip
+  roll joint centers, aligned with global frame in nominal standing pose
+- **Rotation sign:** positive rotation is counterclockwise when looking along the
+  positive axis direction (right-hand rule)
+
 ---
 
 ## Mandatory Workflow
@@ -95,17 +114,24 @@ unless the user explicitly initiates a design revision.
    This regenerates `SPEC.md`, `MECH.md`, and `README.md` from YAML + templates.
 3. **Run validation** to catch consistency errors:
    ```bash
-   python3 tools/validate_dof_consistency.py
-   python3 tools/validate_no_geometry_literals.py
-   python3 tools/validate_geometry.py
+   python3 tools/validate_all.py
    ```
-4. **Commit YAML changes first**, derived docs second — never in the same commit.
+   (Runs `validate_geometry.py`, `validate_no_geometry_literals.py`, and
+   `validate_dof_consistency.py` in sequence. Run them individually if you need
+   to isolate a failure.)
+4. **If URDF-relevant geometry changed**, regenerate and verify the URDF:
+   ```bash
+   python3 tools/generate_urdf.py
+   python3 tools/verify_urdf_dimensions.py
+   ```
+5. **Commit YAML changes first**, derived docs second — never in the same commit.
 
 ### Commit order (non-negotiable)
 
 ```
-Commit 1: design/*.yaml changes  ← always first
-Commit 2: SPEC.md MECH.md README.md  ← rehydrated derived docs
+Commit 1: design/*.yaml changes            ← always first
+Commit 2: SPEC.md MECH.md README.md        ← rehydrated derived docs
+Commit 3: simulation/urdf/megadroid_mvs.urdf  ← if URDF was regenerated
 ```
 
 ### Never do
@@ -124,14 +150,15 @@ tools/
   rehydrate_spec.py             Regenerate SPEC.md
   rehydrate_mech.py             Regenerate MECH.md
   rehydrate_readme_structure.py Regenerate README.md structure
-  validate_all.py               Run all validators
+  validate_all.py               Run all validators (primary entry point)
   validate_dof_consistency.py   Check DOF counts are consistent across YAML
   validate_no_geometry_literals.py  Catch hardcoded numbers in derived docs
   validate_geometry.py          Geometry-specific consistency checks
   generate_urdf.py              Generate URDF from YAML
-  verify_urdf_dimensions.py     Validate URDF against YAML
+  verify_urdf_dimensions.py     Validate URDF dimensions against YAML
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
+  generate_spec_dof.py          Generate DOF table markdown from joints.yaml
   check_joints.py               Joint-level sanity checks
 
 templates/
@@ -139,9 +166,16 @@ templates/
   MECH.md.j2                    Jinja2 template for MECH.md
 ```
 
-Dependencies: `pyyaml`, `jinja2`. Install with:
+Dependencies:
+
+| Purpose | Packages |
+|---------|----------|
+| Rehydration and validation (required) | `pyyaml jinja2` |
+| URDF verification | `numpy` |
+| Visualization and workspace analysis | `matplotlib numpy` |
+
 ```bash
-pip install pyyaml jinja2
+pip install pyyaml jinja2 numpy matplotlib
 ```
 
 ---
@@ -154,10 +188,10 @@ megadroid/
   templates/        Jinja2 templates for derived docs
   tools/            Rehydration, validation, generation, visualization scripts
   simulation/
-    urdf/           Generated URDF files (e.g., megadroid_mvs.urdf)
+    urdf/           Generated URDF files (megadroid_mvs.urdf)
   docs/             Static milestone reports (e.g., P2_VALIDATION.md)
-  firmware/         (placeholder — not yet populated)
-  software/         (placeholder — not yet populated)
+  firmware/         Embedded motor/joint control — RP2350-CAN boards (not yet populated)
+  software/         High-level control, gait planning, dev tools (not yet populated)
   SPEC.md           Derived system specification
   MECH.md           Derived mechanical description
   README.md         Derived repository overview
@@ -166,13 +200,16 @@ megadroid/
   PROCESS.md        Static workflow definition
   REHYDRATE.md      Static rehydration process description
   CLAUDE.md         This file
+  LICENSE           Apache 2.0 (software)
+  LICENSE-HARDWARE.txt  CERN-OHL-S v2 (hardware)
 ```
 
 ---
 
 ## CI
 
-Two GitHub Actions workflows run on push/PR:
+Two GitHub Actions workflows run on push/PR when design files, templates, tools,
+or derived docs change:
 
 - **`validate.yml`** — runs `validate_dof_consistency.py` and
   `validate_no_geometry_literals.py` when design files or derived docs change

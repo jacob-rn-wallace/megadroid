@@ -2,7 +2,7 @@ import yaml
 import sys
 
 JOINTS_FILE = "design/joints.yaml"
-EXPECTED_MVS_DOF = 9
+EXPECTED_MVS_DOF = 11
 
 
 def main():
