@@ -1,0 +1,23 @@
+# Megadroid authoritative mass estimates
+# Nominal values for simulation. Actual masses measured during P6 (physical build).
+# All values in kg. Left/right symmetric links share one entry.
+# Do not duplicate these values in markdown documents.
+
+meta:
+  total_estimate_kg: 8.9
+  basis: >
+    775 DC motor assembly ~200g each (motor + gearbox + mounting hardware).
+    Structural framing: 300mm twin-rail segments with bulkheads, ~150-250g each.
+    Torso: 3 motor assemblies + upper frame + battery + electronics.
+  status: "nominal — pending verification during P6 physical build"
+
+bodies:
+  pelvis: 1.5             # structural pelvis frame + 2× hip roll motor assemblies
+  hip_roll_link: 0.3      # per side; minimal pivot link, no motor here
+  thigh: 0.9              # per side; hip pitch motor + gearbox + 300mm twin-rail frame
+  shin: 0.7               # per side; knee pitch motor + gearbox + 300mm twin-rail frame
+  ankle: 0.35             # per side; ankle pitch motor + gearbox
+  foot: 0.15              # per side; foot plate only
+  torso_pitch_link: 0.3   # torso pitch intermediate link
+  torso_roll_link: 0.3    # torso roll intermediate link
+  torso: 2.0              # 3× torso motor assemblies + upper structural frame + electronics

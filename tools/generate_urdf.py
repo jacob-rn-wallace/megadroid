@@ -2,8 +2,8 @@
 """
 Generate URDF from authoritative design YAML files.
 
-Reads design/joints.yaml, design/geometry.yaml, and design/kinematics.yaml
-and produces a URDF file suitable for visualization and kinematics analysis.
+Reads design/joints.yaml, design/geometry.yaml, design/kinematics.yaml,
+and design/mass.yaml and produces a dynamics-capable URDF.
 
 Output: simulation/urdf/megadroid_mvs.urdf
 """
@@ -35,6 +35,47 @@ def prettify_xml(elem):
 def deg_to_rad(deg):
     return deg * math.pi / 180.0
 
+
+# ── Inertia helpers ────────────────────────────────────────────────────────────
+
+def _fmt3(a, b, c):
+    return f"{a:.6f} {b:.6f} {c:.6f}"
+
+
+def add_inertial(link, mass, com_xyz, ixx, iyy, izz, ixy=0.0, ixz=0.0, iyz=0.0):
+    """Append a <inertial> element to a URDF <link>."""
+    inertial = ET.SubElement(link, "inertial")
+    ET.SubElement(inertial, "origin",
+                  xyz=_fmt3(*com_xyz), rpy="0 0 0")
+    ET.SubElement(inertial, "mass", value=str(mass))
+    ET.SubElement(inertial, "inertia",
+                  ixx=f"{ixx:.8f}", iyy=f"{iyy:.8f}", izz=f"{izz:.8f}",
+                  ixy=f"{ixy:.8f}", ixz=f"{ixz:.8f}", iyz=f"{iyz:.8f}")
+
+
+def box_inertia(mass, hx, hy, hz):
+    """Diagonal inertia for solid box; hx/hy/hz are HALF-sizes."""
+    ixx = mass * (hy**2 + hz**2) / 3.0
+    iyy = mass * (hx**2 + hz**2) / 3.0
+    izz = mass * (hx**2 + hy**2) / 3.0
+    return ixx, iyy, izz
+
+
+def cylinder_inertia(mass, radius, half_len):
+    """Diagonal inertia for solid cylinder along z-axis; half_len is HALF-length."""
+    ixx = mass * (3 * radius**2 + 4 * half_len**2) / 12.0
+    iyy = ixx
+    izz = mass * radius**2 / 2.0
+    return ixx, iyy, izz
+
+
+def sphere_inertia(mass, radius):
+    """Diagonal inertia for solid sphere."""
+    i = 2.0 * mass * radius**2 / 5.0
+    return i, i, i
+
+
+# ── URDF helpers ───────────────────────────────────────────────────────────────
 
 def axis_string(axis_direction: str) -> str:
     """Convert axis direction letter from kinematics.yaml to URDF xyz string."""
@@ -130,7 +171,7 @@ def add_fixed_joint(robot, name, parent, child, origin_xyz, origin_rpy=(0, 0, 0)
     return joint
 
 
-def create_urdf(joints_data, geometry_data, kinematics_data):
+def create_urdf(joints_data, geometry_data, kinematics_data, mass_data):
     """
     Build URDF from design data.
 
@@ -158,9 +199,11 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
 
     Axis directions are read from kinematics.yaml — not hardcoded.
     Joint limits are read from joints.yaml — not hardcoded.
+    Mass and inertia are read from mass.yaml — not hardcoded.
     """
 
     robot = ET.Element("robot", name="megadroid_mvs")
+    masses = mass_data["bodies"]
 
     # ── Geometry ──────────────────────────────────────────────────────────────
     geo = geometry_data["anthropometrics"]
@@ -173,22 +216,25 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
 
     # ── Pelvis ────────────────────────────────────────────────────────────────
     pelvis_geom = ET.Element("box", size="0.20 0.30 0.15")
-    add_link(robot, "pelvis",
-             visual_origin_xyz=(0, 0, 0),
-             visual_origin_rpy=(0, 0, 0),
-             geometry=pelvis_geom,
-             color_rgba=(0.5, 0.5, 0.5, 1.0),
-             material_name="grey")
+    pelvis_link = add_link(robot, "pelvis",
+                           visual_origin_xyz=(0, 0, 0),
+                           visual_origin_rpy=(0, 0, 0),
+                           geometry=pelvis_geom,
+                           color_rgba=(0.5, 0.5, 0.5, 1.0),
+                           material_name="grey")
+    ixx, iyy, izz = box_inertia(masses["pelvis"], 0.10, 0.15, 0.075)
+    add_inertial(pelvis_link, masses["pelvis"], (0, 0, 0), ixx, iyy, izz)
 
     # ── Torso chain ───────────────────────────────────────────────────────────
-    # torso_pitch
     torso_pitch_geom = ET.Element("box", size="0.05 0.20 0.05")
-    add_link(robot, "torso_pitch_link",
-             visual_origin_xyz=(0, 0, 0),
-             visual_origin_rpy=(0, 0, 0),
-             geometry=torso_pitch_geom,
-             color_rgba=(0.5, 0.5, 0.5, 1.0),
-             material_name="grey")
+    tp_link = add_link(robot, "torso_pitch_link",
+                       visual_origin_xyz=(0, 0, 0),
+                       visual_origin_rpy=(0, 0, 0),
+                       geometry=torso_pitch_geom,
+                       color_rgba=(0.5, 0.5, 0.5, 1.0),
+                       material_name="grey")
+    ixx, iyy, izz = box_inertia(masses["torso_pitch_link"], 0.025, 0.10, 0.025)
+    add_inertial(tp_link, masses["torso_pitch_link"], (0, 0, 0), ixx, iyy, izz)
 
     lower, upper = get_limits(joints_data, "torso_pitch")
     add_revolute_joint(robot, "torso_pitch_joint",
@@ -197,14 +243,15 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
                        axis_xyz=get_joint_axis(kinematics_data, "torso_pitch"),
                        lower_rad=lower, upper_rad=upper)
 
-    # torso_roll
     torso_roll_geom = ET.Element("box", size="0.05 0.20 0.05")
-    add_link(robot, "torso_roll_link",
-             visual_origin_xyz=(0, 0, 0),
-             visual_origin_rpy=(0, 0, 0),
-             geometry=torso_roll_geom,
-             color_rgba=(0.5, 0.5, 0.5, 1.0),
-             material_name="grey")
+    tr_link = add_link(robot, "torso_roll_link",
+                       visual_origin_xyz=(0, 0, 0),
+                       visual_origin_rpy=(0, 0, 0),
+                       geometry=torso_roll_geom,
+                       color_rgba=(0.5, 0.5, 0.5, 1.0),
+                       material_name="grey")
+    ixx, iyy, izz = box_inertia(masses["torso_roll_link"], 0.025, 0.10, 0.025)
+    add_inertial(tr_link, masses["torso_roll_link"], (0, 0, 0), ixx, iyy, izz)
 
     lower, upper = get_limits(joints_data, "torso_roll")
     add_revolute_joint(robot, "torso_roll_joint",
@@ -213,14 +260,15 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
                        axis_xyz=get_joint_axis(kinematics_data, "torso_roll"),
                        lower_rad=lower, upper_rad=upper)
 
-    # torso_yaw → torso body
     torso_geom = ET.Element("box", size="0.15 0.25 0.40")
-    add_link(robot, "torso",
-             visual_origin_xyz=(0, 0, 0.20),
-             visual_origin_rpy=(0, 0, 0),
-             geometry=torso_geom,
-             color_rgba=(0.5, 0.5, 0.5, 1.0),
-             material_name="grey")
+    torso_link = add_link(robot, "torso",
+                          visual_origin_xyz=(0, 0, 0.20),
+                          visual_origin_rpy=(0, 0, 0),
+                          geometry=torso_geom,
+                          color_rgba=(0.5, 0.5, 0.5, 1.0),
+                          material_name="grey")
+    ixx, iyy, izz = box_inertia(masses["torso"], 0.075, 0.125, 0.20)
+    add_inertial(torso_link, masses["torso"], (0, 0, 0.20), ixx, iyy, izz)
 
     lower, upper = get_limits(joints_data, "torso_yaw")
     add_revolute_joint(robot, "torso_yaw_joint",
@@ -238,14 +286,15 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
         p = side.lower()
         y = y_sign * hip_y_offset
 
-        # ── Hip roll link (minimal geometry — just a joint pivot) ──────────
         hip_roll_geom = ET.Element("sphere", radius="0.03")
-        add_link(robot, f"{p}_hip_roll_link",
-                 visual_origin_xyz=(0, 0, 0),
-                 visual_origin_rpy=(0, 0, 0),
-                 geometry=hip_roll_geom,
-                 color_rgba=(0.8, 0.4, 0.1, 1.0),
-                 material_name="orange")
+        hr_link = add_link(robot, f"{p}_hip_roll_link",
+                           visual_origin_xyz=(0, 0, 0),
+                           visual_origin_rpy=(0, 0, 0),
+                           geometry=hip_roll_geom,
+                           color_rgba=(0.8, 0.4, 0.1, 1.0),
+                           material_name="orange")
+        i3 = sphere_inertia(masses["hip_roll_link"], 0.03)
+        add_inertial(hr_link, masses["hip_roll_link"], (0, 0, 0), *i3)
 
         lower, upper = get_limits(joints_data, "hip_roll")
         add_revolute_joint(robot, f"{p}_hip_roll_joint",
@@ -254,16 +303,17 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
                            axis_xyz=get_joint_axis(kinematics_data, "hip_roll"),
                            lower_rad=lower, upper_rad=upper)
 
-        # ── Thigh (hip pitch output) ───────────────────────────────────────
         thigh_geom = ET.Element("cylinder",
                                 radius="0.040",
                                 length=str(thigh_len))
-        add_link(robot, f"{p}_thigh",
-                 visual_origin_xyz=(0, 0, -thigh_len / 2),
-                 visual_origin_rpy=(0, 0, 0),
-                 geometry=thigh_geom,
-                 color_rgba=(0.2, 0.2, 0.8, 1.0),
-                 material_name="blue")
+        th_link = add_link(robot, f"{p}_thigh",
+                           visual_origin_xyz=(0, 0, -thigh_len / 2),
+                           visual_origin_rpy=(0, 0, 0),
+                           geometry=thigh_geom,
+                           color_rgba=(0.2, 0.2, 0.8, 1.0),
+                           material_name="blue")
+        ixx, iyy, izz = cylinder_inertia(masses["thigh"], 0.040, thigh_len / 2)
+        add_inertial(th_link, masses["thigh"], (0, 0, -thigh_len / 2), ixx, iyy, izz)
 
         lower, upper = get_limits(joints_data, "hip_pitch")
         add_revolute_joint(robot, f"{p}_hip_pitch_joint",
@@ -272,16 +322,17 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
                            axis_xyz=get_joint_axis(kinematics_data, "hip_pitch"),
                            lower_rad=lower, upper_rad=upper)
 
-        # ── Shin (knee pitch output) ───────────────────────────────────────
         shin_geom = ET.Element("cylinder",
                                radius="0.035",
                                length=str(shin_len))
-        add_link(robot, f"{p}_shin",
-                 visual_origin_xyz=(0, 0, -shin_len / 2),
-                 visual_origin_rpy=(0, 0, 0),
-                 geometry=shin_geom,
-                 color_rgba=(0.2, 0.2, 0.8, 1.0),
-                 material_name="blue")
+        sh_link = add_link(robot, f"{p}_shin",
+                           visual_origin_xyz=(0, 0, -shin_len / 2),
+                           visual_origin_rpy=(0, 0, 0),
+                           geometry=shin_geom,
+                           color_rgba=(0.2, 0.2, 0.8, 1.0),
+                           material_name="blue")
+        ixx, iyy, izz = cylinder_inertia(masses["shin"], 0.035, shin_len / 2)
+        add_inertial(sh_link, masses["shin"], (0, 0, -shin_len / 2), ixx, iyy, izz)
 
         lower, upper = get_limits(joints_data, "knee_pitch")
         add_revolute_joint(robot, f"{p}_knee_pitch_joint",
@@ -290,15 +341,16 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
                            axis_xyz=get_joint_axis(kinematics_data, "knee_pitch"),
                            lower_rad=lower, upper_rad=upper)
 
-        # ── Ankle pitch (MVS) ─────────────────────────────────────────────
         if is_mvs_actuated(joints_data, "ankle_pitch"):
             ankle_geom = ET.Element("sphere", radius="0.025")
-            add_link(robot, f"{p}_ankle",
-                     visual_origin_xyz=(0, 0, 0),
-                     visual_origin_rpy=(0, 0, 0),
-                     geometry=ankle_geom,
-                     color_rgba=(0.8, 0.4, 0.1, 1.0),
-                     material_name="orange")
+            an_link = add_link(robot, f"{p}_ankle",
+                               visual_origin_xyz=(0, 0, 0),
+                               visual_origin_rpy=(0, 0, 0),
+                               geometry=ankle_geom,
+                               color_rgba=(0.8, 0.4, 0.1, 1.0),
+                               material_name="orange")
+            i3 = sphere_inertia(masses["ankle"], 0.025)
+            add_inertial(an_link, masses["ankle"], (0, 0, 0), *i3)
 
             lower, upper = get_limits(joints_data, "ankle_pitch")
             add_revolute_joint(robot, f"{p}_ankle_pitch_joint",
@@ -310,18 +362,18 @@ def create_urdf(joints_data, geometry_data, kinematics_data):
             foot_parent = f"{p}_ankle"
             foot_origin_xyz = (0.05, 0, -ankle_off)
         else:
-            # No ankle — foot attaches directly to shin
             foot_parent = f"{p}_shin"
             foot_origin_xyz = (0.05, 0, -(shin_len + ankle_off / 2))
 
-        # ── Foot ──────────────────────────────────────────────────────────
         foot_geom = ET.Element("box", size="0.15 0.08 0.04")
-        add_link(robot, f"{p}_foot",
-                 visual_origin_xyz=(0, 0, 0),
-                 visual_origin_rpy=(0, 0, 0),
-                 geometry=foot_geom,
-                 color_rgba=(0.1, 0.1, 0.1, 1.0),
-                 material_name="black")
+        ft_link = add_link(robot, f"{p}_foot",
+                           visual_origin_xyz=(0, 0, 0),
+                           visual_origin_rpy=(0, 0, 0),
+                           geometry=foot_geom,
+                           color_rgba=(0.1, 0.1, 0.1, 1.0),
+                           material_name="black")
+        ixx, iyy, izz = box_inertia(masses["foot"], 0.075, 0.040, 0.020)
+        add_inertial(ft_link, masses["foot"], (0, 0, 0), ixx, iyy, izz)
 
         add_fixed_joint(robot, f"{p}_foot_joint",
                         parent=foot_parent, child=f"{p}_foot",
@@ -340,8 +392,9 @@ def main():
     joints_data     = load_yaml(DESIGN_DIR / "joints.yaml")
     geometry_data   = load_yaml(DESIGN_DIR / "geometry.yaml")
     kinematics_data = load_yaml(DESIGN_DIR / "kinematics.yaml")
+    mass_data       = load_yaml(DESIGN_DIR / "mass.yaml")
 
-    robot = create_urdf(joints_data, geometry_data, kinematics_data)
+    robot = create_urdf(joints_data, geometry_data, kinematics_data, mass_data)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     urdf_string = prettify_xml(robot)
@@ -352,6 +405,7 @@ def main():
     print("Next steps:")
     print("  1. Verify dimensions: python3 tools/verify_urdf_dimensions.py")
     print("  2. Visualize robot:   python3 tools/visualize_urdf.py")
+    print("  3. Generate MJCF:     python3 tools/generate_mjcf.py")
 
 
 if __name__ == "__main__":

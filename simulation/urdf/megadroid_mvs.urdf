@@ -10,6 +10,11 @@
         <color rgba="0.5 0.5 0.5 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="1.5"/>
+      <inertia ixx="0.01406250" iyy="0.00781250" izz="0.01625000" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <link name="torso_pitch_link">
     <visual>
@@ -21,6 +26,11 @@
         <color rgba="0.5 0.5 0.5 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.00106250" iyy="0.00012500" izz="0.00106250" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="torso_pitch_joint" type="revolute">
     <parent link="pelvis"/>
@@ -39,6 +49,11 @@
         <color rgba="0.5 0.5 0.5 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.00106250" iyy="0.00012500" izz="0.00106250" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="torso_roll_joint" type="revolute">
     <parent link="torso_pitch_link"/>
@@ -57,6 +72,11 @@
         <color rgba="0.5 0.5 0.5 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.200000" rpy="0 0 0"/>
+      <mass value="2.0"/>
+      <inertia ixx="0.03708333" iyy="0.03041667" izz="0.01416667" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="torso_yaw_joint" type="revolute">
     <parent link="torso_roll_link"/>
@@ -75,6 +95,11 @@
         <color rgba="0.8 0.4 0.1 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.00010800" iyy="0.00010800" izz="0.00010800" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="left_hip_roll_joint" type="revolute">
     <parent link="pelvis"/>
@@ -93,6 +118,11 @@
         <color rgba="0.2 0.2 0.8 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 -0.150000" rpy="0 0 0"/>
+      <mass value="0.9"/>
+      <inertia ixx="0.00711000" iyy="0.00711000" izz="0.00072000" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="left_hip_pitch_joint" type="revolute">
     <parent link="left_hip_roll_link"/>
@@ -111,6 +141,11 @@
         <color rgba="0.2 0.2 0.8 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 -0.150000" rpy="0 0 0"/>
+      <mass value="0.7"/>
+      <inertia ixx="0.00546437" iyy="0.00546437" izz="0.00042875" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="left_knee_pitch_joint" type="revolute">
     <parent link="left_thigh"/>
@@ -129,6 +164,11 @@
         <color rgba="0.8 0.4 0.1 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.35"/>
+      <inertia ixx="0.00008750" iyy="0.00008750" izz="0.00008750" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="left_ankle_pitch_joint" type="revolute">
     <parent link="left_shin"/>
@@ -147,6 +187,11 @@
         <color rgba="0.1 0.1 0.1 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.15"/>
+      <inertia ixx="0.00010000" iyy="0.00030125" izz="0.00036125" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="left_foot_joint" type="fixed">
     <parent link="left_ankle"/>
@@ -163,6 +208,11 @@
         <color rgba="0.8 0.4 0.1 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia ixx="0.00010800" iyy="0.00010800" izz="0.00010800" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="right_hip_roll_joint" type="revolute">
     <parent link="pelvis"/>
@@ -181,6 +231,11 @@
         <color rgba="0.2 0.2 0.8 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 -0.150000" rpy="0 0 0"/>
+      <mass value="0.9"/>
+      <inertia ixx="0.00711000" iyy="0.00711000" izz="0.00072000" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="right_hip_pitch_joint" type="revolute">
     <parent link="right_hip_roll_link"/>
@@ -199,6 +254,11 @@
         <color rgba="0.2 0.2 0.8 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 -0.150000" rpy="0 0 0"/>
+      <mass value="0.7"/>
+      <inertia ixx="0.00546437" iyy="0.00546437" izz="0.00042875" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="right_knee_pitch_joint" type="revolute">
     <parent link="right_thigh"/>
@@ -217,6 +277,11 @@
         <color rgba="0.8 0.4 0.1 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.35"/>
+      <inertia ixx="0.00008750" iyy="0.00008750" izz="0.00008750" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="right_ankle_pitch_joint" type="revolute">
     <parent link="right_shin"/>
@@ -235,6 +300,11 @@
         <color rgba="0.1 0.1 0.1 1.0"/>
       </material>
     </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.15"/>
+      <inertia ixx="0.00010000" iyy="0.00030125" izz="0.00036125" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
   </link>
   <joint name="right_foot_joint" type="fixed">
     <parent link="right_ankle"/>
