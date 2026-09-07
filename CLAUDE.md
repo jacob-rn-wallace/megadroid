@@ -41,23 +41,50 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   is injected into the model in memory at load time; the checked-in MJCF
   (needed for the future floating-base ZMP controller) is never modified
   on disk. Run: `python3 tools/sim_static_pose.py`
+- `tools/sim_zmp_balance.py` — **P3 dynamic-balance milestone, passing.**
+  Floating-base (unmodified MJCF, no weld): a proportional ankle-pitch
+  controller measures ZMP from actual foot ground-contact points and
+  drives it toward the support-polygon centroid. Stable indefinitely
+  (tested to 30s simulated) with <1° pelvis tilt. Two non-obvious fixes
+  were required, both documented in the script's module docstring and
+  worth knowing before touching this file:
+    1. The naive nominal pose (bend only the knee) leaves the pelvis/torso
+       column well forward of the foot — a large structural lean an
+       ankle-only strategy can never correct. `NOMINAL_POSE` is instead a
+       proper crouch (hip_pitch and ankle_pitch solved by FK to counter-
+       rotate the knee bend) — with this pose alone, *no active control*,
+       the robot is already stable. The controller's real job is the
+       small residual/dynamic drift, which is what ankle strategy is
+       actually good for.
+    2. ZMP as one point per foot (the foot body's own origin) can't see
+       heel/toe load shifting, since both feet share the same x-offset —
+       it's blind to an oncoming tip. ZMP is computed from the actual
+       contact points instead, then low-pass filtered (EMA, α=0.02)
+       before being fed to the controller — the raw per-step signal is
+       noisy (MuJoCo's box-plane contact activates different corner
+       subsets frame to frame) and unfiltered feedback destabilizes an
+       otherwise-stable pose.
+  Known limitation: this ankle-only controller does not extend how large
+  a disturbance the robot can absorb before falling beyond what the
+  balanced passive pose already tolerates — that would need a hip/torso
+  strategy too, out of scope for ankle-pitch alone. Run:
+  `python3 tools/sim_zmp_balance.py` (add `--baseline` to compare against
+  the uncontrolled/passive case).
 - `simulation/mujoco/megadroid_mvs.xml` — full MuJoCo scene with dynamics,
   position actuators (kp=150), foot contact geometry, ground plane
 
 **Where work stopped:**
-Fixed-base static validation (option 1 below) is done. The floating-base
-dynamic balance controller (option 2) has not been started — position
-control alone cannot balance a floating-base biped, since the pelvis is
-free to tip in any direction with nothing correcting it. This is the next
-P3 task:
-
-**ZMP ankle-pitch balance controller** (proper dynamic balance): implement
-a proportional controller that adjusts ankle pitch to keep computed ZMP at
-the target point (between feet). This is the real P3 deliverable for
-quasi-static walking validation. More involved (~1–2 sessions). Build it
-against the floating-base `simulation/mujoco/megadroid_mvs.xml` — the
-fixed-base weld trick in `sim_static_pose.py` does not apply here, since
-the whole point is to test balance without an artificial pelvis restraint.
+Both P3 simulation milestones described in the previous version of this
+file — fixed-base static load validation and the floating-base ZMP
+ankle-pitch balance controller — are done and passing. Next possible
+directions (none started, no decision made yet):
+  - Extend the ZMP controller to reject external disturbances (a push),
+    which will likely need a hip/torso strategy layered on top of the
+    ankle strategy (see the known limitation above).
+  - Build a walking gait on top of the now-stable standing controller
+    (footstep planning + a moving ZMP reference trajectory).
+  - Move toward P4 physical prototyping now that P3's simulation
+    validation goals are met.
 
 ---
 
@@ -157,6 +184,7 @@ unless the user explicitly initiates a design revision.
 | Regenerate MuJoCo scene | `python3 tools/generate_mjcf.py` |
 | MuJoCo load test | `python3 tools/sim_load_test.py` |
 | P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
+| P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |
 | Print DOF summary | `python3 tools/generate_spec_dof.py` |
@@ -220,6 +248,7 @@ tools/
   generate_mjcf.py              Generate MuJoCo MJCF scene from YAML
   sim_load_test.py              MuJoCo load/sanity check (run after generate_mjcf.py)
   sim_static_pose.py            P3 fixed-base static load validation — passing
+  sim_zmp_balance.py            P3 floating-base ZMP ankle-pitch balance controller — passing
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
   generate_spec_dof.py          Generate DOF table markdown from joints.yaml
