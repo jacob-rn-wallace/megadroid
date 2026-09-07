@@ -70,61 +70,74 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   strategy too, out of scope for ankle-pitch alone. Run:
   `python3 tools/sim_zmp_balance.py` (add `--baseline` to compare against
   the uncontrolled/passive case).
-- `tools/sim_walk_gait.py` — **P3 walking-gait milestone, partial: one
-  step validated (well), not yet a sustained gait.** Floating-base, no
-  weld. Reuses sim_zmp_balance.py's balanced pose and sagittal
-  ankle-pitch ZMP loop, plus a second control mechanism the standing
-  controller didn't need — lateral (hip_roll) weight transfer, since
-  there's no ankle_roll to shift ZMP sideways. `python3
-  tools/sim_walk_gait.py` passes: ~5° peak tilt, no fall, swing foot
-  lands ~34mm forward (add `--render out.gif` for a visual — MuJoCo's
+- `tools/sim_walk_gait.py` — **P3 walking-gait milestone, partial: two
+  steps validated, not yet a sustained gait.** Floating-base, no weld.
+  Reuses sim_zmp_balance.py's balanced pose and sagittal ankle-pitch ZMP
+  loop, plus a second control mechanism the standing controller didn't
+  need — lateral (hip_roll) weight transfer, since there's no
+  ankle_roll to shift ZMP sideways. `python3 tools/sim_walk_gait.py`
+  passes: ~19° peak tilt, no fall, ~185mm total swing-foot forward
+  progress over 2 steps (add `--render out.gif` for a visual — MuJoCo's
   offscreen renderer works in this environment; `imageio` + `ffmpeg`
-  handle encoding). `--steps 2` reliably fails. Five real bugs were
-  found and fixed getting the single step this clean (all documented in
-  the script's module docstring, worth reading before touching gait
-  code) — two sign-convention bugs (which stance side needs positive
-  vs. negative hip_roll; hip_pitch's sign for "forward," since positive
-  hip_pitch rotates the thigh backward in this axis convention), the
-  swing leg inheriting the stance leg's hip_roll shift and landing
-  ~30mm off from its intended footprint, the stance leg's forward-drive
-  needing a smaller, separately-tuned magnitude than the swing leg's or
-  the stance foot slips on the ground, and — counter to intuition — a
-  *faster* swing (~0.3s) being markedly more stable than a slower one.
-  One finding stands independent of further tuning: the pelvis nets
-  slightly backward every step even though the foot itself lands
-  forward (a real, reproduced-across-the-tuning-range recoil effect,
-  not noise) — the pass criterion is deliberately based on foot
-  placement, not pelvis translation, because of this.
+  handle encoding). `--steps 3` reliably fails. Six real bugs were
+  found and fixed getting here (all documented in the script's module
+  docstring, worth reading before touching gait code) — two sign-
+  convention bugs (which stance side needs positive vs. negative
+  hip_roll; hip_pitch's sign for "forward," since positive hip_pitch
+  rotates the thigh backward in this axis convention), the swing leg
+  inheriting the stance leg's hip_roll shift and landing ~30mm off from
+  its intended footprint, the stance leg's forward-drive needing a
+  smaller magnitude than the swing leg's or the stance foot slips on
+  the ground, a faster swing (~0.3s) being markedly more stable than a
+  slower one (counter-intuitive but measured), and — the fix that took
+  it from 1 step to 2 — a single ANKLE_KP used for both single- and
+  double-support phases, when double support needs a much gentler gain
+  (kp=1, not kp=4) or it slowly diverges on its own. One finding stands
+  independent of further tuning: the pelvis nets slightly backward
+  every step even though the foot itself lands forward (a real,
+  reproduced recoil effect, not noise) — the pass criterion is
+  deliberately based on foot placement, not pelvis translation.
 
-  **Why multi-step reliably fails (root cause, not just "needs more
-  tuning"):** after one step the two legs are no longer mirror-
-  symmetric — their hip_pitch angles advanced in opposite directions —
-  so the two feet end up at genuinely different (x, y) positions rather
-  than the nominal ±hip_y mirror pair. The "rotate both hip_roll by the
-  same angle" weight-shift trick relies on exactly that mirror symmetry
-  to produce a clean pelvis translation; tested directly against the
-  post-step-1 asymmetric configuration, it mostly fails to move the
-  pelvis laterally at all and pitch grows instead. Fixing this needs
-  real per-step inverse kinematics for the actual (asymmetric) foot
-  placements each step leaves behind, not the symmetric-case shortcut
-  reused every step — a bigger undertaking than gain-tuning, and the
-  actual next task if continuing this work (see below).
+  **Why a third step fails (root cause — an earlier theory here was
+  wrong and has been corrected):** the first analysis of this problem
+  blamed leg asymmetry breaking the hip_roll weight-shift trick. That
+  was tested directly and ruled out — the trick still works fine even
+  with very asymmetric legs. The real cause: `NOMINAL_HIP_DEG` in
+  sim_zmp_balance.py was solved so the foot lands centered under the
+  pelvis (balanced) at hip_pitch=-1.19°. Every swing/stance advance
+  moves a leg's hip_pitch away from that value while only keeping the
+  foot LEVEL, not re-solving for balance — and the resulting CoM offset
+  grows almost linearly with the deviation (~1cm per degree; a single
+  10° swing already creates ~10cm of static offset, the same scale of
+  problem the very first naive standing pose had). This is confirmed as
+  a geometry problem, not a dynamics one — it reproduces even holding a
+  pose perfectly still under gravity with no gait motion. Neither
+  remaining joint can fix it at the deviations 3 steps would require:
+  ankle has ~7x less leverage on this offset than hip_pitch does, and
+  knee has some leverage but tops out well short of full correction
+  even at its own limit. Two steps stay within what this can barely
+  tolerate; a third doesn't.
 - `simulation/mujoco/megadroid_mvs.xml` — full MuJoCo scene with dynamics,
   position actuators (kp=150), foot contact geometry, ground plane
 
 **Where work stopped:**
 Three P3 simulation milestones are done: fixed-base static load
 validation, the floating-base ZMP ankle-pitch standing controller, and
-one well-validated step of quasi-static walking. Sustained multi-step
-walking is NOT done. The next task, if continuing the gait work, is
-per-step inverse kinematics: given the actual (asymmetric) current foot
-placements after a step, solve for the hip_roll/hip_pitch/knee/ankle
-needed for the next weight shift and swing, rather than reusing the
-single nominal-pose-derived shift angle and fixed gains for every step
-regardless of how asymmetric the legs have become. Periodic re-
-centering (restoring a fresh symmetric-enough relative leg configuration
-between steps) is a lighter-weight alternative worth trying first if it
-proves easier than full per-step IK.
+two validated steps of quasi-static walking. Sustained multi-step
+walking is NOT done. The next task, if continuing the gait work, is one
+of the two approaches sim_walk_gait.py's docstring identifies for the
+now-confirmed root cause (CoM imbalance from hip_pitch drifting
+unboundedly from the -1.19° balance point, not leg asymmetry):
+  - Periodic re-centering: bring hip_pitch back toward -1.19° over
+    multiple steps rather than letting it accumulate without bound.
+  - A genuine per-step balanced-pose re-solve: for whatever hip_pitch
+    each swing/advance actually produces, solve for the ankle (and
+    possibly knee) angle that keeps the foot balanced under the pelvis,
+    not just level — the same FK-solve technique NOMINAL_HIP_DEG itself
+    used, generalized to run at each step rather than once offline.
+Do not re-pursue "per-step inverse kinematics for asymmetric foot
+placements" as the fix — that was the first (wrong) diagnosis and has
+been superseded by the above.
 Other next directions (none started, no decision made yet):
   - Extend the ZMP controller to reject external disturbances (a push),
     which will likely need a hip/torso strategy layered on top of the
@@ -233,7 +246,7 @@ unless the user explicitly initiates a design revision.
 | MuJoCo load test | `python3 tools/sim_load_test.py` |
 | P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
 | P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |
-| P3 walking gait validation (1 step) | `python3 tools/sim_walk_gait.py` |
+| P3 walking gait validation (2 steps) | `python3 tools/sim_walk_gait.py` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |
 | Print DOF summary | `python3 tools/generate_spec_dof.py` |
@@ -298,7 +311,7 @@ tools/
   sim_load_test.py              MuJoCo load/sanity check (run after generate_mjcf.py)
   sim_static_pose.py            P3 fixed-base static load validation — passing
   sim_zmp_balance.py            P3 floating-base ZMP ankle-pitch balance controller — passing
-  sim_walk_gait.py              P3 walking gait — 1 step validated, multi-step not yet stable
+  sim_walk_gait.py              P3 walking gait — 2 steps validated, 3rd fails (CoM-balance limit)
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
   generate_spec_dof.py          Generate DOF table markdown from joints.yaml

@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-P3 Quasi-Static Walking Gait — floating-base, one step validated.
+P3 Quasi-Static Walking Gait — floating-base, two steps validated.
 
 Builds on sim_zmp_balance.py's proven standing-balance techniques (the
 balanced-crouch nominal pose, filtered contact-point ZMP, ankle-pitch
-sagittal feedback) to take a step forward. Validated for ONE step
-(weight shift -> swing -> land, max pelvis tilt ~5deg, no fall) — a
-real "quasi-static walking validation" milestone in its own right,
-since it demonstrates something standing balance alone can't: shifting
-weight fully onto one foot, lifting and advancing the other, and
-landing safely. A second consecutive step reliably fails; see "Why
-multi-step still fails" below for the root cause, which is more
-fundamental than a leftover disturbance or a gain-tuning gap.
+sagittal feedback) to take steps forward. Validated for TWO consecutive
+steps (max pelvis tilt ~19deg, no fall, ~185mm total swing-foot forward
+progress) — a real "quasi-static walking validation" milestone in its
+own right, since it demonstrates something standing balance alone
+can't: shifting weight fully onto one foot, lifting and advancing the
+other, landing safely, and doing it again on the other side. A third
+step reliably fails, and the root cause (see "Why a third step fails"
+below) is a genuine geometric limit of this pose-advancement scheme,
+not a leftover disturbance or a gain-tuning gap.
 
 Two balance mechanisms had to be added beyond the standing controller,
 both because the MVS has no ankle_roll joint — nothing at the ankle can
@@ -67,6 +68,18 @@ knowing before touching this file:
    support does; spending less time in it, not more caution while in
    it, is what actually helps.
 
+6. ANKLE_KP needs to be phase-dependent, and using one value everywhere
+   was the dominant remaining cause of a second step's instability (NOT
+   the leg asymmetry a first analysis of this problem blamed — that
+   theory was tested directly and ruled out, see point 7). Single
+   support (swing) needs a strong, fast gain; using that same strong
+   gain during double support (shift/settle) causes slow divergence
+   there — measured directly: the plain, perfectly nominal, zero-
+   deviation double-support pose diverges to ~11deg of tilt over 1.5s
+   at ANKLE_KP=4, but holds to ~1deg at ANKLE_KP=1 (the gain
+   sim_zmp_balance.py's standing controller independently validated).
+   ANKLE_KP_DOUBLE and ANKLE_KP_SINGLE are now separate constants.
+
 Even after all of the above, the pelvis nets slightly BACKWARD every
 step (tens of mm) while the swing foot itself lands meaningfully
 forward — see run()'s pelvis_progress_m vs swing_foot_progress_m. The
@@ -75,55 +88,81 @@ translation, because this backward-pelvis recoil is real, reproducible
 across the tuning range tried, and not yet resolved (a hip/torso
 strategy or an actively-trailing stance leg would likely be needed).
 
-Why multi-step still fails: after one step, the two legs are no longer
-mirror-symmetric (the swing leg's hip_pitch advanced one way, the
-stance leg's the other), and the two feet end up at genuinely different
-(x, y) positions rather than the nominal ±hip_y mirror pair. The
-"rotate both hip_roll by the same angle" trick in point 1 above relies
-on exactly that mirror symmetry to produce a clean pelvis translation;
-tested directly against the post-step-1 asymmetric configuration, it
-mostly fails to move the pelvis laterally at all and pitch grows
-instead (measured: pelvis_y barely moved, 34deg -> 21deg tilt growth,
-in one isolated shift-phase test). A real fix needs per-step inverse
-kinematics for the actual current (asymmetric) foot placements, not
-the symmetric-case shortcut reused every step — a bigger undertaking
-than this milestone, not a further gain-tuning pass.
+Why a third step fails: NOT leg asymmetry breaking the hip_roll
+weight-shift trick — that was the first hypothesis, and it was WRONG.
+Direct testing showed the "rotate both hip_roll by the same angle"
+relationship still holds even with very asymmetric hip_pitch between
+the two legs (verified via forward kinematics: both feet still shift
+by equal amounts for a given hip_roll change, regardless of each leg's
+current hip_pitch). The real cause is simpler and more fundamental:
+NOMINAL_HIP_DEG in sim_zmp_balance.py was specifically solved so the
+foot lands centered under the pelvis (foot_x=0) for hip_pitch=-1.19deg
+with knee=12deg. Every swing/stance advance in this gait moves a leg's
+hip_pitch away from that value while only keeping the foot LEVEL
+(ankle = -(hip+knee)), not re-solving for BALANCE — and foot_x grows
+almost perfectly linearly with the deviation (measured: ~0.0104m of
+CoM offset per degree away from -1.19deg, so a single -10deg swing
+already creates a ~10cm static CoM offset — the same magnitude of
+problem the original naive standing pose had). This is a genuine
+geometry problem, not a dynamics one (reproduced even holding a pose
+perfectly still under gravity with no gait motion at all) and neither
+remaining DOF can fix it: ankle has ~7x less leverage on foot_x than
+hip_pitch does (correcting a 10deg hip deviation would need roughly
+70+ degrees of ankle rotation — far past its +-30deg limit), and knee
+has some leverage but tops out well short of full correction even at
+its 30deg limit for a 10deg hip deviation. Two consecutive steps stay
+within the region this can still (barely) tolerate; a third pushes at
+least one leg's cumulative advance far enough out that no ankle/knee
+combination can hold it up. A real fix for sustained multi-step
+walking needs one of: periodic re-centering (bring hip_pitch back
+toward -1.19deg over multiple steps rather than letting it accumulate
+without bound), or a genuine per-step balanced-pose re-solve for
+whatever hip_pitch each swing/advance actually produces (not just the
+level-foot shortcut) — both bigger than a further gain-tuning pass.
 
 Gait state machine (repeats, alternating stance/swing leg):
   1. SHIFT   — ramp hip_roll (both legs, symmetric) toward the new
-               stance side over SHIFT_DURATION_S. Open-loop (see
-               step_physics: the filtered ZMP hasn't caught up with
-               the still-in-progress transfer, so closing the lateral
-               loop here fights the ramp instead of helping).
+               stance side over SHIFT_DURATION_S, with ANKLE_KP_DOUBLE
+               (point 6) sagittal feedback targeting the double-support
+               centroid (double_support_target()) — still double
+               support, both feet planted, so targeting either foot
+               alone here was a real bug: after an asymmetric step the
+               feet can be ~0.1m+ apart in x, and a sudden switch to a
+               single-foot target provoked a large, destabilizing
+               correction right as the phase started. Open-loop on
+               hip_roll itself (see step_physics: the filtered lateral
+               ZMP hasn't caught up with the still-in-progress transfer,
+               so closing that loop here fights the ramp instead of
+               helping).
   2. SWING   — the swing leg's hip_pitch advances forward by
                STEP_ADVANCE_DEG from wherever it currently is (not to
                a fixed absolute angle); the stance leg's hip_pitch
                advances the opposite way by STANCE_ADVANCE_DEG (point
                4); knee_pitch bumps up mid-swing for ground clearance;
-               ankle_pitch tracks -(hip+knee) on both legs to keep
-               each foot level; the swing leg's hip_roll returns to
-               neutral (point 3). Both feedback loops run, targeting
-               the stance foot's (x, y).
-  3. SETTLE  — double-support pause after landing: the (former) stance
-               leg's hip_roll also returns to neutral (point 3);
-               feedback now targets the double-support centroid
-               (double_support_target()), not the stale single-support
-               target — using the stale target here was tried first
-               and was a real bug of its own.
+               ankle_pitch tracks -(hip+knee) on both legs to keep each
+               foot level (see "Why a third step fails" for the limits
+               of this); the swing leg's hip_roll returns to neutral
+               (point 3). Both feedback loops run with ANKLE_KP_SINGLE
+               (point 6), targeting the stance foot's (x, y).
+  3. SETTLE  — double-support pause after landing, ANKLE_KP_DOUBLE
+               again: the (former) stance leg's hip_roll also returns
+               to neutral (point 3); feedback targets the double-
+               support centroid, not the stale single-support target.
   Then mirror for the other leg.
 
 Because each leg's hip_pitch only ever advances (never reset to a
-fixed "trailing" angle), even a working multi-step version of this
-would be a few-step shuffle, not an infinite periodic gait — the joint
-range (-30 to 110 deg) allows on the order of ten steps before running
-out of room. That's enough to validate quasi-static forward walking is
-achievable at all with this DOF set; a true infinite periodic gait is
+fixed "trailing" angle), even a fix for "Why a third step fails" above
+would still make this a few-step shuffle, not an infinite periodic
+gait. That's enough to validate quasi-static forward walking is
+achievable at all with this DOF set; a true infinite periodic gait —
+with the stance leg trailing as the pelvis advances over it, and
+without hip_pitch drifting unboundedly from the balanced pose — is
 further follow-up work.
 
 Usage:
-    python3 tools/sim_walk_gait.py                       # validated: 1 step
-    python3 tools/sim_walk_gait.py --render out.gif       # render the step to a GIF/video
-    python3 tools/sim_walk_gait.py --steps 2              # known to fail — see above
+    python3 tools/sim_walk_gait.py                       # validated: 2 steps
+    python3 tools/sim_walk_gait.py --render out.gif       # render to a GIF/video
+    python3 tools/sim_walk_gait.py --steps 3              # known to fail — see above
 """
 
 import math
@@ -150,7 +189,17 @@ SHIFT_DURATION_S = 0.6
 SWING_DURATION_S = 0.3         # faster is more stable here, not less — see module docstring
 SETTLE_DURATION_S = 0.3
 
-ANKLE_KP = 4.0                 # sagittal (x) ZMP -> ankle-pitch gain, rad/m
+# Ankle gain must differ by phase: single support (swing) needs strong, fast
+# correction (only one small foot supporting, plus the swing disturbance);
+# double support (shift/settle) is inherently more stable and the SAME high
+# gain there causes slow divergence (verified: kp=4 diverges the plain
+# nominal double-support pose to 10.9deg tilt over 1.5s; kp=1 — the gain
+# sim_zmp_balance.py's standing controller validated — holds it to ~1deg).
+# Using the swing-tuned gain during shift/settle was a real bug, and the
+# dominant remaining cause of multi-step instability, not hip_pitch
+# asymmetry (tested and ruled out — see module docstring).
+ANKLE_KP_SINGLE = 4.0          # sagittal (x) ZMP -> ankle-pitch gain during swing (single support)
+ANKLE_KP_DOUBLE = 1.0          # ...during shift/settle (double support)
 ROLL_KP = 2.0                  # lateral (y) ZMP -> hip-roll gain, rad/m
 ZMP_FILTER_ALPHA = 0.02        # EMA weight on each new raw ZMP sample (both axes)
 MAX_ANKLE_CORRECTION_RAD = math.radians(15.0)
@@ -261,12 +310,16 @@ class Gait:
             nominal_ankle = foot_level_ankle_deg(self.hip_deg[side], self.knee_deg[side])
             d.ctrl[act[f"{side}_ankle_pitch"]] = math.radians(nominal_ankle) + ankle_correction_rad
 
-    def step_physics(self, stance_target, stance_side, frame_sink=None, roll_feedback=True):
+    def step_physics(self, stance_target, stance_side, ankle_kp, frame_sink=None, roll_feedback=True):
         """Advance one physics step with the current joint targets and
         feedback corrections. stance_target is (x, y) of the current
         primary-support foot; stance_side says which leg the lateral
         feedback correction applies to (see apply_ctrl — applying it to
         an airborne swing leg would just perturb where it lands).
+        ankle_kp must be phase-appropriate — ANKLE_KP_DOUBLE during
+        shift/settle, ANKLE_KP_SINGLE during swing (see the constants'
+        comment: using the single-support gain during double support is
+        what was actually causing multi-step instability).
         roll_feedback=False leaves hip_roll purely open-loop (see
         shift(): the filtered zy hasn't caught up with reality yet
         during the deliberate weight-shift ramp, so closing the loop on
@@ -274,7 +327,7 @@ class Gait:
         Returns False if the robot fell."""
         target_x, target_y = stance_target
         x_error = target_x - self.zx_filtered
-        ankle_corr = np.clip(ANKLE_KP * x_error, -MAX_ANKLE_CORRECTION_RAD, MAX_ANKLE_CORRECTION_RAD)
+        ankle_corr = np.clip(ankle_kp * x_error, -MAX_ANKLE_CORRECTION_RAD, MAX_ANKLE_CORRECTION_RAD)
         roll_corr = 0.0
         if roll_feedback:
             y_error = target_y - self.zy_filtered
@@ -303,13 +356,14 @@ class Gait:
 
         return not self.fell
 
-    def run_phase(self, duration, stance_target, stance_side, per_step_update=None,
+    def run_phase(self, duration, stance_target, stance_side, ankle_kp, per_step_update=None,
                   frame_sink=None, roll_feedback=True):
         n = int(duration / self.dt)
         for i in range(n):
             if per_step_update is not None:
                 per_step_update(i / max(1, n - 1))
-            if not self.step_physics(stance_target, stance_side, frame_sink, roll_feedback=roll_feedback):
+            if not self.step_physics(stance_target, stance_side, ankle_kp, frame_sink,
+                                      roll_feedback=roll_feedback):
                 return False
         return True
 
@@ -327,8 +381,9 @@ class Gait:
         # Open-loop: the filtered ZMP hasn't caught up with the still-
         # in-progress weight transfer, so closing the roll loop here
         # fights the deliberate ramp instead of helping (see step_physics).
-        return self.run_phase(SHIFT_DURATION_S, stance_target, stance_side, update, frame_sink,
-                               roll_feedback=False)
+        # ANKLE_KP_DOUBLE, not _SINGLE — see that constant's comment.
+        return self.run_phase(SHIFT_DURATION_S, stance_target, stance_side, ANKLE_KP_DOUBLE,
+                               update, frame_sink, roll_feedback=False)
 
     def swing(self, swing_side, stance_target, frame_sink=None):
         stance_side = "left" if swing_side == "right" else "right"
@@ -357,7 +412,8 @@ class Gait:
             self.knee_deg[swing_side] = start_knee + bump
             self.hip_roll_deg[swing_side] = start_roll_swing + (0.0 - start_roll_swing) * e
 
-        ok = self.run_phase(SWING_DURATION_S, stance_target, stance_side, update, frame_sink)
+        ok = self.run_phase(SWING_DURATION_S, stance_target, stance_side, ANKLE_KP_SINGLE,
+                             update, frame_sink)
         self.knee_deg[swing_side] = start_knee   # land at the original knee bend
         return ok
 
@@ -372,7 +428,9 @@ class Gait:
         def update(s):
             self.hip_roll_deg[stance_side] = start_roll_stance + (0.0 - start_roll_stance) * ease(s)
 
-        return self.run_phase(SETTLE_DURATION_S, stance_target, stance_side, update, frame_sink)
+        # ANKLE_KP_DOUBLE, not _SINGLE — see that constant's comment.
+        return self.run_phase(SETTLE_DURATION_S, stance_target, stance_side, ANKLE_KP_DOUBLE,
+                               update, frame_sink)
 
 
 def run(n_steps, render_path=None, render_fps=30):
@@ -419,8 +477,15 @@ def run(n_steps, render_path=None, render_fps=30):
         # verified empirically; do not "fix" this to look more intuitive.
         target_roll = -hip_roll_shift_deg if stance_side == "left" else hip_roll_shift_deg
 
-        stance_target = gait.foot_pos(stance_side)
-        ok = gait.shift(stance_side, target_roll, stance_target, frame_sink)
+        # SHIFT is still double support (both feet planted) — target the
+        # centroid for sagittal feedback, not the single stance foot. Using
+        # the single-foot target here was a real bug: after an asymmetric
+        # step the two feet can be ~0.1m+ apart in x, so this target jumps
+        # discontinuously the instant shift() starts, provoking a large,
+        # destabilizing ankle correction (this was the dominant cause of
+        # the pitch blowup during a second step, not the lateral/hip_roll
+        # mechanism the shift itself changes).
+        ok = gait.shift(stance_side, target_roll, gait.double_support_target(), frame_sink)
         if not ok:
             break
         stance_target = gait.foot_pos(stance_side)
@@ -467,11 +532,13 @@ def run(n_steps, render_path=None, render_fps=30):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--steps", type=int, default=1,
-                        help="Number of swing steps to attempt (default: 1 — see module "
-                             "docstring: a second consecutive step is not yet reliably stable, "
-                             "since it starts from the asymmetric pose the first step leaves "
-                             "behind rather than the well-balanced nominal crouch)")
+    parser.add_argument("--steps", type=int, default=2,
+                        help="Number of swing steps to attempt (default: 2 — validated; a "
+                             "third fails, and not from a leftover disturbance or a tunable "
+                             "gain — see module docstring: each swing/stance advance pushes "
+                             "hip_pitch further from the FK-solved balance point, creating a "
+                             "growing static CoM offset that neither ankle nor knee has "
+                             "enough range to correct by the third step)")
     parser.add_argument("--render", type=str, default=None, help="Path to save a rendered video/GIF")
     args = parser.parse_args()
 
