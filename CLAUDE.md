@@ -70,21 +70,59 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   strategy too, out of scope for ankle-pitch alone. Run:
   `python3 tools/sim_zmp_balance.py` (add `--baseline` to compare against
   the uncontrolled/passive case).
+- `tools/sim_walk_gait.py` — **P3 walking-gait milestone, partial: one
+  step validated, not yet a sustained gait.** Floating-base, no weld.
+  Reuses sim_zmp_balance.py's balanced pose and sagittal ankle-pitch ZMP
+  loop, and adds a second control mechanism the standing controller
+  didn't need: lateral (hip_roll) weight transfer, since there's no
+  ankle_roll to shift ZMP sideways. State machine per step: SHIFT (ramp
+  hip_roll, both legs symmetric, to move weight fully onto the stance
+  foot) -> SWING (advance the swing leg's hip_pitch forward while the
+  *stance* leg's hip_pitch also advances the opposite way, driving the
+  pelvis forward over the planted foot — without this the pelvis
+  recoils backward instead of progressing) -> SETTLE. One step is
+  reliable: `python3 tools/sim_walk_gait.py` passes (478mm forward,
+  ~35° peak tilt, no fall). A second consecutive step is NOT reliable
+  yet — `--steps 2` fails — because it starts from the asymmetric pose
+  the first step leaves behind (both legs' angles shifted away from the
+  symmetric nominal crouch) rather than the well-tuned starting point,
+  and the same gains don't consistently hold up there. Add `--render
+  out.gif` to get a visual (uses MuJoCo's offscreen renderer, confirmed
+  working in this environment; `imageio` + `ffmpeg` handle encoding).
+  Three real sign-convention bugs were found and fixed while building
+  this (all documented in the script, worth reading before touching
+  gait code): (1) which stance side needs positive vs. negative
+  hip_roll, (2) the lateral ZMP-error-to-hip_roll feedback sign (inverse
+  of the sagittal ankle relationship — increasing hip_roll *decreases*
+  pelvis y), (3) hip_pitch sign for "forward" (positive hip_pitch
+  rotates the thigh backward in this axis convention, confirmed via FK,
+  not assumption).
 - `simulation/mujoco/megadroid_mvs.xml` — full MuJoCo scene with dynamics,
   position actuators (kp=150), foot contact geometry, ground plane
 
 **Where work stopped:**
-Both P3 simulation milestones described in the previous version of this
-file — fixed-base static load validation and the floating-base ZMP
-ankle-pitch balance controller — are done and passing. Next possible
-directions (none started, no decision made yet):
+Three P3 simulation milestones are done: fixed-base static load
+validation, the floating-base ZMP ankle-pitch standing controller, and
+one validated step of quasi-static walking. Sustained multi-step walking
+is NOT done — this is the immediate next task if continuing the gait
+work, and it needs one of:
+  - Symmetric periodic re-centering: after each step, restore both legs
+    to a fresh well-tuned relative configuration (not literally reset to
+    the original nominal pose, since that would erase forward progress)
+    before starting the next shift, rather than continuing from whatever
+    asymmetric state the previous step left behind.
+  - Per-step gain/target re-solving: recompute the hip_roll shift target
+    and re-tune (or gain-schedule) the feedback gains for each step's
+    actual starting configuration instead of reusing one fixed tuning
+    for every step.
+Other next directions (none started, no decision made yet):
   - Extend the ZMP controller to reject external disturbances (a push),
     which will likely need a hip/torso strategy layered on top of the
-    ankle strategy (see the known limitation above).
-  - Build a walking gait on top of the now-stable standing controller
-    (footstep planning + a moving ZMP reference trajectory).
-  - Move toward P4 physical prototyping now that P3's simulation
-    validation goals are met.
+    ankle strategy (see sim_zmp_balance.py's known limitation).
+  - Move toward P4 physical prototyping — premature before multi-step
+    walking is validated, since walking is likely to stress-test
+    mechanical dimensions and motor torque budgets that standing alone
+    doesn't touch.
 
 ---
 
@@ -185,6 +223,7 @@ unless the user explicitly initiates a design revision.
 | MuJoCo load test | `python3 tools/sim_load_test.py` |
 | P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
 | P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |
+| P3 walking gait validation (1 step) | `python3 tools/sim_walk_gait.py` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |
 | Print DOF summary | `python3 tools/generate_spec_dof.py` |
@@ -249,6 +288,7 @@ tools/
   sim_load_test.py              MuJoCo load/sanity check (run after generate_mjcf.py)
   sim_static_pose.py            P3 fixed-base static load validation — passing
   sim_zmp_balance.py            P3 floating-base ZMP ankle-pitch balance controller — passing
+  sim_walk_gait.py              P3 walking gait — 1 step validated, multi-step not yet stable
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
   generate_spec_dof.py          Generate DOF table markdown from joints.yaml
