@@ -26,30 +26,38 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
 
 **What exists and works:**
 - `design/mass.yaml` — authoritative link mass estimates (8.90 kg total)
-- `tools/generate_mjcf.py` — generates `simulation/mujoco/megadroid_mvs.xml`
+- `tools/generate_mjcf.py` — generates `simulation/mujoco/megadroid_mvs.xml`;
+  also excludes self-collision pairs (pelvis↔thigh, and the non-adjacent
+  pairs among the stacked torso_pitch/torso_roll/torso links) where
+  collision-proxy geometry inevitably overlaps by construction
 - `tools/sim_load_test.py` — model loads cleanly (15 bodies, 11 actuators) ✓
+- `tools/sim_static_pose.py` — **P3 fixed-base milestone, passing.** Welds
+  the pelvis to the world (like a test-stand bolt), holds the nominal
+  standing pose (knees bent 12°), and validates the weld's vertical
+  reaction force converges to the robot's exact computed weight (87.31 N,
+  0.0% error) with joint torques symmetric left/right. Ground contact is
+  intentionally excluded for this test — welding the pelvis while feet
+  also touch ground would make support statically indeterminate. The weld
+  is injected into the model in memory at load time; the checked-in MJCF
+  (needed for the future floating-base ZMP controller) is never modified
+  on disk. Run: `python3 tools/sim_static_pose.py`
 - `simulation/mujoco/megadroid_mvs.xml` — full MuJoCo scene with dynamics,
   position actuators (kp=150), foot contact geometry, ground plane
 
 **Where work stopped:**
-`tools/sim_standing.py` exists but the standing test fails. Root cause:
-joint position control alone cannot balance a floating-base biped — the pelvis
-is free to tip in any direction and there is nothing correcting it.
+Fixed-base static validation (option 1 below) is done. The floating-base
+dynamic balance controller (option 2) has not been started — position
+control alone cannot balance a floating-base biped, since the pelvis is
+free to tip in any direction with nothing correcting it. This is the next
+P3 task:
 
-**Decision required before continuing:**
-Choose one of:
-
-1. **Fixed-base static test** (simpler, faster): add a weld/fixed constraint
-   from world to pelvis; verify joint torques and static load distribution.
-   Rename to `sim_static_pose.py`. Valid P3 milestone on its own.
-
-2. **ZMP ankle-pitch balance controller** (proper dynamic balance): implement
-   a proportional controller that adjusts ankle pitch to keep computed ZMP at
-   the target point (between feet). This is the real P3 deliverable for
-   quasi-static walking validation. More involved (~1–2 sessions).
-
-**Key file:** `tools/sim_standing.py` — geometry and initialization are correct;
-only the control strategy is missing.
+**ZMP ankle-pitch balance controller** (proper dynamic balance): implement
+a proportional controller that adjusts ankle pitch to keep computed ZMP at
+the target point (between feet). This is the real P3 deliverable for
+quasi-static walking validation. More involved (~1–2 sessions). Build it
+against the floating-base `simulation/mujoco/megadroid_mvs.xml` — the
+fixed-base weld trick in `sim_static_pose.py` does not apply here, since
+the whole point is to test balance without an artificial pelvis restraint.
 
 ---
 
@@ -148,7 +156,7 @@ unless the user explicitly initiates a design revision.
 | Verify URDF dimensions | `python3 tools/verify_urdf_dimensions.py` |
 | Regenerate MuJoCo scene | `python3 tools/generate_mjcf.py` |
 | MuJoCo load test | `python3 tools/sim_load_test.py` |
-| P3 standing balance test | `python3 tools/sim_standing.py` |
+| P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |
 | Print DOF summary | `python3 tools/generate_spec_dof.py` |
@@ -211,7 +219,7 @@ tools/
   verify_urdf_dimensions.py     Validate URDF dimensions against YAML
   generate_mjcf.py              Generate MuJoCo MJCF scene from YAML
   sim_load_test.py              MuJoCo load/sanity check (run after generate_mjcf.py)
-  sim_standing.py               P3 balance validation — in progress (see P3 Active Work)
+  sim_static_pose.py            P3 fixed-base static load validation — passing
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
   generate_spec_dof.py          Generate DOF table markdown from joints.yaml

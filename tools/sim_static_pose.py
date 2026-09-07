@@ -1,28 +1,45 @@
 #!/usr/bin/env python3
 """
-P3 Standing Validation — quasi-static balance test in MuJoCo.
+P3 Static Pose Validation — fixed-base load test in MuJoCo.
 
-Loads the MJCF model, initializes the nominal standing pose, runs a
-position-controlled simulation, and validates:
+Position control on a floating-base biped cannot balance the pelvis by
+itself (nothing corrects tip-over) — that requires a real balance
+controller (P3 follow-up: ZMP ankle-pitch control). Before building that,
+this test welds the pelvis to the world (like a test stand bolted at the
+hip) and holds the nominal standing pose, so the leg structure can be
+checked in isolation from balance:
 
-  1. Robot maintains upright stance (pelvis height and tilt)
-  2. ZMP stays within the support polygon (between the feet)
-  3. Joint torques are within reasonable bounds
+  1. Simulation stays numerically stable (no NaN/divergence)
+  2. The weld reaction force converges to the robot's total weight
+     (everything below the pelvis is cantilevered from it — this is the
+     one load path, so it must equal gravity exactly at rest)
+  3. Load is distributed symmetrically between the left and right legs
+  4. Joint torques are reported for each MVS joint (no pass/fail — motor
+     torque limits are not yet populated in design/actuation.yaml)
 
-Pass/fail threshold: pelvis must not drop more than 30mm or tilt more
-than 15° within 2 seconds under gravity with position-hold control.
+Ground contact is deliberately excluded: welding the pelvis while the
+feet also rest on the ground would make the support statically
+indeterminate (the weld can supply vertical force on its own, so ground
+reaction force would depend on solver/contact stiffness, not on gravity)
+and wouldn't validate anything meaningful.
+
+The weld constraint and contact exclusions are injected into the model
+in memory at load time — the checked-in
+simulation/mujoco/megadroid_mvs.xml (the generated floating-base scene
+needed for the future dynamic balance controller) is never modified on
+disk.
 
 Usage:
-    python3 tools/sim_standing.py
-    python3 tools/sim_standing.py --duration 5.0
+    python3 tools/sim_static_pose.py
+    python3 tools/sim_static_pose.py --duration 5.0
 """
 
 import math
-import sys
 import argparse
 import numpy as np
 import mujoco
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MJCF_PATH = REPO_ROOT / "simulation" / "mujoco" / "megadroid_mvs.xml"
@@ -33,26 +50,48 @@ NOMINAL_POSE = {
     "right_knee_pitch": math.radians(12.0),
 }
 
-# Validation thresholds
-MAX_HEIGHT_DROP_M  = 0.030   # 30 mm
-MAX_TILT_DEG       = 15.0    # pelvis tilt from vertical
-MIN_CONTACT_FZ_N   = 5.0     # minimum total vertical contact force to count as "standing"
+# Validation thresholds (test-script parameters, not design values)
+WEIGHT_TOLERANCE_FRAC = 0.05   # weld Fz must settle within 5% of robot weight
+LOAD_SYMMETRY_FRAC    = 0.05   # relative |left - right| joint-torque diff allowed
+GRAVITY_MPS2          = 9.81
+
+
+def build_welded_model(mjcf_path):
+    """Parse the generated MJCF, weld the pelvis to the world at its
+    reference pose, and exclude foot/ground contact (see module
+    docstring for why). Returns a compiled MjModel — the file on disk is
+    never modified."""
+    tree = ET.parse(mjcf_path)
+    root = tree.getroot()
+
+    equality = ET.SubElement(root, "equality")
+    ET.SubElement(equality, "weld",
+                  body1="pelvis",
+                  solref="0.002 1",
+                  solimp="0.9 0.95 0.001")
+
+    contact = root.find("contact")
+    if contact is None:
+        contact = ET.SubElement(root, "contact")
+    for side in ("left", "right"):
+        ET.SubElement(contact, "exclude",
+                      body1="world", body2=f"{side}_foot")
+
+    xml_str = ET.tostring(root, encoding="unicode")
+    return mujoco.MjModel.from_xml_string(xml_str)
 
 
 def set_nominal_pose(model, data):
     """Set joint qpos and control targets to nominal standing pose."""
-    mujoco.mj_resetData(model, data)  # initializes freejoint from MJCF body pos
+    mujoco.mj_resetData(model, data)
 
-    # Set joint angles
     for joint_name, angle in NOMINAL_POSE.items():
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
         if jid >= 0:
             data.qpos[model.jnt_qposadr[jid]] = angle
 
-    # Set all actuator targets to match current joint positions
     for i in range(model.nu):
-        act_name  = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
-        # Strip "act_" prefix to get joint name
+        act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
         jname = act_name[4:] if act_name.startswith("act_") else act_name
         jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, jname)
         if jid >= 0:
@@ -63,46 +102,27 @@ def set_nominal_pose(model, data):
     mujoco.mj_forward(model, data)
 
 
-def compute_zmp(model, data):
-    """
-    Compute Zero Moment Point from foot contact forces.
-
-    Uses cfrc_ext (net external contact forces on each body, in world frame).
-    cfrc_ext[i] layout: [Tx, Ty, Tz, Fx, Fy, Fz]
-
-    Returns (zmp_x, zmp_y, total_fz) or (None, None, 0) if no ground contact.
-    """
-    foot_body_names = ("left_foot", "right_foot")
-    total_fz  = 0.0
-    zmp_x_num = 0.0
-    zmp_y_num = 0.0
-
-    for bname in foot_body_names:
-        bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, bname)
-        if bid < 0:
-            continue
-        fz = data.cfrc_ext[bid, 5]   # world-frame Fz
-        if fz > 0.01:
-            x = data.xpos[bid, 0]
-            y = data.xpos[bid, 1]
-            zmp_x_num += fz * x
-            zmp_y_num += fz * y
-            total_fz   += fz
-
-    if total_fz < 0.01:
-        return None, None, 0.0
-    return zmp_x_num / total_fz, zmp_y_num / total_fz, total_fz
+def weld_reaction_fz(model, data):
+    """Vertical component of the external force MuJoCo computes on the
+    pelvis (the weld reaction, since no other external forces act on it
+    with ground contact excluded)."""
+    pid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+    return data.cfrc_ext[pid, 5]
 
 
-def pelvis_tilt_deg(model, data):
-    """Return pelvis tilt from vertical in degrees (0 = perfectly upright)."""
-    pelvis_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
-    # xmat is the 3x3 rotation matrix, row-major. Column 2 is the body z-axis in world frame.
-    mat = data.xmat[pelvis_id].reshape(3, 3)
-    body_z_in_world = mat[:, 2]
-    world_z = np.array([0.0, 0.0, 1.0])
-    cos_angle = np.clip(np.dot(body_z_in_world, world_z), -1.0, 1.0)
-    return math.degrees(math.acos(cos_angle))
+def leg_torque_totals(model, data):
+    """Sum |torque| across each leg's actuators, for a symmetry check."""
+    totals = {"left": 0.0, "right": 0.0}
+    for i in range(model.nu):
+        act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+        for side in totals:
+            if act_name.startswith(f"act_{side}_"):
+                totals[side] += abs(data.actuator_force[i])
+    return totals["left"], totals["right"]
+
+
+def total_mass(model):
+    return sum(model.body_mass)
 
 
 def main():
@@ -112,7 +132,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("P3 Standing Validation")
+    print("P3 Static Pose Validation (fixed base)")
     print("=" * 60)
     print()
 
@@ -121,126 +141,101 @@ def main():
         print("Run: python3 tools/generate_mjcf.py")
         raise SystemExit(1)
 
-    model = mujoco.MjModel.from_xml_path(str(MJCF_PATH))
-    data  = mujoco.MjData(model)
+    model = build_welded_model(MJCF_PATH)
+    data = mujoco.MjData(model)
 
     set_nominal_pose(model, data)
 
-    pelvis_id        = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
-    initial_height   = data.xpos[pelvis_id, 2]
-    initial_tilt_deg = pelvis_tilt_deg(model, data)
-
-    print(f"Initial state:")
-    print(f"  Pelvis height:  {initial_height:.4f} m")
-    print(f"  Pelvis tilt:    {initial_tilt_deg:.2f}°")
-    zx, zy, fz = compute_zmp(model, data)
-    if zx is not None:
-        print(f"  ZMP:            ({zx:.4f}, {zy:.4f}) m,  Fz={fz:.1f} N")
-    else:
-        print("  ZMP:            no ground contact yet")
+    weight_n = total_mass(model) * GRAVITY_MPS2
+    print(f"Robot mass:   {total_mass(model):.3f} kg")
+    print(f"Robot weight: {weight_n:.2f} N")
     print()
 
-    # Simulation loop
     dt = model.opt.timestep
     n_steps = int(args.duration / dt)
     log_interval = max(1, n_steps // 20)
 
     print(f"Simulating {args.duration}s ({n_steps} steps, dt={dt}s)...")
     print()
-    print(f"  {'Time':>6s}  {'Height':>8s}  {'Drop':>8s}  {'Tilt':>7s}  {'ZMP_x':>8s}  {'ZMP_y':>8s}  {'Fz':>8s}")
-    print(f"  {'-'*6}  {'-'*8}  {'-'*8}  {'-'*7}  {'-'*8}  {'-'*8}  {'-'*8}")
+    print(f"  {'Time':>6s}  {'Weld_Fz':>9s}  {'Leg_L':>8s}  {'Leg_R':>8s}")
+    print(f"  {'-'*6}  {'-'*9}  {'-'*8}  {'-'*8}")
 
-    heights = []
-    tilts   = []
-    zmps    = []
-    failed  = False
-    fail_reason = ""
+    log = []
+    diverged = False
 
     for step in range(n_steps):
         mujoco.mj_step(model, data)
+        # mj_step does not populate cfrc_ext (external/constraint body
+        # forces) — it must be computed explicitly.
+        mujoco.mj_rnePostConstraint(model, data)
         t = (step + 1) * dt
 
-        h    = data.xpos[pelvis_id, 2]
-        drop = initial_height - h
-        tilt = pelvis_tilt_deg(model, data)
-        heights.append(h)
-        tilts.append(tilt)
-
-        zx, zy, fz = compute_zmp(model, data)
-        if zx is not None:
-            zmps.append((t, zx, zy, fz))
-
-        if step % log_interval == 0 or step == n_steps - 1:
-            zx_str = f"{zx:.4f}" if zx is not None else "  n/a  "
-            zy_str = f"{zy:.4f}" if zy is not None else "  n/a  "
-            fz_str = f"{fz:.1f}"  if fz > 0     else "  n/a  "
-            print(f"  {t:6.2f}s  {h:8.4f}m  {drop*1000:6.1f}mm  {tilt:6.1f}°  "
-                  f"{zx_str:>8s}  {zy_str:>8s}  {fz_str:>8s}")
-
-        # Early exit on catastrophic failure
-        if drop > MAX_HEIGHT_DROP_M * 3:
-            failed = True
-            fail_reason = f"Robot fell (height drop {drop*1000:.0f}mm at t={t:.2f}s)"
+        if not np.all(np.isfinite(data.qpos)) or not np.all(np.isfinite(data.qvel)):
+            diverged = True
+            print(f"  simulation diverged (non-finite state) at t={t:.3f}s")
             break
 
+        weld_fz = weld_reaction_fz(model, data)
+        leg_l, leg_r = leg_torque_totals(model, data)
+        log.append((t, weld_fz, leg_l, leg_r))
+
+        if step % log_interval == 0 or step == n_steps - 1:
+            print(f"  {t:6.2f}s  {weld_fz:9.2f}  {leg_l:8.2f}  {leg_r:8.2f}")
+
     print()
+    print("=" * 60)
+    print("Joint torques (final step)")
+    print("=" * 60)
+    for i in range(model.nu):
+        act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+        print(f"  {act_name:<28s}  {data.actuator_force[i]:8.3f} N·m")
+    print()
+    print("  (no pass/fail gate — design/actuation.yaml is not yet populated"
+          " with motor torque limits)")
+    print()
+
     print("=" * 60)
     print("Results")
     print("=" * 60)
 
-    final_height   = heights[-1]
-    final_drop     = initial_height - final_height
-    max_drop       = initial_height - min(heights)
-    max_tilt       = max(tilts)
-    mean_tilt      = sum(tilts) / len(tilts)
-
-    print(f"  Final pelvis height:  {final_height:.4f} m")
-    print(f"  Final height drop:    {final_drop*1000:.1f} mm")
-    print(f"  Maximum height drop:  {max_drop*1000:.1f} mm")
-    print(f"  Maximum tilt:         {max_tilt:.1f}°")
-    print(f"  Mean tilt:            {mean_tilt:.1f}°")
-
-    if zmps:
-        zmp_arr = np.array([[z[1], z[2]] for z in zmps])
-        print(f"  ZMP mean:            ({zmp_arr[:,0].mean():.4f}, {zmp_arr[:,1].mean():.4f}) m")
-        print(f"  ZMP x range:          [{zmp_arr[:,0].min():.4f}, {zmp_arr[:,0].max():.4f}] m")
-        print(f"  ZMP y range:          [{zmp_arr[:,1].min():.4f}, {zmp_arr[:,1].max():.4f}] m")
-    else:
-        print("  ZMP: no sustained ground contact detected")
-
-    print()
-
-    # ── Pass/fail evaluation ───────────────────────────────────────────────
     checks = []
-    checks.append(("Height drop ≤ 30mm", max_drop <= MAX_HEIGHT_DROP_M,
-                   f"{max_drop*1000:.1f} mm"))
-    checks.append(("Max tilt ≤ 15°",     max_tilt <= MAX_TILT_DEG,
-                   f"{max_tilt:.1f}°"))
-    if zmps:
-        zmp_arr = np.array([[z[1], z[2]] for z in zmps])
-        # Support polygon: roughly ±foot_length/2 in x, between feet in y
-        zmp_in_x = bool(np.all(np.abs(zmp_arr[:,0]) < 0.20))
-        zmp_in_y = bool(np.all(np.abs(zmp_arr[:,1]) < 0.10))
-        checks.append(("ZMP within support (x)", zmp_in_x,
-                       f"x∈[{zmp_arr[:,0].min():.3f}, {zmp_arr[:,0].max():.3f}]"))
-        checks.append(("ZMP within support (y)", zmp_in_y,
-                       f"y∈[{zmp_arr[:,1].min():.3f}, {zmp_arr[:,1].max():.3f}]"))
+    checks.append(("Simulation stayed numerically stable", not diverged, ""))
 
-    all_passed = not failed and all(ok for _, ok, _ in checks)
+    if log and not diverged:
+        # Use the settled tail (last 25% of samples) to avoid initial transient.
+        tail = log[-max(1, len(log) // 4):]
+        weld_fz_mean = sum(s[1] for s in tail) / len(tail)
+        leg_l_mean = sum(s[2] for s in tail) / len(tail)
+        leg_r_mean = sum(s[3] for s in tail) / len(tail)
+
+        weight_err_frac = abs(weld_fz_mean - weight_n) / weight_n if weight_n > 0 else 1.0
+        checks.append(("Weld Fz within %.0f%% of weight (%.2f N)"
+                        % (WEIGHT_TOLERANCE_FRAC * 100, weight_n),
+                        weight_err_frac <= WEIGHT_TOLERANCE_FRAC,
+                        f"Fz={weld_fz_mean:.2f} N ({weight_err_frac*100:.1f}% err)"))
+
+        leg_avg = (leg_l_mean + leg_r_mean) / 2
+        symmetry_frac = abs(leg_l_mean - leg_r_mean) / leg_avg if leg_avg > 0 else 1.0
+        checks.append(("Leg torque load symmetric (≤%.0f%%)" % (LOAD_SYMMETRY_FRAC * 100),
+                        symmetry_frac <= LOAD_SYMMETRY_FRAC,
+                        f"L={leg_l_mean:.2f} N·m, R={leg_r_mean:.2f} N·m "
+                        f"({symmetry_frac*100:.1f}% diff)"))
+    else:
+        checks.append(("Weld Fz within tolerance of weight", False, "no data"))
+        checks.append(("Leg torque load symmetric", False, "no data"))
+
+    all_passed = all(ok for _, ok, _ in checks)
 
     for label, ok, detail in checks:
         status = "✓" if ok else "✗"
-        print(f"  {status} {label:<30s}  {detail}")
+        print(f"  {status} {label:<45s}  {detail}")
 
     print()
     if all_passed:
-        print("✓ PASS — robot maintained standing balance")
+        print("✓ PASS — static load carried as expected with fixed base")
     else:
-        if failed:
-            print(f"✗ FAIL — {fail_reason}")
-        else:
-            failed_checks = [label for label, ok, _ in checks if not ok]
-            print(f"✗ FAIL — {', '.join(failed_checks)}")
+        failed_checks = [label for label, ok, _ in checks if not ok]
+        print(f"✗ FAIL — {', '.join(failed_checks)}")
         raise SystemExit(1)
 
 
