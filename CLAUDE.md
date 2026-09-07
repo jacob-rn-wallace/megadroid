@@ -71,50 +71,60 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   `python3 tools/sim_zmp_balance.py` (add `--baseline` to compare against
   the uncontrolled/passive case).
 - `tools/sim_walk_gait.py` — **P3 walking-gait milestone, partial: one
-  step validated, not yet a sustained gait.** Floating-base, no weld.
-  Reuses sim_zmp_balance.py's balanced pose and sagittal ankle-pitch ZMP
-  loop, and adds a second control mechanism the standing controller
-  didn't need: lateral (hip_roll) weight transfer, since there's no
-  ankle_roll to shift ZMP sideways. State machine per step: SHIFT (ramp
-  hip_roll, both legs symmetric, to move weight fully onto the stance
-  foot) -> SWING (advance the swing leg's hip_pitch forward while the
-  *stance* leg's hip_pitch also advances the opposite way, driving the
-  pelvis forward over the planted foot — without this the pelvis
-  recoils backward instead of progressing) -> SETTLE. One step is
-  reliable: `python3 tools/sim_walk_gait.py` passes (478mm forward,
-  ~35° peak tilt, no fall). A second consecutive step is NOT reliable
-  yet — `--steps 2` fails — because it starts from the asymmetric pose
-  the first step leaves behind (both legs' angles shifted away from the
-  symmetric nominal crouch) rather than the well-tuned starting point,
-  and the same gains don't consistently hold up there. Add `--render
-  out.gif` to get a visual (uses MuJoCo's offscreen renderer, confirmed
-  working in this environment; `imageio` + `ffmpeg` handle encoding).
-  Three real sign-convention bugs were found and fixed while building
-  this (all documented in the script, worth reading before touching
-  gait code): (1) which stance side needs positive vs. negative
-  hip_roll, (2) the lateral ZMP-error-to-hip_roll feedback sign (inverse
-  of the sagittal ankle relationship — increasing hip_roll *decreases*
-  pelvis y), (3) hip_pitch sign for "forward" (positive hip_pitch
-  rotates the thigh backward in this axis convention, confirmed via FK,
-  not assumption).
+  step validated (well), not yet a sustained gait.** Floating-base, no
+  weld. Reuses sim_zmp_balance.py's balanced pose and sagittal
+  ankle-pitch ZMP loop, plus a second control mechanism the standing
+  controller didn't need — lateral (hip_roll) weight transfer, since
+  there's no ankle_roll to shift ZMP sideways. `python3
+  tools/sim_walk_gait.py` passes: ~5° peak tilt, no fall, swing foot
+  lands ~34mm forward (add `--render out.gif` for a visual — MuJoCo's
+  offscreen renderer works in this environment; `imageio` + `ffmpeg`
+  handle encoding). `--steps 2` reliably fails. Five real bugs were
+  found and fixed getting the single step this clean (all documented in
+  the script's module docstring, worth reading before touching gait
+  code) — two sign-convention bugs (which stance side needs positive
+  vs. negative hip_roll; hip_pitch's sign for "forward," since positive
+  hip_pitch rotates the thigh backward in this axis convention), the
+  swing leg inheriting the stance leg's hip_roll shift and landing
+  ~30mm off from its intended footprint, the stance leg's forward-drive
+  needing a smaller, separately-tuned magnitude than the swing leg's or
+  the stance foot slips on the ground, and — counter to intuition — a
+  *faster* swing (~0.3s) being markedly more stable than a slower one.
+  One finding stands independent of further tuning: the pelvis nets
+  slightly backward every step even though the foot itself lands
+  forward (a real, reproduced-across-the-tuning-range recoil effect,
+  not noise) — the pass criterion is deliberately based on foot
+  placement, not pelvis translation, because of this.
+
+  **Why multi-step reliably fails (root cause, not just "needs more
+  tuning"):** after one step the two legs are no longer mirror-
+  symmetric — their hip_pitch angles advanced in opposite directions —
+  so the two feet end up at genuinely different (x, y) positions rather
+  than the nominal ±hip_y mirror pair. The "rotate both hip_roll by the
+  same angle" weight-shift trick relies on exactly that mirror symmetry
+  to produce a clean pelvis translation; tested directly against the
+  post-step-1 asymmetric configuration, it mostly fails to move the
+  pelvis laterally at all and pitch grows instead. Fixing this needs
+  real per-step inverse kinematics for the actual (asymmetric) foot
+  placements each step leaves behind, not the symmetric-case shortcut
+  reused every step — a bigger undertaking than gain-tuning, and the
+  actual next task if continuing this work (see below).
 - `simulation/mujoco/megadroid_mvs.xml` — full MuJoCo scene with dynamics,
   position actuators (kp=150), foot contact geometry, ground plane
 
 **Where work stopped:**
 Three P3 simulation milestones are done: fixed-base static load
 validation, the floating-base ZMP ankle-pitch standing controller, and
-one validated step of quasi-static walking. Sustained multi-step walking
-is NOT done — this is the immediate next task if continuing the gait
-work, and it needs one of:
-  - Symmetric periodic re-centering: after each step, restore both legs
-    to a fresh well-tuned relative configuration (not literally reset to
-    the original nominal pose, since that would erase forward progress)
-    before starting the next shift, rather than continuing from whatever
-    asymmetric state the previous step left behind.
-  - Per-step gain/target re-solving: recompute the hip_roll shift target
-    and re-tune (or gain-schedule) the feedback gains for each step's
-    actual starting configuration instead of reusing one fixed tuning
-    for every step.
+one well-validated step of quasi-static walking. Sustained multi-step
+walking is NOT done. The next task, if continuing the gait work, is
+per-step inverse kinematics: given the actual (asymmetric) current foot
+placements after a step, solve for the hip_roll/hip_pitch/knee/ankle
+needed for the next weight shift and swing, rather than reusing the
+single nominal-pose-derived shift angle and fixed gains for every step
+regardless of how asymmetric the legs have become. Periodic re-
+centering (restoring a fresh symmetric-enough relative leg configuration
+between steps) is a lighter-weight alternative worth trying first if it
+proves easier than full per-step IK.
 Other next directions (none started, no decision made yet):
   - Extend the ZMP controller to reject external disturbances (a push),
     which will likely need a hip/torso strategy layered on top of the

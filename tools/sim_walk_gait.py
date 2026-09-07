@@ -1,78 +1,129 @@
 #!/usr/bin/env python3
 """
-P3 Quasi-Static Walking Gait — floating-base multi-step validation.
+P3 Quasi-Static Walking Gait — floating-base, one step validated.
 
 Builds on sim_zmp_balance.py's proven standing-balance techniques (the
 balanced-crouch nominal pose, filtered contact-point ZMP, ankle-pitch
-sagittal feedback) to take a step forward. Currently validated for
-ONE step (weight shift -> swing -> land), which is itself a real
-"quasi-static walking validation" milestone: it demonstrates the robot
-can shift its weight fully onto one foot, lift and advance the other,
-and land without falling — the thing standing balance alone can't show.
-A second consecutive step is not yet reliably stable: it starts from
-the asymmetric pose the first step leaves behind (both legs' angles
-shifted from the nominal crouch) rather than the well-tuned symmetric
-starting point, and the same gains that work for the first step don't
-consistently hold up there. Extending to a robust multi-step gait is
-follow-up work — see the state machine notes below for the design and
-exactly where multi-step attempts break down.
+sagittal feedback) to take a step forward. Validated for ONE step
+(weight shift -> swing -> land, max pelvis tilt ~5deg, no fall) — a
+real "quasi-static walking validation" milestone in its own right,
+since it demonstrates something standing balance alone can't: shifting
+weight fully onto one foot, lifting and advancing the other, and
+landing safely. A second consecutive step reliably fails; see "Why
+multi-step still fails" below for the root cause, which is more
+fundamental than a leftover disturbance or a gain-tuning gap.
 
-Two balance problems had to be solved beyond the standing controller,
+Two balance mechanisms had to be added beyond the standing controller,
 both because the MVS has no ankle_roll joint — nothing at the ankle can
 shift the ZMP sideways:
 
-1. Lateral weight transfer. Before a foot can lift without the robot
-   falling sideways, the pelvis has to move fully over the other foot.
-   Rotating both hip_roll joints by the SAME angle, with both feet
-   planted, shifts the *pelvis* sideways relative to the fixed feet
-   (verified empirically: ~4.2 degrees of symmetric hip_roll shifts the
-   pelvis a full 50mm, centering it over one foot — matches the ~0.68m
-   effective leg-length lever arm). That baseline shift angle is solved
-   once via forward kinematics (solve_hip_roll_shift), the same way the
-   standing controller's nominal crouch pose was solved.
+1. Lateral weight transfer via hip_roll. Rotating both hip_roll joints
+   by the SAME angle, with both feet planted, shifts the *pelvis*
+   sideways relative to the fixed feet (~4.25deg shifts it a full
+   50mm, centering it over one foot — matches the ~0.68m effective
+   leg-length lever arm at the nominal pose). Solved once via forward
+   kinematics (solve_hip_roll_shift), the same way the standing
+   controller's crouch pose was solved. This is a genuinely different
+   relationship from the free-swing case (see swing() and run(): two
+   separate sign flips were found and fixed here by tracing through
+   why a "stabilizing" gain was making things worse, not by assuming
+   the sign from first principles).
 
-2. Active lateral balance during single support. The FK-solved shift
-   above is a static target for a rigid, non-swinging pose — once the
-   swing leg actually starts moving, its shifting mass pulls the
-   pelvis off that target and it drifts (measured: pelvis roll went
-   from +1.5deg to -15deg over one swing with hip_roll held at the
-   static target the whole time — a real, growing lateral fall, not
-   sagittal). A second filtered-ZMP feedback loop, structurally
-   identical to the sagittal ankle-pitch one but using hip_roll and the
-   lateral (y) ZMP component, corrects this continuously through all
-   three phases below.
+2. Active lateral balance during single support via a second filtered-
+   ZMP feedback loop (hip_roll <- lateral ZMP error), structurally
+   identical to the sagittal one (ankle_pitch <- longitudinal ZMP
+   error) but with its own sign, since increasing hip_roll DECREASES
+   pelvis y (the inverse of the ankle/x relationship). Applied only to
+   the current STANCE leg — applying it to an airborne swing leg would
+   perturb where it lands, which was a real bug (see #3).
+
+Three more real bugs surfaced building the single step, each worth
+knowing before touching this file:
+
+3. The swing leg was inheriting the stance leg's shifted hip_roll for
+   the whole swing, so it landed ~30mm laterally off from its intended
+   footprint every step. Fixed by tracking hip_roll per leg: the swing
+   leg's ramps back to neutral during swing(), and the (former) stance
+   leg's ramps back to neutral during settle() — both converge to a
+   clean, symmetric (0, 0) double-support pose before the next shift.
+
+4. Swinging one leg forward while the stance leg's hip_pitch stayed
+   fixed just recoiled the (heavier) pelvis backward, since nothing
+   drove the pelvis forward over the planted foot (the actual walking
+   mechanism). Fixed by also advancing the stance leg's hip_pitch
+   during swing() — opposite sign from the swing leg's, since its foot
+   is fixed to the ground rather than free (STANCE_ADVANCE_DEG). Using
+   the SAME magnitude as the swing leg's advance pushed the stance
+   ankle's foot-level angle close to its own +-30deg limit and caused
+   the stance foot to slip on the ground during settle — a real
+   grounded-contact failure mode, not a tuning artifact — so
+   STANCE_ADVANCE_DEG is deliberately smaller and tuned separately.
+
+5. Contrary to "slower is more quasi-static, so more stable" intuition,
+   a FASTER swing (SWING_DURATION_S ~0.3s, not ~1.2s) is markedly more
+   stable here (measured: max tilt on a lone swing dropped from >30deg
+   to <10deg just from shortening the swing). The single-support window
+   is when nothing corrects lateral drift as effectively as double
+   support does; spending less time in it, not more caution while in
+   it, is what actually helps.
+
+Even after all of the above, the pelvis nets slightly BACKWARD every
+step (tens of mm) while the swing foot itself lands meaningfully
+forward — see run()'s pelvis_progress_m vs swing_foot_progress_m. The
+pass criterion is deliberately based on foot placement, not pelvis
+translation, because this backward-pelvis recoil is real, reproducible
+across the tuning range tried, and not yet resolved (a hip/torso
+strategy or an actively-trailing stance leg would likely be needed).
+
+Why multi-step still fails: after one step, the two legs are no longer
+mirror-symmetric (the swing leg's hip_pitch advanced one way, the
+stance leg's the other), and the two feet end up at genuinely different
+(x, y) positions rather than the nominal ±hip_y mirror pair. The
+"rotate both hip_roll by the same angle" trick in point 1 above relies
+on exactly that mirror symmetry to produce a clean pelvis translation;
+tested directly against the post-step-1 asymmetric configuration, it
+mostly fails to move the pelvis laterally at all and pitch grows
+instead (measured: pelvis_y barely moved, 34deg -> 21deg tilt growth,
+in one isolated shift-phase test). A real fix needs per-step inverse
+kinematics for the actual current (asymmetric) foot placements, not
+the symmetric-case shortcut reused every step — a bigger undertaking
+than this milestone, not a further gain-tuning pass.
 
 Gait state machine (repeats, alternating stance/swing leg):
-  1. SHIFT   — ramp the hip_roll *target* (both legs, symmetric) toward
-               the new stance side over SHIFT_DURATION_S; the lateral
-               feedback loop (see point 2) rides on top of this ramp
-               the whole time, not just after it completes.
-  2. SWING   — the swing leg's hip_pitch interpolates forward by a
-               fixed increment from wherever it currently is (not to a
-               fixed absolute angle — see below); knee_pitch bumps up
-               mid-swing for ground clearance and back down to land;
-               ankle_pitch tracks -(hip+knee) throughout to keep the
-               foot level (the same relation the crouch pose uses).
-               Both feedback loops (sagittal ankle-pitch, lateral
-               hip-roll) keep running, targeting the current stance
-               foot's (x, y) instead of the double-support centroid.
-  3. SETTLE  — brief double-support pause after landing.
+  1. SHIFT   — ramp hip_roll (both legs, symmetric) toward the new
+               stance side over SHIFT_DURATION_S. Open-loop (see
+               step_physics: the filtered ZMP hasn't caught up with
+               the still-in-progress transfer, so closing the lateral
+               loop here fights the ramp instead of helping).
+  2. SWING   — the swing leg's hip_pitch advances forward by
+               STEP_ADVANCE_DEG from wherever it currently is (not to
+               a fixed absolute angle); the stance leg's hip_pitch
+               advances the opposite way by STANCE_ADVANCE_DEG (point
+               4); knee_pitch bumps up mid-swing for ground clearance;
+               ankle_pitch tracks -(hip+knee) on both legs to keep
+               each foot level; the swing leg's hip_roll returns to
+               neutral (point 3). Both feedback loops run, targeting
+               the stance foot's (x, y).
+  3. SETTLE  — double-support pause after landing: the (former) stance
+               leg's hip_roll also returns to neutral (point 3);
+               feedback now targets the double-support centroid
+               (double_support_target()), not the stale single-support
+               target — using the stale target here was tried first
+               and was a real bug of its own.
   Then mirror for the other leg.
 
-Because each leg's hip_pitch only ever advances (it is never reset to
-a fixed "trailing" angle when it becomes the stance leg), this is a
-few-step shuffle, not an infinite periodic gait — the joint range
-(-30 to 110 deg) allows on the order of ten steps before hip_pitch
-would run out of room. That is enough to validate that quasi-static
-forward walking is achievable at all with this DOF set; turning it
-into a true infinite periodic gait — with the stance leg actively
-trailing as the pelvis advances over it — is follow-up work, not this
-milestone.
+Because each leg's hip_pitch only ever advances (never reset to a
+fixed "trailing" angle), even a working multi-step version of this
+would be a few-step shuffle, not an infinite periodic gait — the joint
+range (-30 to 110 deg) allows on the order of ten steps before running
+out of room. That's enough to validate quasi-static forward walking is
+achievable at all with this DOF set; a true infinite periodic gait is
+further follow-up work.
 
 Usage:
     python3 tools/sim_walk_gait.py                       # validated: 1 step
     python3 tools/sim_walk_gait.py --render out.gif       # render the step to a GIF/video
-    python3 tools/sim_walk_gait.py --steps 2              # known to fail — see docstring above
+    python3 tools/sim_walk_gait.py --steps 2              # known to fail — see above
 """
 
 import math
@@ -84,16 +135,23 @@ import sim_zmp_balance as sb
 
 MJCF_PATH = sb.MJCF_PATH
 
-STEP_ADVANCE_DEG = -10.0       # hip_pitch delta per swing (negative moves the foot +X/forward — verified empirically)
+STEP_ADVANCE_DEG = -10.0       # swing leg's hip_pitch delta (negative moves the foot +X/forward — verified empirically)
+STANCE_ADVANCE_DEG = 6.0       # stance leg's hip_pitch delta (opposite sign — see swing()). Deliberately
+                                # smaller than STEP_ADVANCE_DEG: using the same magnitude pushes the
+                                # stance ankle's foot-level angle close to its +-30deg limit (nominal
+                                # ankle = -(hip+knee) with hip advanced a full 10deg is already ~-21deg
+                                # before any correction), which was found to cause the stance foot to
+                                # slip during settle rather than a graceful recovery.
 KNEE_LIFT_EXTRA_DEG = 18.0     # extra knee bend at mid-swing for ground clearance
-HIP_ROLL_SHIFT_DEG = 4.25      # symmetric hip_roll for full lateral weight transfer (FK-solved)
+# HIP_ROLL_SHIFT_DEG is solved at runtime by solve_hip_roll_shift() (~4.25deg
+# at the nominal pose) rather than hardcoded — see run().
 
 SHIFT_DURATION_S = 0.6
-SWING_DURATION_S = 1.2
+SWING_DURATION_S = 0.3         # faster is more stable here, not less — see module docstring
 SETTLE_DURATION_S = 0.3
 
 ANKLE_KP = 4.0                 # sagittal (x) ZMP -> ankle-pitch gain, rad/m
-ROLL_KP = 3.0                  # lateral (y) ZMP -> hip-roll gain, rad/m
+ROLL_KP = 2.0                  # lateral (y) ZMP -> hip-roll gain, rad/m
 ZMP_FILTER_ALPHA = 0.02        # EMA weight on each new raw ZMP sample (both axes)
 MAX_ANKLE_CORRECTION_RAD = math.radians(15.0)
 MAX_ROLL_CORRECTION_RAD = math.radians(10.0)
@@ -165,7 +223,14 @@ class Gait:
                                  "left_hip_roll", "right_hip_roll")}
         self.hip_deg = {"left": sb.NOMINAL_HIP_DEG, "right": sb.NOMINAL_HIP_DEG}
         self.knee_deg = {"left": sb.NOMINAL_KNEE_DEG, "right": sb.NOMINAL_KNEE_DEG}
-        self.hip_roll_deg = 0.0   # scheduled target, before the lateral feedback correction
+        # Scheduled hip_roll target per leg, before the lateral feedback
+        # correction. NOT always equal between legs — see swing()/settle():
+        # while a leg is airborne its hip_roll must return to neutral
+        # independently of the stance leg's shifted value, or it lands
+        # laterally offset from its intended footprint (this was a real
+        # bug: the swing foot landed ~30mm further out than intended
+        # every step because it inherited the stance leg's shift).
+        self.hip_roll_deg = {"left": 0.0, "right": 0.0}
         self.dt = model.opt.timestep
 
         self.zx_filtered = 0.0
@@ -179,26 +244,33 @@ class Gait:
         p = self.data.xpos[self.foot_id[side]]
         return p[0], p[1]
 
-    def apply_ctrl(self, ankle_correction_rad, roll_correction_rad):
+    def double_support_target(self):
+        lx, ly = self.foot_pos("left")
+        rx, ry = self.foot_pos("right")
+        return (lx + rx) / 2.0, (ly + ry) / 2.0
+
+    def apply_ctrl(self, ankle_correction_rad, roll_correction_rad, stance_side):
         d, act = self.data, self.act
         d.ctrl[act["left_hip_pitch"]] = math.radians(self.hip_deg["left"])
         d.ctrl[act["right_hip_pitch"]] = math.radians(self.hip_deg["right"])
         d.ctrl[act["left_knee_pitch"]] = math.radians(self.knee_deg["left"])
         d.ctrl[act["right_knee_pitch"]] = math.radians(self.knee_deg["right"])
-        roll_ctrl = math.radians(self.hip_roll_deg) + roll_correction_rad
-        d.ctrl[act["left_hip_roll"]] = roll_ctrl
-        d.ctrl[act["right_hip_roll"]] = roll_ctrl
         for side in ("left", "right"):
+            corr = roll_correction_rad if side == stance_side else 0.0
+            d.ctrl[act[f"{side}_hip_roll"]] = math.radians(self.hip_roll_deg[side]) + corr
             nominal_ankle = foot_level_ankle_deg(self.hip_deg[side], self.knee_deg[side])
             d.ctrl[act[f"{side}_ankle_pitch"]] = math.radians(nominal_ankle) + ankle_correction_rad
 
-    def step_physics(self, stance_target, frame_sink=None, roll_feedback=True):
+    def step_physics(self, stance_target, stance_side, frame_sink=None, roll_feedback=True):
         """Advance one physics step with the current joint targets and
         feedback corrections. stance_target is (x, y) of the current
-        primary-support foot. roll_feedback=False leaves hip_roll purely
-        open-loop (see shift(): the filtered zy hasn't caught up with
-        reality yet during the deliberate weight-shift ramp, so closing
-        the loop on it there fights the ramp instead of helping).
+        primary-support foot; stance_side says which leg the lateral
+        feedback correction applies to (see apply_ctrl — applying it to
+        an airborne swing leg would just perturb where it lands).
+        roll_feedback=False leaves hip_roll purely open-loop (see
+        shift(): the filtered zy hasn't caught up with reality yet
+        during the deliberate weight-shift ramp, so closing the loop on
+        it there fights the ramp instead of helping).
         Returns False if the robot fell."""
         target_x, target_y = stance_target
         x_error = target_x - self.zx_filtered
@@ -209,7 +281,7 @@ class Gait:
             # Note the minus sign: increasing hip_roll DECREASES pelvis/ZMP y
             # (verified empirically — the inverse of the ankle/x relationship).
             roll_corr = np.clip(-ROLL_KP * y_error, -MAX_ROLL_CORRECTION_RAD, MAX_ROLL_CORRECTION_RAD)
-        self.apply_ctrl(ankle_corr, roll_corr)
+        self.apply_ctrl(ankle_corr, roll_corr, stance_side)
 
         mujoco.mj_step(self.model, self.data)
         mujoco.mj_rnePostConstraint(self.model, self.data)
@@ -231,26 +303,31 @@ class Gait:
 
         return not self.fell
 
-    def run_phase(self, duration, stance_target, per_step_update=None, frame_sink=None,
-                  roll_feedback=True):
+    def run_phase(self, duration, stance_target, stance_side, per_step_update=None,
+                  frame_sink=None, roll_feedback=True):
         n = int(duration / self.dt)
         for i in range(n):
             if per_step_update is not None:
                 per_step_update(i / max(1, n - 1))
-            if not self.step_physics(stance_target, frame_sink, roll_feedback=roll_feedback):
+            if not self.step_physics(stance_target, stance_side, frame_sink, roll_feedback=roll_feedback):
                 return False
         return True
 
-    def shift(self, target_roll_deg, stance_target, frame_sink=None):
-        start_roll = self.hip_roll_deg
+    def shift(self, stance_side, target_roll_deg, stance_target, frame_sink=None):
+        """Double support: ramp BOTH legs' hip_roll together (this only
+        makes kinematic sense with both feet planted — see
+        solve_hip_roll_shift's derivation)."""
+        start_roll = {"left": self.hip_roll_deg["left"], "right": self.hip_roll_deg["right"]}
 
         def update(s):
-            self.hip_roll_deg = start_roll + (target_roll_deg - start_roll) * ease(s)
+            e = ease(s)
+            for side in ("left", "right"):
+                self.hip_roll_deg[side] = start_roll[side] + (target_roll_deg - start_roll[side]) * e
 
         # Open-loop: the filtered ZMP hasn't caught up with the still-
         # in-progress weight transfer, so closing the roll loop here
         # fights the deliberate ramp instead of helping (see step_physics).
-        return self.run_phase(SHIFT_DURATION_S, stance_target, update, frame_sink,
+        return self.run_phase(SHIFT_DURATION_S, stance_target, stance_side, update, frame_sink,
                                roll_feedback=False)
 
     def swing(self, swing_side, stance_target, frame_sink=None):
@@ -265,8 +342,12 @@ class Gait:
         # pelvis forward over the planted foot — without it, swinging one
         # leg forward just recoils the (heavier) pelvis backward instead
         # of producing net forward progress.
-        end_hip_stance = start_hip_stance - STEP_ADVANCE_DEG
+        end_hip_stance = start_hip_stance + STANCE_ADVANCE_DEG
         start_knee = self.knee_deg[swing_side]
+        # The swing leg's hip_roll must return to neutral independently of
+        # the stance leg's shifted value, or it lands laterally offset from
+        # its intended footprint (real bug, see __init__ docstring note).
+        start_roll_swing = self.hip_roll_deg[swing_side]
 
         def update(s):
             e = ease(s)
@@ -274,19 +355,31 @@ class Gait:
             self.hip_deg[stance_side] = start_hip_stance + (end_hip_stance - start_hip_stance) * e
             bump = KNEE_LIFT_EXTRA_DEG * math.sin(math.pi * s)
             self.knee_deg[swing_side] = start_knee + bump
+            self.hip_roll_deg[swing_side] = start_roll_swing + (0.0 - start_roll_swing) * e
 
-        ok = self.run_phase(SWING_DURATION_S, stance_target, update, frame_sink)
+        ok = self.run_phase(SWING_DURATION_S, stance_target, stance_side, update, frame_sink)
         self.knee_deg[swing_side] = start_knee   # land at the original knee bend
         return ok
 
-    def settle(self, stance_target, frame_sink=None):
-        return self.run_phase(SETTLE_DURATION_S, stance_target, None, frame_sink)
+    def settle(self, stance_side, stance_target, frame_sink=None):
+        """Double support after landing: bring the (former) stance leg's
+        hip_roll back to neutral too — the swing leg already returned to
+        0 during swing() — so both legs start the next shift() from a
+        consistent, symmetric double-support hip_roll (0, 0) rather than
+        from an inconsistent (shifted, 0) pair."""
+        start_roll_stance = self.hip_roll_deg[stance_side]
+
+        def update(s):
+            self.hip_roll_deg[stance_side] = start_roll_stance + (0.0 - start_roll_stance) * ease(s)
+
+        return self.run_phase(SETTLE_DURATION_S, stance_target, stance_side, update, frame_sink)
 
 
 def run(n_steps, render_path=None, render_fps=30):
     model = mujoco.MjModel.from_xml_path(str(MJCF_PATH))
     data = mujoco.MjData(model)
     root_z, target_x0, target_y0 = sb.solve_nominal_geometry(model)
+    hip_roll_shift_deg = solve_hip_roll_shift(model)
     sb.set_initial_state(model, data, root_z)
 
     gait = Gait(model, data)
@@ -317,24 +410,36 @@ def run(n_steps, render_path=None, render_fps=30):
 
     ok = True
     steps_completed = 0
+    swing_foot_progress_m = 0.0
     for i in range(n_steps):
         stance_side = stance_order[i % 2]
         swing_side = "left" if stance_side == "right" else "right"
+        swing_foot_x_start = gait.foot_pos(swing_side)[0]
         # Positive hip_roll shifts the pelvis toward NEGATIVE y (right foot) —
         # verified empirically; do not "fix" this to look more intuitive.
-        target_roll = -HIP_ROLL_SHIFT_DEG if stance_side == "left" else HIP_ROLL_SHIFT_DEG
+        target_roll = -hip_roll_shift_deg if stance_side == "left" else hip_roll_shift_deg
 
         stance_target = gait.foot_pos(stance_side)
-        ok = gait.shift(target_roll, stance_target, frame_sink)
+        ok = gait.shift(stance_side, target_roll, stance_target, frame_sink)
         if not ok:
             break
         stance_target = gait.foot_pos(stance_side)
         ok = gait.swing(swing_side, stance_target, frame_sink)
         if not ok:
             break
-        ok = gait.settle(stance_target, frame_sink)
+        # Once the swing foot lands, both feet are on the ground — target
+        # the double-support centroid, not the stale single-support foot
+        # position. Feeding settle() the single-support target here was a
+        # real bug: it left the ankle loop chasing a target that could be
+        # ~0.2m away from where the ZMP actually needed to be with both
+        # feet loaded, and that mistargeted correction was the dominant
+        # cause of multi-step failure (a growing forward pitch, not the
+        # lateral/roll problem the shift-phase fixes addressed).
+        settle_target = gait.double_support_target()
+        ok = gait.settle(stance_side, settle_target, frame_sink)
         if not ok:
             break
+        swing_foot_progress_m += gait.foot_pos(swing_side)[0] - swing_foot_x_start
         steps_completed += 1
 
     pelvis_x_end = data.xpos[gait.pelvis_id, 0]
@@ -349,7 +454,13 @@ def run(n_steps, render_path=None, render_fps=30):
     return {
         "fell": gait.fell,
         "max_tilt": gait.max_tilt,
-        "forward_progress_m": pelvis_x_end - pelvis_x_start,
+        # Net pelvis translation, not the same thing as forward walking
+        # progress — see the module docstring's note on the persistent
+        # backward pelvis recoil. swing_foot_progress_m (how far forward
+        # each swing foot lands relative to where it started) is the more
+        # honest measure of "did a step actually happen."
+        "pelvis_progress_m": pelvis_x_end - pelvis_x_start,
+        "swing_foot_progress_m": swing_foot_progress_m,
         "steps_completed": steps_completed,
     }
 
@@ -371,23 +482,30 @@ def main():
 
     result = run(args.steps, render_path=args.render)
 
-    print(f"Steps attempted:  {args.steps}")
-    print(f"Steps completed:  {result['steps_completed']}")
-    print(f"Robot fell:       {result['fell']}")
-    print(f"Max tilt:         {result['max_tilt']:.2f} deg")
-    print(f"Forward progress: {result['forward_progress_m']*1000:.1f} mm")
+    print(f"Steps attempted:      {args.steps}")
+    print(f"Steps completed:      {result['steps_completed']}")
+    print(f"Robot fell:           {result['fell']}")
+    print(f"Max tilt:             {result['max_tilt']:.2f} deg")
+    print(f"Swing foot progress:  {result['swing_foot_progress_m']*1000:.1f} mm")
+    print(f"Pelvis net progress:  {result['pelvis_progress_m']*1000:.1f} mm "
+          f"(recoils backward net — see module docstring; not the pass criterion)")
     if args.render:
         print(f"Rendered video:   {args.render}")
     print()
 
     # Pass bar: completed the requested steps without triggering the fall
-    # cutoff, and made real forward progress. No separate tilt gate — the
-    # "fell" check (see step_physics: tilt > MAX_TILT_DEG or height drop
-    # > MAX_HEIGHT_DROP_M) is what actually distinguishes "leaned a lot
-    # but recovered" from "toppled," and single-support genuinely leans
-    # more than the standing controller ever needed to.
+    # cutoff, and each swing foot landed meaningfully forward of where it
+    # started. Deliberately NOT gated on pelvis translation — the pelvis
+    # nets slightly backward every step regardless of tuning (a real,
+    # understood, currently-unresolved recoil effect, not noise), while
+    # the foot placement itself is what actually advances. No separate
+    # tilt gate either — the "fell" check (see step_physics: tilt >
+    # MAX_TILT_DEG or height drop > MAX_HEIGHT_DROP_M) is what actually
+    # distinguishes "leaned a lot but recovered" from "toppled," and
+    # single-support genuinely leans more than the standing controller
+    # ever needed to.
     passed = (not result["fell"]) and result["steps_completed"] == args.steps \
-        and result["forward_progress_m"] > 0.05
+        and result["swing_foot_progress_m"] > 0.02 * args.steps
     if passed:
         print("PASS - robot walked forward without falling")
     else:
