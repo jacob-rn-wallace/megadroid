@@ -133,15 +133,19 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
                   friction="0.8 0.02 0.01")
 
     # ── Pelvis (floating base) ─────────────────────────────────────────────
+    # Collision half-width in y must stay inside the hip roll spacing (hip_y)
+    # minus the hip_roll_link sphere radius (0.03) plus clearance, or the
+    # pelvis box overlaps the thigh cylinders and injects spurious contacts.
+    pelvis_hy = max(0.02, hip_y - 0.035)
     pelvis = ET.SubElement(worldbody, "body",
                            name="pelvis",
                            pos=f"0 0 {pelvis_z:.4f}")
     ET.SubElement(pelvis, "freejoint", name="root")
-    ixx, iyy, izz = box_inertia(masses["pelvis"], 0.10, 0.15, 0.075)
+    ixx, iyy, izz = box_inertia(masses["pelvis"], 0.10, pelvis_hy, 0.075)
     add_inertial(pelvis, masses["pelvis"], (0, 0, 0), ixx, iyy, izz)
     ET.SubElement(pelvis, "geom",
                   name="pelvis_geom", type="box",
-                  size="0.10 0.15 0.075", pos="0 0 0",
+                  size=f"0.10 {pelvis_hy:.4f} 0.075", pos="0 0 0",
                   rgba="0.5 0.5 0.5 1")
 
     # ── Legs ──────────────────────────────────────────────────────────────
@@ -230,7 +234,24 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
     add_leg(pelvis, "left",  +1.0)
     add_leg(pelvis, "right", -1.0)
 
+    # ── Contact exclusions ───────────────────────────────────────────────
+    # The thigh cylinder's collision radius (a placeholder proxy, not a
+    # real design dimension) is wider than the hip roll spacing, so it
+    # always overlaps the pelvis box at the hip. MuJoCo auto-excludes
+    # direct parent/child pairs but not this grandparent/grandchild one,
+    # so it must be excluded explicitly to avoid injecting spurious
+    # contact forces at the hip.
+    contact = ET.SubElement(mujoco, "contact")
+    for side in ("left", "right"):
+        ET.SubElement(contact, "exclude",
+                      body1="pelvis", body2=f"{side}_thigh")
+
     # ── Torso chain ───────────────────────────────────────────────────────
+    # torso_pitch_link, torso_roll_link, and torso all sit at the same
+    # point (each successive link's local pos is "0 0 0") to represent a
+    # compound multi-axis joint, so their collision boxes fully overlap by
+    # construction. Only directly-adjacent pairs are auto-excluded by
+    # MuJoCo; the non-adjacent pairs are excluded below.
     lo, hi = get_range(joints_data, "torso_pitch")
     tp = ET.SubElement(pelvis, "body",
                        name="torso_pitch_link",
@@ -242,6 +263,7 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
     ixx, iyy, izz = box_inertia(masses["torso_pitch_link"], 0.025, 0.10, 0.025)
     add_inertial(tp, masses["torso_pitch_link"], (0, 0, 0), ixx, iyy, izz)
     ET.SubElement(tp, "geom",
+                  name="torso_pitch_link_geom",
                   type="box", size="0.025 0.10 0.025", rgba="0.5 0.5 0.5 1")
 
     lo, hi = get_range(joints_data, "torso_roll")
@@ -253,6 +275,7 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
     ixx, iyy, izz = box_inertia(masses["torso_roll_link"], 0.025, 0.10, 0.025)
     add_inertial(tr, masses["torso_roll_link"], (0, 0, 0), ixx, iyy, izz)
     ET.SubElement(tr, "geom",
+                  name="torso_roll_link_geom",
                   type="box", size="0.025 0.10 0.025", rgba="0.5 0.5 0.5 1")
 
     lo, hi = get_range(joints_data, "torso_yaw")
@@ -264,8 +287,14 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
     ixx, iyy, izz = box_inertia(masses["torso"], 0.075, 0.125, 0.20)
     add_inertial(torso, masses["torso"], (0, 0, 0.20), ixx, iyy, izz)
     ET.SubElement(torso, "geom",
+                  name="torso_geom",
                   type="box", size="0.075 0.125 0.20",
                   pos="0 0 0.20", rgba="0.5 0.5 0.5 1")
+
+    for b1, b2 in (("pelvis", "torso_roll_link"),
+                   ("pelvis", "torso"),
+                   ("torso_pitch_link", "torso")):
+        ET.SubElement(contact, "exclude", body1=b1, body2=b2)
 
     # ── Actuators (position control for all MVS joints) ────────────────────
     actuator = ET.SubElement(mujoco, "actuator")
@@ -321,8 +350,8 @@ def main():
     print(f"✓ MJCF generated: {OUTPUT_FILE}")
     print()
     print("Next steps:")
-    print("  1. Load test:     python3 tools/sim_load_test.py")
-    print("  2. Standing test: python3 tools/sim_standing.py")
+    print("  1. Load test:      python3 tools/sim_load_test.py")
+    print("  2. Static pose:    python3 tools/sim_static_pose.py")
 
 
 if __name__ == "__main__":
