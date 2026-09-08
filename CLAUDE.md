@@ -119,7 +119,7 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   reproduces the committed baseline before trusting any diff from it.
 - `simulation/mujoco/megadroid_mvs.xml` — full MuJoCo scene with dynamics,
   position actuators (kp=150), foot contact geometry, ground plane
-- `tools/sim_walk_lipm.py` — **P3 smooth-walking rearchitecture, thirteen
+- `tools/sim_walk_lipm.py` — **P3 smooth-walking rearchitecture, fifteen
   steps validated with real MuJoCo dynamics and DCM tracking control.**
   Supersedes `sim_walk_gait.py`'s reactive phase-based state machine for
   the goal of SMOOTH, ASIMO-like walking (kept as reference/fallback):
@@ -136,14 +136,15 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   numerical self-verification chain (IK round-trip, footstep-plan
   invariants, implied-ZMP self-consistency, swing-trajectory endpoints,
   full-plan FK/joint-limit verification, a 12-step MuJoCo drive);
-  `--steps 13` (or `--steps N --render out.gif`) runs the real thing.
-  Validated: **≤7.9° peak tilt across every step count from 3 to 13, and
-  sustained NET-FORWARD pelvis motion throughout**. `--steps 14`
-  degrades (25° peak, not a full fall) rather than failing sharply; not
-  yet root-caused further. This is the THIRD control-loop iteration this
-  file has used, and both of the first two hit a hard wall that gain
-  tuning alone could not fix — each real fix was an architectural or
-  measurement change, not a bigger gain:
+  `--steps 15` (or `--steps N --render out.gif`) runs the real thing.
+  Validated: **≤6.4° peak tilt, flat across every step count from 3 to
+  15, and sustained NET-FORWARD pelvis motion throughout**. `--steps 16`
+  is borderline (19.6° peak — under the old gait's ~20° baseline, but
+  visibly worse than the flat 3–15 range); `--steps 17` fails outright.
+  This is the THIRD control-loop iteration this file has used, and both
+  of the first two hit a hard wall that gain tuning alone could not fix
+  — each real fix was an architectural or measurement change, not a
+  bigger gain:
     1. The first version used a small ad-hoc ZMP-error → hip_roll/
        ankle_pitch trim on top of open-loop trajectory replay. It got 3
        steps working but hit a hard 4-step wall that a wide P/I/D gain
@@ -191,10 +192,25 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
        *timing* change — raising `plan_footsteps`' `ds_fraction` default
        from 0.3 to 0.4 (more double-support time, proportionally less
        single-support time per step) — which nearly halved both (peak
-       tilt 6.9→5.5°, bob 14.2→9.3mm), at the cost of the clean range
-       dropping from 15 steps to 13 (confirmed as a real tradeoff, not a
-       solvable gap: a K_DCM/DCM_FILTER_ALPHA re-sweep at 0.4 could not
-       recover 15 steps). Documented above `plan_footsteps`.
+       tilt 6.9→5.5°, bob 14.2→9.3mm), at an *initial* cost of the clean
+       range dropping from 15 steps to 13 (a K_DCM/DCM_FILTER_ALPHA
+       re-sweep at 0.4 alone could not recover it). Documented above
+       `plan_footsteps`.
+    4. That cost was then fully recovered by continuing to investigate
+       the same step-13/14+ wall (same diagnostic signature as #2 — the
+       >15° tilt onset for n_steps=16/18/20 all landed at an identical
+       t≈9.6s regardless of total plan length): tightening
+       `MAX_DCM_CORRECTION_M` (the correction's safety clamp, 0.08 →
+       0.04) dropped a 16-step run's peak tilt from 94.7° (a fall) to
+       19.6°, and pushed the clean range at `ds_fraction=0.4` back up to
+       15 steps — with a slightly *better* tilt profile than either
+       prior setting alone (a flat ~5.9–6.4° across the whole range, not
+       just at a few step counts). Net effect of fixes #3+#4 together: a
+       smoother gait with no step-count cost at all. The stability
+       landscape isn't a smooth gradient, though — 0.035 gave a fall
+       (87.8°) sandwiched between 0.03's and 0.04's clean results — so
+       this is a real, somewhat fragile margin, documented above
+       `MAX_DCM_CORRECTION_M`.
   Two more real findings surfaced getting the first 3 steps working at
   all (both still load-bearing, documented in comments above
   `WALK_AX_MARGIN_M` / `plan_footsteps`): (1) at `sim_zmp_balance.py`'s
@@ -210,30 +226,34 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
 **Where work stopped:**
 Four P3 simulation milestones are done: fixed-base static load
 validation, the floating-base ZMP ankle-pitch standing controller, three
-validated steps of quasi-static (stumbling) walking, and thirteen
+validated steps of quasi-static (stumbling) walking, and fifteen
 validated steps of the new smooth LIPM/DCM-planned walking with real
-MuJoCo dynamics, EMA-filtered DCM tracking control, and gait timing
-(`ds_fraction=0.4`) chosen for per-step smoothness over raw step count.
-Sustained (14+ step) smooth walking is NOT done — `sim_walk_lipm.py
---steps 14` degrades (25° peak tilt, not a full fall) rather than
-failing sharply, and this hasn't been root-caused further yet. Note this
-range (3-13 steps) trades off against the earlier 3-15 range: a
-K_DCM/DCM_FILTER_ALPHA re-sweep at `ds_fraction=0.4` could not recover
-15 steps, so extending past 13 while keeping the smoother gait likely
-needs a different lever than gain tuning — same category of open
-question as the 15→16 wall that preceded this fix. Candidates for
-investigating either (none started, no decision made yet): a second,
-slower low-pass stage on the DCM measurement (current filtering targets
-frame-to-frame contact noise; these walls' time constants look much
-longer); checking whether `MAX_DCM_CORRECTION_M`'s clamp introduces its
-own nonlinearity that a smaller/larger value would avoid; or trying
-`K_DCM` values outside the narrow band already swept (-0.6 to -1.5).
+MuJoCo dynamics, EMA-filtered DCM tracking control, gait timing
+(`ds_fraction=0.4`) chosen for per-step smoothness, and a tightened
+`MAX_DCM_CORRECTION_M` clamp that recovered the step-count cost that
+timing change initially had — net effect, a smoother gait with no
+range tradeoff. Sustained (16+ step) smooth walking is NOT done —
+`sim_walk_lipm.py --steps 16` is borderline (19.6° peak tilt, not a
+full fall) and `--steps 17` fails outright; this hasn't been
+root-caused further yet, though it shows the same diagnostic signature
+(a >15° tilt onset at a fixed elapsed time regardless of total plan
+length) as both earlier walls that WERE eventually resolved, which is
+grounds for optimism it's tractable with more of the same kind of
+investigation. Candidates (none started, no decision made yet): a
+second, slower low-pass stage on the DCM measurement (current filtering
+targets frame-to-frame contact noise; this wall's time constant looks
+much longer — a cascaded second EMA stage was tried once already and
+didn't help, but wasn't swept thoroughly); a finer sweep of
+`MAX_DCM_CORRECTION_M` around 0.04 given how non-monotonic that
+landscape already showed itself to be (0.035 failing between two
+clean values); or trying `K_DCM` values outside the narrow band already
+swept (-0.6 to -1.5).
 Other next directions (none started, no decision made yet):
   - Extend either ZMP controller to reject external disturbances (a
     push), which will likely need a hip/torso strategy layered on top of
     the ankle strategy (see sim_zmp_balance.py's known limitation).
   - Move toward P4 physical prototyping — premature before sustained
-    (14+ step) walking is validated, since walking is likely to
+    (16+ step) walking is validated, since walking is likely to
     stress-test mechanical dimensions and motor torque budgets that
     standing alone doesn't touch.
 
@@ -337,7 +357,7 @@ unless the user explicitly initiates a design revision.
 | P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
 | P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |
 | P3 walking gait validation (3 steps, stumbling) | `python3 tools/sim_walk_gait.py` |
-| P3 smooth walking validation (13 steps, LIPM/DCM) | `python3 tools/sim_walk_lipm.py --steps 13` |
+| P3 smooth walking validation (15 steps, LIPM/DCM) | `python3 tools/sim_walk_lipm.py --steps 15` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |
 | Print DOF summary | `python3 tools/generate_spec_dof.py` |
@@ -403,7 +423,7 @@ tools/
   sim_static_pose.py            P3 fixed-base static load validation — passing
   sim_zmp_balance.py            P3 floating-base ZMP ankle-pitch balance controller — passing
   sim_walk_gait.py              P3 walking gait (reactive, stumbles) — 3 steps validated, 4th fails; superseded by sim_walk_lipm.py
-  sim_walk_lipm.py               P3 smooth walking (LIPM/DCM + filtered DCM tracking control) — 13 steps validated, 14th degrades (not yet root-caused)
+  sim_walk_lipm.py               P3 smooth walking (LIPM/DCM + filtered DCM tracking control) — 15 steps validated, 16th borderline (not yet root-caused)
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
   generate_spec_dof.py          Generate DOF table markdown from joints.yaml

@@ -116,9 +116,10 @@ CoM=/=pelvis is a real effect here, not a hypothetical one. Using pelvis
 height for Tc=sqrt(z_c/g) would be off by ~8% in the time constant that
 governs the whole trajectory's dynamics. See solve_whole_body_com_height.
 
-VALIDATED STATE (Stage 6/7, current): 13 steps, driven with real MuJoCo
+VALIDATED STATE (Stage 6/7, current): 15 steps, driven with real MuJoCo
 dynamics (mj_step, not the offline kinematic plan) -- max pelvis tilt
-<=7.9deg across every n_steps from 3 to 13, and NET-FORWARD pelvis
+<=6.4deg, FLAT across every n_steps from 3 to 15 (smoother AND longer
+than any earlier iteration of this control loop), and NET-FORWARD pelvis
 translation throughout. This is the THIRD control-loop iteration this
 file has used; the first two (history below) each hit a hard wall that
 gain tuning alone could not fix, and both real fixes were architectural/
@@ -137,12 +138,17 @@ what would read as "stumbling" on video despite the robot never actually
 falling. Raising ds_fraction from 0.3 to 0.4 (more double-support time,
 proportionally less single-support time per step) nearly halved both
 (peak tilt 6.9->5.5deg, bob 14.2->9.3mm) at the same step count, at the
-cost of the clean/validated range dropping from 15 steps to 13 (14
-degrades to 25deg peak, rather than the sharp fall seen past the old
-15-step boundary) -- confirmed to be a real tradeoff, not a solvable gap:
-a K_DCM/DCM_FILTER_ALPHA re-sweep at ds_fraction=0.4 could not recover
-15 steps. 14+ steps is a known, not-yet-investigated-further limit at
-this setting.
+INITIAL cost of the clean/validated range dropping from 15 steps to 13.
+A FIFTH change then recovered that cost entirely: tightening
+MAX_DCM_CORRECTION_M (0.08 -> 0.04, documented above that constant)
+pushed the clean range back to 15 steps at ds_fraction=0.4, with a
+slightly better tilt profile than either prior setting on its own (flat
+~5.9-6.4deg across the whole range, not just at a few step counts) --
+i.e. the smoothness win from step 3 above ended up free, not traded
+against range, once this second fix was found. 16 steps is borderline
+(19.6deg peak — still under the old gait's ~20deg baseline, but visibly
+worse than the flat 3..15 range); 17 steps fails outright. Not yet
+investigated further past that.
 
 HISTORY (why the control loop was rearchitected, twice): the first
 working version used a small ad-hoc "ZMP-error -> hip_roll/ankle_pitch
@@ -442,18 +448,21 @@ def plan_footsteps(n_steps, step_length=0.08, step_width=2 * HIP_Y, step_height=
     height against walking-crouch depth settled on.
 
     ds_fraction defaults to 0.4, not the more common 0.3, purely for gait
-    QUALITY, not stability -- both are stable, but this is a real,
-    measured tradeoff, not a free improvement. Swept directly against a
-    steady-state run (10 steps, K_DCM/DCM_FILTER_ALPHA held at their
-    validated values): 0.4 nearly halves both the peak-tilt rocking (6.9
-    -> 5.5deg) and the pelvis's vertical bob (14.2 -> 9.3mm) each step --
-    the two things that visually read as "stumbling" even though the gait
-    was never actually falling over at 0.3. The cost: the clean/validated
-    step range drops from 15 to 13 (14 steps degrades to 25deg tilt,
-    rather than the sharp fall seen past the old boundary), and this
-    isn't a gain-tuning gap -- a K_DCM/DCM_FILTER_ALPHA re-sweep at 0.4
-    couldn't recover 15 steps either. If a longer walk matters more than
-    per-step smoothness for a given use, pass ds_fraction=0.3 explicitly.
+    QUALITY, not stability -- both are stable, but this was a real,
+    measured tradeoff at first. Swept directly against a steady-state run
+    (10 steps, K_DCM/DCM_FILTER_ALPHA held at their then-validated
+    values): 0.4 nearly halves both the peak-tilt rocking (6.9 -> 5.5deg)
+    and the pelvis's vertical bob (14.2 -> 9.3mm) each step -- the two
+    things that visually read as "stumbling" even though the gait was
+    never actually falling over at 0.3. The initial cost was the
+    clean/validated step range dropping from 15 to 13 (14 steps degraded
+    to 25deg tilt, not the sharp fall seen past the old boundary), and a
+    K_DCM/DCM_FILTER_ALPHA re-sweep at 0.4 alone couldn't recover 15
+    steps -- but a separate fix (tightening MAX_DCM_CORRECTION_M, see
+    that constant's comment) recovered the full 15-step range on top of
+    ds_fraction=0.4's smoothness gain, so this ended up a net win with no
+    remaining tradeoff. If a longer walk still matters more than per-step
+    smoothness for some future use, pass ds_fraction=0.3 explicitly.
 
     Returns (phases, t_end). Each phase is a dict:
       kind: "dwell" | "single" | "double"
@@ -1010,8 +1019,21 @@ def _selftest_stage5(model):
 # stable band, not a gentle gradient -- consistent with a real feedback
 # stability margin rather than a free parameter to push arbitrarily.
 K_DCM = -1.0                             # dimensionless gain on the DCM correction
-MAX_DCM_CORRECTION_M = 0.08              # safety clamp -- keeps a bad transient from
-                                          # commanding an unreachable IK target outright
+
+# MAX_DCM_CORRECTION_M started as a safety clamp only (keeping a bad
+# transient from commanding an outright-unreachable IK target), but turned
+# out to matter for the SLOW step-13/14+ wall too (see plan_footsteps'
+# ds_fraction=0.4 comment for that wall's discovery) -- swept directly
+# against it, not assumed: a TIGHTER clamp (0.08 -> 0.04) dropped n=16's
+# peak tilt from 94.7deg (a fall) to 19.6deg and, combined with
+# ds_fraction=0.4, pushed the clean/validated range at THAT setting from 13
+# steps back up to 15 (with a flatter, slightly better ~5.9-6.4deg tilt
+# across the whole range, not just a wider range at the same quality). The
+# landscape isn't a smooth gradient, though -- 0.035 gave 87.8deg (a fall)
+# sandwiched between 0.03's and 0.04's clean results -- so this is a real,
+# somewhat fragile stability margin, not a value to nudge casually without
+# re-running --selftest and a longer --steps check.
+MAX_DCM_CORRECTION_M = 0.04
 
 # DCM_FILTER_ALPHA: the raw xi measurement (from mj_subtreeVel's per-step
 # subtree_com/subtree_linvel) is noisy frame to frame -- the same lesson
@@ -1047,12 +1069,14 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     the pelvis position target fed to leg_ik each step is the offline
     plan's x_com(t) corrected by K_DCM times the gap between the (EMA-
     filtered -- see DCM_FILTER_ALPHA) actual and planned Divergent
-    Component of Motion. VALIDATED: 13 steps clean (peak tilt <=7.9deg
-    across n=3..13, with plan_footsteps' current ds_fraction=0.4 default
-    -- see that function's docstring for the quality-vs-range tradeoff
-    that default was chosen for). 14 steps degrades (25deg peak, not a
-    full fall) rather than failing sharply; not yet root-caused further.
-    Returns a summary dict; optionally renders an offscreen GIF."""
+    Component of Motion, clamped by MAX_DCM_CORRECTION_M. VALIDATED: 15
+    steps clean (peak tilt <=6.4deg, flat across n=3..15 -- see
+    MAX_DCM_CORRECTION_M's comment for how this range was recovered after
+    plan_footsteps' ds_fraction=0.4 default initially cost 2 steps of
+    range for a smoothness win). 16 steps is borderline (19.6deg peak,
+    still under the old gait's ~20deg baseline but visibly worse than the
+    flat 3..15 range); 17 steps fails outright. Returns a summary dict;
+    optionally renders an offscreen GIF."""
     data = mujoco.MjData(model)
 
     pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
@@ -1195,9 +1219,9 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
 
 
 def _selftest_stage6(model):
-    # 12 steps: comfortably inside the validated stable range (n=3..13 all
-    # stay under 8deg peak tilt — see run_walk's docstring), with margin
-    # below the n=14 degradation point.
+    # 12 steps: comfortably inside the validated stable range (n=3..15 all
+    # stay under 6.5deg peak tilt — see run_walk's docstring), with margin
+    # below the n=16 borderline point.
     result = run_walk(model, n_steps=12, verbose=False)
     print(f"[stage 6] 12-step run: diverged={result['diverged']}  "
           f"max_tilt={result['max_tilt_deg']:.2f}deg  net_forward={result['net_forward_m']*1000:.1f}mm  "
