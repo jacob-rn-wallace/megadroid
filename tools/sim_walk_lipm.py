@@ -2,6 +2,23 @@
 """
 P3 Walking Gait — LIPM/DCM trajectory generator (smooth, planned walking).
 
+PARTIALLY SUPERSEDED by tools/sim_walk_recede.py for the goal of indefinite
+walking and real disturbance rejection: this file plans ONE FIXED
+trajectory for an entire N-step walk, offline, once, with a hard terminal
+"come to rest" boundary condition and footstep placement that never
+responds to measured state -- structurally incapable of walking
+indefinitely or genuinely reacting to a push, only of tracking its own
+fixed plan more precisely. sim_walk_recede.py replaces the fixed plan with
+receding-horizon replanning and measured-DCM-driven footstep placement,
+reusing this file's own IK/swing-trajectory/DCM-integration machinery
+unchanged. Kept here as reference/fallback and the smoother-in-its-own-
+range baseline: at the time of writing, THIS file's fixed-horizon approach
+is still validated further (15 clean steps) than sim_walk_recede.py's
+receding-horizon controller (8 clean steps) -- the new file's own module
+docstring documents a genuine, not-yet-resolved wall in that range, so
+this remains the better choice for a short, smooth walk with no
+disturbance-rejection requirement.
+
 Supersedes sim_walk_gait.py's heuristic phase-based state machine (SHIFT ->
 SWING -> SETTLE, hand-tuned PD gains) for the specific goal of SMOOTH walking.
 That script is kept as-is, as reference/fallback — it's still the validated

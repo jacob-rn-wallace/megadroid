@@ -222,38 +222,93 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   shortens the swing leg's hip-to-foot distance enough to push
   `ankle_pitch` past its own -30° limit, given this design's tight reach
   margin.
+- `tools/sim_walk_recede.py` — **P3 receding-horizon rearchitecture, eight
+  steps validated — a real architectural change, not another tuning
+  pass, prompted by the user asking whether chasing higher step counts in
+  a *fixed*-horizon plan was actually how real bipeds learn to walk
+  indefinitely (it isn't).** `sim_walk_lipm.py` plans one fixed trajectory
+  for an entire N-step walk with a hard "rest at the very end" boundary
+  condition and footstep placement that never responds to measured state
+  — structurally incapable of walking indefinitely or genuinely reacting
+  to a push. This file replaces that with real receding-horizon
+  replanning (a short window continuously re-solved from actual measured
+  state, reusing `sim_walk_lipm.py`'s own DCM/CoM integration machinery
+  unchanged) and capture-point footstep placement — the immediately-
+  swinging foot's touchdown adapts to the measured DCM via a closed-form
+  formula confirmed directly against a paper in the project's own
+  reference library (Khadiv et al., via Roux 2024, "MPC-RL-based bipedal
+  robot control") before implementing it, not derived from memory.
+  `python3 tools/sim_walk_recede.py --selftest` gates the footstep-
+  placement formula, the swing-retarget Hermite blend, the short-horizon
+  replan, and a 6-step drive; `--steps 8` runs the real thing; `--push-at
+  T --push-force FX FY --push-duration D` applies a real external force
+  to the pelvis for disturbance testing. **Validated: 8 steps clean
+  (≤6.9° peak tilt), 9 borderline, 10+ falls** — honestly, a *more
+  modest* range than `sim_walk_lipm.py`'s 15 steps, a real tradeoff, not
+  a strict improvement. Three real bugs were found and fixed while
+  building this (documented in full in the module docstring, worth
+  reading before touching this file): a redundant double-EMA filter
+  update on replan ticks; an EMA filter alpha calibrated as a per-tick
+  rate but applied only at replan ticks, giving it an effective time
+  constant ~10× slower than intended (found by noticing the filtered CoM
+  estimate was still near its startup value several steps into a walk
+  that was inexplicably falling); and lateral footstep adaptation
+  compounding forward through every subsequent "nominal" footstep instead
+  of being a one-off correction, because the nominal reference itself was
+  wrongly inherited from a previous adapted landing rather than the true
+  fixed geometric track. **Known limitation, not yet resolved:** even
+  with footstep adaptation disabled entirely, pure receding-horizon
+  replanning of an otherwise-fixed nominal gait still degrades in the
+  same 8–15 step range — this rules out the footstep-placement law as
+  the sole cause. Tracing the gap between each short-horizon replan's own
+  prediction and the next replan's real measured state shows a genuinely
+  *growing* discontinuity (single-digit mm early in a walk, hundreds of
+  mm by the time it falls), and a wide sweep of the replan cadence,
+  lookahead depth, and `K_DCM` didn't find a combination extending
+  cleanly past ~12 steps. **Push recovery was tested, not just claimed,
+  and the result is an honest open finding**: sweeping external pelvis
+  forces (5–30N, 0.1s, scaled to this design's actual ~8.9kg mass) mid-
+  walk, footstep adaptation does not yet show a clear, consistent
+  advantage over the plain fast-loop correction alone — the mechanism is
+  verified mathematically correct and does shift the footstep target in
+  response to a real disturbance, but that doesn't yet translate into
+  measurably better recovery at the magnitudes tested.
 
 **Where work stopped:**
-Four P3 simulation milestones are done: fixed-base static load
+Five P3 simulation milestones are done: fixed-base static load
 validation, the floating-base ZMP ankle-pitch standing controller, three
-validated steps of quasi-static (stumbling) walking, and fifteen
-validated steps of the new smooth LIPM/DCM-planned walking with real
-MuJoCo dynamics, EMA-filtered DCM tracking control, gait timing
-(`ds_fraction=0.4`) chosen for per-step smoothness, and a tightened
-`MAX_DCM_CORRECTION_M` clamp that recovered the step-count cost that
-timing change initially had — net effect, a smoother gait with no
-range tradeoff. Sustained (16+ step) smooth walking is NOT done —
-`sim_walk_lipm.py --steps 16` is borderline (19.6° peak tilt, not a
-full fall) and `--steps 17` fails outright; this hasn't been
-root-caused further yet, though it shows the same diagnostic signature
-(a >15° tilt onset at a fixed elapsed time regardless of total plan
-length) as both earlier walls that WERE eventually resolved, which is
-grounds for optimism it's tractable with more of the same kind of
-investigation. Candidates (none started, no decision made yet): a
-second, slower low-pass stage on the DCM measurement (current filtering
-targets frame-to-frame contact noise; this wall's time constant looks
-much longer — a cascaded second EMA stage was tried once already and
-didn't help, but wasn't swept thoroughly); a finer sweep of
-`MAX_DCM_CORRECTION_M` around 0.04 given how non-monotonic that
-landscape already showed itself to be (0.035 failing between two
-clean values); or trying `K_DCM` values outside the narrow band already
-swept (-0.6 to -1.5).
+validated steps of quasi-static (stumbling) walking, fifteen validated
+steps of smooth fixed-horizon LIPM/DCM-planned walking
+(`sim_walk_lipm.py`), and eight validated steps of the new receding-
+horizon controller with capture-point footstep placement
+(`sim_walk_recede.py`). Neither indefinite walking nor a demonstrated
+disturbance-rejection advantage is done yet — see that file's own bullet
+above and its module docstring for the full, honest account: even with
+footstep adaptation disabled, pure receding-horizon replanning alone
+still degrades in the same 8-15 step range as `sim_walk_lipm.py`'s own
+walls, via a *growing* (not constant) discontinuity between each short-
+horizon replan's own prediction and the next replan's real measured
+state — ruling out the footstep-placement law as the sole cause, and
+ruling out both "replanning itself is destabilizing" (disabling it after
+the first window fails even faster) and a wide `REPLAN_PERIOD_S`/
+`N_FUTURE_STEPS`/`K_DCM` sweep as fixes. Candidates for investigating this
+(none started, no decision made yet): smoothly blending the fast loop's
+reference across a replan boundary instead of hard-switching to the new
+window (addresses the symptom); checking whether the short-horizon
+model's own Tc/dynamics assumptions systematically mismatch real MuJoCo
+behavior in a way that specifically compounds over many replans
+(addresses a hypothesized root cause, unconfirmed). Push recovery itself
+(once a longer validated range exists) also needs real tuning work: the
+current footstep-adaptation clamps/gains don't yet show a measurable
+recovery advantage over the plain tracking correction at the pelvis-force
+magnitudes tested (5-30N).
 Other next directions (none started, no decision made yet):
-  - Extend either ZMP controller to reject external disturbances (a
-    push), which will likely need a hip/torso strategy layered on top of
-    the ankle strategy (see sim_zmp_balance.py's known limitation).
-  - Move toward P4 physical prototyping — premature before sustained
-    (16+ step) walking is validated, since walking is likely to
+  - Extend either ZMP controller (or the receding-horizon one) to reject
+    external disturbances more robustly, which will likely need a
+    hip/torso strategy layered on top of the ankle strategy (see
+    sim_zmp_balance.py's known limitation).
+  - Move toward P4 physical prototyping — premature before sustained,
+    disturbance-tolerant walking is validated, since walking is likely to
     stress-test mechanical dimensions and motor torque budgets that
     standing alone doesn't touch.
 
@@ -358,6 +413,7 @@ unless the user explicitly initiates a design revision.
 | P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |
 | P3 walking gait validation (3 steps, stumbling) | `python3 tools/sim_walk_gait.py` |
 | P3 smooth walking validation (15 steps, LIPM/DCM) | `python3 tools/sim_walk_lipm.py --steps 15` |
+| P3 receding-horizon walking validation (8 steps) | `python3 tools/sim_walk_recede.py --steps 8` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |
 | Print DOF summary | `python3 tools/generate_spec_dof.py` |
@@ -424,6 +480,7 @@ tools/
   sim_zmp_balance.py            P3 floating-base ZMP ankle-pitch balance controller — passing
   sim_walk_gait.py              P3 walking gait (reactive, stumbles) — 3 steps validated, 4th fails; superseded by sim_walk_lipm.py
   sim_walk_lipm.py               P3 smooth walking (LIPM/DCM + filtered DCM tracking control) — 15 steps validated, 16th borderline (not yet root-caused)
+  sim_walk_recede.py             P3 receding-horizon walking + capture-point footstep placement — 8 steps validated; indefinite walking/push-recovery advantage not yet demonstrated (see module docstring)
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
   generate_spec_dof.py          Generate DOF table markdown from joints.yaml
