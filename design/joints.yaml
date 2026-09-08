@@ -4,8 +4,12 @@
 
 # Conventions:
 # - actuated: whether the joint is physically motorized in any configuration
-# - variants.MVS / variants.FULL: whether the joint is installed and active
-#   in that configuration
+# - variants.MVS / variants.FULL: whether the joint is physically installed
+#   in that configuration (driven, for actuated joints; free-to-move within
+#   its passive mechanism, for non-actuated joints like ankle_roll)
+# - passive_type: for a non-actuated but installed joint, how it behaves
+#   mechanically (e.g. "spring_centered"). Absent/null for actuated joints
+#   and for joints that aren't installed at all.
 
 meta:
   mvs_dof_total: 11    # declared expected total; validator checks counted value against this
@@ -71,11 +75,26 @@ joints:
     axis: roll
     location: ankle
     actuated: false
+    passive_type: spring_centered   # not motorized; a torsion spring returns the
+                                     # joint toward nominal_stand_deg when unloaded,
+                                     # giving lateral ground-conformance compliance
+                                     # without active control. First (and currently
+                                     # only) passive joint in this file.
+    spring_stiffness_nm_per_rad: 15.0   # PLACEHOLDER — nominal, no spring has been
+                                         # physically selected/engineered yet.
+                                         # Pending verification during P6 physical
+                                         # build (same convention as mass.yaml's
+                                         # "nominal — pending verification" status).
     variants:
-      MVS: false
+      MVS: true      # installed (but not motorized) in the MVS
       FULL: true
-    limits_deg: null
-             
+    angle_reference: foot_flat
+    limits_deg:
+      min: -15   # PLACEHOLDER — nominal passive range only; no physical spring or
+      max: 15    # hard-stop design exists yet. Revise once the physical mechanism
+                 # is dimensioned (P6).
+    nominal_stand_deg: 0   # spring rest/center angle
+
   torso_pitch:
     type: revolute
     axis: pitch

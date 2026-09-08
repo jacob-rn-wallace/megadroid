@@ -47,7 +47,11 @@ joint_axes:
   ankle_pitch:
     axis_direction: "y"  # rotation around lateral axis, same as hip_pitch and knee_pitch
     positive_direction: "dorsiflexion (shin moves forward over foot)"
-    
+
+  ankle_roll:
+    axis_direction: "x"  # rotation around forward-back axis, same as hip_roll and torso_roll
+    positive_direction: "eversion (sole tilts laterally away from body midline)"
+
   torso_pitch:
     axis_direction: "y"
     positive_direction: "torso forward lean"
