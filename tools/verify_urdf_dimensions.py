@@ -55,12 +55,19 @@ def compute_leg_length(joints, side):
     # Ankle pitch joint origin is relative to shin — z offset = shin length.
     ankle_joint_xyz = joints.get(f'{prefix}_ankle_pitch_joint', {}).get('xyz', np.zeros(3))
 
-    # Foot joint origin is relative to ankle — z offset = ankle_to_sole_offset.
+    # Ankle roll joint origin is relative to ankle_pitch's link (or the shin,
+    # if ankle_pitch is absent) — currently zero offset (co-located with
+    # ankle_pitch; see generate_urdf.py), summed explicitly here rather than
+    # assumed, so this check stays correct if that offset becomes nonzero.
+    ankle_roll_joint_xyz = joints.get(f'{prefix}_ankle_roll_joint', {}).get('xyz', np.zeros(3))
+
+    # Foot joint origin is relative to whichever ankle-stack link is last
+    # (ankle_roll, ankle_pitch, or shin) — z offset = remaining ankle_to_sole_offset.
     foot_joint_xyz  = joints.get(f'{prefix}_foot_joint',        {}).get('xyz', np.zeros(3))
 
     thigh_length = abs(knee_joint_xyz[2])
     shin_length  = abs(ankle_joint_xyz[2])
-    ankle_offset = abs(foot_joint_xyz[2])
+    ankle_offset = abs(ankle_roll_joint_xyz[2]) + abs(foot_joint_xyz[2])
 
     return {
         'thigh_length':  thigh_length,

@@ -91,6 +91,17 @@ def get_range(joints_data, joint_name):
     return deg_to_rad(limits["min"]), deg_to_rad(limits["max"])
 
 
+def get_spring(joints_data, joint_name):
+    """Return (stiffness_nm_per_rad, springref_rad) for a passive spring-
+    centered joint, or (None, None) if the joint has no passive_type."""
+    j = joints_data["joints"][joint_name]
+    if j.get("passive_type") != "spring_centered":
+        return None, None
+    stiffness = j["spring_stiffness_nm_per_rad"]
+    springref = deg_to_rad(j.get("nominal_stand_deg", 0))
+    return stiffness, springref
+
+
 # ── MJCF builder ───────────────────────────────────────────────────────────────
 
 def create_mjcf(joints_data, geo_data, kin_data, mass_data):
@@ -217,8 +228,37 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
                       name=f"{s}_ankle_geom", type="sphere", size="0.025",
                       rgba="0.8 0.4 0.1 1")
 
-        # Foot (visual + contact)
-        foot = ET.SubElement(ankle, "body",
+        # Ankle roll (passive, spring-centered) — mounted at the same point
+        # as ankle_pitch (pos "0 0 0"), matching the co-located compound-axis
+        # convention already used for the torso_pitch/torso_roll/torso stack
+        # above. Physical stack order per design/geometry.yaml's foot_stack:
+        # ankle_pitch -> ankle_roll -> F/T sensor -> foot. The F/T sensor
+        # itself has no body here (it isn't modeled as a separate mass/body
+        # anywhere in this generator today), so this joint sits directly
+        # between the ankle_pitch body and the foot body.
+        lo, hi = get_range(joints_data, "ankle_roll")
+        stiffness, springref = get_spring(joints_data, "ankle_roll")
+        ankle_roll = ET.SubElement(ankle, "body",
+                              name=f"{s}_ankle_roll",
+                              pos="0 0 0")
+        joint_kwargs = dict(name=f"{s}_ankle_roll", type="hinge",
+                             axis=get_axis(kin_data, "ankle_roll"),
+                             range=f"{lo:.6f} {hi:.6f}")
+        if stiffness is not None:
+            joint_kwargs["stiffness"] = f"{stiffness:.4f}"
+            joint_kwargs["springref"] = f"{springref:.6f}"
+        ET.SubElement(ankle_roll, "joint", **joint_kwargs)
+        i3 = sphere_inertia(masses["ankle_roll"], 0.020)
+        add_inertial(ankle_roll, masses["ankle_roll"], (0, 0, 0), *i3)
+        ET.SubElement(ankle_roll, "geom",
+                      name=f"{s}_ankle_roll_geom", type="sphere", size="0.020",
+                      rgba="0.8 0.4 0.1 1")
+
+        # Foot (visual + contact) — a flat box resting on its bottom face,
+        # not a sphere; SPEC.md's historical "ball foot" language never
+        # matched what this generator has actually produced (see SPEC.md
+        # Sec 5 for the corrected framing).
+        foot = ET.SubElement(ankle_roll, "body",
                              name=f"{s}_foot",
                              pos=f"0.05 0 {-ankle_off:.4f}")
         ixx, iyy, izz = box_inertia(masses["foot"], 0.075, 0.040, 0.020)

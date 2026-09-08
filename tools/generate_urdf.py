@@ -119,11 +119,12 @@ def get_limits(joints_data: dict, joint_name: str):
     return deg_to_rad(limits["min"]), deg_to_rad(limits["max"])
 
 
-def is_mvs_actuated(joints_data: dict, joint_name: str) -> bool:
-    """Return True if the joint is actuated and included in the MVS config."""
+def is_installed(joints_data: dict, joint_name: str) -> bool:
+    """Return True if the joint is physically present in the MVS kinematic
+    tree, regardless of whether it is motorized. URDF has no concept of
+    actuation (no motor/spring modeling) — a passive joint like ankle_roll
+    must still appear in the kinematic tree if it is mechanically installed."""
     j = joints_data["joints"].get(joint_name, {})
-    if not j.get("actuated", False):
-        return False
     return j.get("variants", {}).get("MVS", False)
 
 
@@ -185,8 +186,10 @@ def create_urdf(joints_data, geometry_data, kinematics_data, mass_data):
                                  └─ {side}_shin
                                       └─ {side}_ankle_pitch_joint (revolute, Y-axis) [MVS]
                                            └─ {side}_ankle
-                                                └─ {side}_foot_joint (fixed)
-                                                     └─ {side}_foot
+                                                └─ {side}_ankle_roll_joint (revolute, X-axis, passive) [MVS]
+                                                     └─ {side}_ankle_roll
+                                                          └─ {side}_foot_joint (fixed)
+                                                               └─ {side}_foot
 
     Torso chain:
       pelvis
@@ -341,7 +344,7 @@ def create_urdf(joints_data, geometry_data, kinematics_data, mass_data):
                            axis_xyz=get_joint_axis(kinematics_data, "knee_pitch"),
                            lower_rad=lower, upper_rad=upper)
 
-        if is_mvs_actuated(joints_data, "ankle_pitch"):
+        if is_installed(joints_data, "ankle_pitch"):
             ankle_geom = ET.Element("sphere", radius="0.025")
             an_link = add_link(robot, f"{p}_ankle",
                                visual_origin_xyz=(0, 0, 0),
@@ -358,12 +361,41 @@ def create_urdf(joints_data, geometry_data, kinematics_data, mass_data):
                                origin_xyz=(0, 0, -shin_len), origin_rpy=(0, 0, 0),
                                axis_xyz=get_joint_axis(kinematics_data, "ankle_pitch"),
                                lower_rad=lower, upper_rad=upper)
-
-            foot_parent = f"{p}_ankle"
-            foot_origin_xyz = (0.05, 0, -ankle_off)
+            ankle_stack_parent = f"{p}_ankle"
         else:
+            ankle_stack_parent = f"{p}_shin"
+
+        if is_installed(joints_data, "ankle_roll"):
+            # Mounted co-located with whatever is above it (zero local
+            # offset), matching generate_mjcf.py's identical choice — the
+            # F/T sensor has no body of its own in this generator either,
+            # so this sits directly between ankle_pitch (or the shin, if
+            # some future variant omits ankle_pitch) and the foot.
+            ankle_roll_geom = ET.Element("sphere", radius="0.020")
+            arl_link = add_link(robot, f"{p}_ankle_roll",
+                                visual_origin_xyz=(0, 0, 0),
+                                visual_origin_rpy=(0, 0, 0),
+                                geometry=ankle_roll_geom,
+                                color_rgba=(0.8, 0.4, 0.1, 1.0),
+                                material_name="orange")
+            i3 = sphere_inertia(masses["ankle_roll"], 0.020)
+            add_inertial(arl_link, masses["ankle_roll"], (0, 0, 0), *i3)
+
+            lower, upper = get_limits(joints_data, "ankle_roll")
+            roll_origin_xyz = (0, 0, 0) if ankle_stack_parent == f"{p}_ankle" else (0, 0, -shin_len)
+            add_revolute_joint(robot, f"{p}_ankle_roll_joint",
+                               parent=ankle_stack_parent, child=f"{p}_ankle_roll",
+                               origin_xyz=roll_origin_xyz, origin_rpy=(0, 0, 0),
+                               axis_xyz=get_joint_axis(kinematics_data, "ankle_roll"),
+                               lower_rad=lower, upper_rad=upper)
+            ankle_stack_parent = f"{p}_ankle_roll"
+
+        if ankle_stack_parent == f"{p}_shin":
             foot_parent = f"{p}_shin"
             foot_origin_xyz = (0.05, 0, -(shin_len + ankle_off / 2))
+        else:
+            foot_parent = ankle_stack_parent
+            foot_origin_xyz = (0.05, 0, -ankle_off)
 
         foot_geom = ET.Element("box", size="0.15 0.08 0.04")
         ft_link = add_link(robot, f"{p}_foot",

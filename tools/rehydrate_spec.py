@@ -44,7 +44,7 @@ def main():
             "axis": joint["axis"]
         }
 
-        if joint["location"] in ("hip", "knee"):
+        if joint["location"] in ("hip", "knee", "ankle"):
             leg_joints.append(entry)
         elif joint["location"] == "torso":
             torso_joints.append(entry)
