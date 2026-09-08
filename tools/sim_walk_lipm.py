@@ -116,23 +116,33 @@ CoM=/=pelvis is a real effect here, not a hypothetical one. Using pelvis
 height for Tc=sqrt(z_c/g) would be off by ~8% in the time constant that
 governs the whole trajectory's dynamics. See solve_whole_body_com_height.
 
-VALIDATED STATE (Stage 6/7, current): 15 steps, driven with real MuJoCo
+VALIDATED STATE (Stage 6/7, current): 13 steps, driven with real MuJoCo
 dynamics (mj_step, not the offline kinematic plan) -- max pelvis tilt
-<=7.8deg across every n_steps from 3 to 15, and NET-FORWARD pelvis
-translation throughout (+1197mm over 15 steps). This is the THIRD
-control-loop iteration this file has used; the first two (history below)
-each hit a hard wall that gain tuning alone could not fix, and both real
-fixes were architectural/measurement changes, not bigger gains: DCM/
-Capture-Point TRACKING CONTROL (documented above K_DCM) replaced open-
-loop trajectory replay to fix a 3-4 step wall, then EMA-filtering that
-control loop's own DCM measurement (documented above DCM_FILTER_ALPHA)
-fixed a SECOND, slower wall that tracking control alone left at ~9-10
-steps. 16 steps degrades (42.7deg peak, not a full fall) rather than
-failing sharply -- not yet root-caused further, but the same
-slow-resonance-from-measurement-noise mechanism DCM_FILTER_ALPHA was
-found for is the leading suspect (see that comment for why onset time
-being independent of total plan length was the key diagnostic clue both
-times).
+<=7.9deg across every n_steps from 3 to 13, and NET-FORWARD pelvis
+translation throughout. This is the THIRD control-loop iteration this
+file has used; the first two (history below) each hit a hard wall that
+gain tuning alone could not fix, and both real fixes were architectural/
+measurement changes, not bigger gains: DCM/Capture-Point TRACKING
+CONTROL (documented above K_DCM) replaced open-loop trajectory replay to
+fix a 3-4 step wall, then EMA-filtering that control loop's own DCM
+measurement (documented above DCM_FILTER_ALPHA) fixed a SECOND, slower
+wall that tracking control alone left at ~9-10 steps.
+
+A FOURTH change, ds_fraction's default (see plan_footsteps), was for
+gait QUALITY rather than reach: even within the fully "validated" (i.e.
+not-falling) range, the gait visibly rocked and bobbed every step --
+real, measured motion (peak tilt ~6.9deg, ~14mm of vertical pelvis bob
+per cycle at the old default), not a rendering artifact, and exactly
+what would read as "stumbling" on video despite the robot never actually
+falling. Raising ds_fraction from 0.3 to 0.4 (more double-support time,
+proportionally less single-support time per step) nearly halved both
+(peak tilt 6.9->5.5deg, bob 14.2->9.3mm) at the same step count, at the
+cost of the clean/validated range dropping from 15 steps to 13 (14
+degrades to 25deg peak, rather than the sharp fall seen past the old
+15-step boundary) -- confirmed to be a real tradeoff, not a solvable gap:
+a K_DCM/DCM_FILTER_ALPHA re-sweep at ds_fraction=0.4 could not recover
+15 steps. 14+ steps is a known, not-yet-investigated-further limit at
+this setting.
 
 HISTORY (why the control loop was rearchitected, twice): the first
 working version used a small ad-hoc "ZMP-error -> hip_roll/ankle_pitch
@@ -402,7 +412,7 @@ def _centroid(foot_xy):
 
 
 def plan_footsteps(n_steps, step_length=0.08, step_width=2 * HIP_Y, step_height=0.02,
-                    step_duration=0.6, ds_fraction=0.3, dwell_s=0.8,
+                    step_duration=0.6, ds_fraction=0.4, dwell_s=0.8,
                     start_stance_side="right"):
     """Straight-line-only footstep plan: alternating left/right placements at
     a fixed step_length/step_width, wrapped in an initial and terminal
@@ -430,6 +440,20 @@ def plan_footsteps(n_steps, step_length=0.08, step_width=2 * HIP_Y, step_height=
     distance enough to push ankle_pitch past its -30deg limit given this
     design's tight reach margin. 20mm is the value a joint sweep of lift
     height against walking-crouch depth settled on.
+
+    ds_fraction defaults to 0.4, not the more common 0.3, purely for gait
+    QUALITY, not stability -- both are stable, but this is a real,
+    measured tradeoff, not a free improvement. Swept directly against a
+    steady-state run (10 steps, K_DCM/DCM_FILTER_ALPHA held at their
+    validated values): 0.4 nearly halves both the peak-tilt rocking (6.9
+    -> 5.5deg) and the pelvis's vertical bob (14.2 -> 9.3mm) each step --
+    the two things that visually read as "stumbling" even though the gait
+    was never actually falling over at 0.3. The cost: the clean/validated
+    step range drops from 15 to 13 (14 steps degrades to 25deg tilt,
+    rather than the sharp fall seen past the old boundary), and this
+    isn't a gain-tuning gap -- a K_DCM/DCM_FILTER_ALPHA re-sweep at 0.4
+    couldn't recover 15 steps either. If a longer walk matters more than
+    per-step smoothness for a given use, pass ds_fraction=0.3 explicitly.
 
     Returns (phases, t_end). Each phase is a dict:
       kind: "dwell" | "single" | "double"
@@ -1023,15 +1047,12 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     the pelvis position target fed to leg_ik each step is the offline
     plan's x_com(t) corrected by K_DCM times the gap between the (EMA-
     filtered -- see DCM_FILTER_ALPHA) actual and planned Divergent
-    Component of Motion. VALIDATED: 15 steps clean (peak tilt <=7.8deg
-    across n=3..15). 16 steps degrades (42.7deg peak, not a full fall)
-    rather than failing sharply; not yet root-caused further -- likely
-    the same slow-resonance mechanism DCM_FILTER_ALPHA was found for,
-    just pushed later rather than eliminated (onset time was independent
-    of total plan length both before and after adding that filter, which
-    is why n_steps well past the currently-clean range degrades instead
-    of running indefinitely). Returns a summary dict; optionally renders
-    an offscreen GIF."""
+    Component of Motion. VALIDATED: 13 steps clean (peak tilt <=7.9deg
+    across n=3..13, with plan_footsteps' current ds_fraction=0.4 default
+    -- see that function's docstring for the quality-vs-range tradeoff
+    that default was chosen for). 14 steps degrades (25deg peak, not a
+    full fall) rather than failing sharply; not yet root-caused further.
+    Returns a summary dict; optionally renders an offscreen GIF."""
     data = mujoco.MjData(model)
 
     pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
@@ -1174,9 +1195,9 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
 
 
 def _selftest_stage6(model):
-    # 12 steps: comfortably inside the validated stable range (n=3..15 all
+    # 12 steps: comfortably inside the validated stable range (n=3..13 all
     # stay under 8deg peak tilt — see run_walk's docstring), with margin
-    # below the n=16 degradation point.
+    # below the n=14 degradation point.
     result = run_walk(model, n_steps=12, verbose=False)
     print(f"[stage 6] 12-step run: diverged={result['diverged']}  "
           f"max_tilt={result['max_tilt_deg']:.2f}deg  net_forward={result['net_forward_m']*1000:.1f}mm  "
