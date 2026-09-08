@@ -45,6 +45,7 @@ def main():
     # Load authoritative design data
     joints = load_yaml(DESIGN_DIR / "joints.yaml")
     geometry = load_yaml(DESIGN_DIR / "geometry.yaml")
+    sensing = load_yaml(DESIGN_DIR / "sensors.yaml")
 
     # Construct metadata (publication authority)
     meta = {
@@ -66,6 +67,7 @@ def main():
         meta=meta,
         joints=joints,
         geometry=geometry,
+        sensing=sensing,
     )
 
     # Write output

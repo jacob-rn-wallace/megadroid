@@ -23,6 +23,7 @@ def main():
     # ---------------------------
     joints_yaml = load_yaml(DESIGN / "joints.yaml")
     geometry_yaml = load_yaml(DESIGN / "geometry.yaml")
+    sensors_yaml = load_yaml(DESIGN / "sensors.yaml")
 
     # ---------------------------
     # Build joint lists (MVS only)
@@ -77,6 +78,8 @@ def main():
         }
     }
 
+    sensing = sensors_yaml
+
     # ---------------------------
     # Preserve Change Control section verbatim
     # ---------------------------
@@ -105,6 +108,7 @@ def main():
         dof={"total": dof_total},
         actuation=actuation,
         power=power,
+        sensing=sensing,
         change_control=change_control,
     )
 

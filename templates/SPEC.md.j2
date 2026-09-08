@@ -85,12 +85,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
   - Passive compliance
   - Shock absorption
   - Tolerance of foot placement errors
-
-### 5.1 End-of-Limb Sensing
-- Each foot includes a **6-DOF force/torque sensor**
-- Sensor form factor: defined in `design/geometry.yaml`
-- Sensor geometry is treated as a hard mechanical constraint
-- F/T sensors are **excluded from MVS cost accounting**
+- End-of-limb sensing (6-DOF force/torque sensor per foot): see Section 7.3
 
 ---
 
@@ -115,13 +110,20 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 ## 7. Sensors
 
 ### 7.1 Joint Position Sensing
-- **Joint-mounted absolute encoders only**
-- Encoders measure **true joint output angle**
-- No motor-mounted encoders are permitted
+- **{{ sensing.joint_position_sensing.type | capitalize }}s only**
+- Encoders measure **{{ sensing.joint_position_sensing.measures }}**
+- {{ "No motor-mounted encoders are permitted" if not sensing.joint_position_sensing.motor_mounted_encoders_allowed else "Motor-mounted encoders are permitted" }}
 
 ### 7.2 Motor Sensing
-- No motor current sensing
-- No motor-side velocity sensing
+- {{ "No motor current sensing" if not sensing.motor_sensing.current_sensing else "Motor current sensing present" }}
+- {{ "No motor-side velocity sensing" if not sensing.motor_sensing.velocity_sensing else "Motor-side velocity sensing present" }}
+
+### 7.3 End-of-Limb Force/Torque Sensing
+- Each foot includes a **6-DOF force/torque sensor**
+- Form factor: {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.shape }}, {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.diameter_mm }}mm diameter × {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.height_mm }}mm height
+- Mounting: {{ sensing.end_of_limb_sensing.ft_sensor.mounting_location }}
+- Sensor geometry is treated as a hard mechanical constraint
+- F/T sensors are **excluded from MVS cost accounting**
 
 ---
 

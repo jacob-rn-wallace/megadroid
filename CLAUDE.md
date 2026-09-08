@@ -78,10 +78,17 @@ design/
   geometry.yaml     Structural constants (link lengths, shaft diameters, etc.)
   kinematics.yaml   Axis directions, sign conventions, angle references
   mass.yaml         Link mass estimates for simulation (nominal; verified in P6)
+  sensors.yaml      Sensing strategy: joint position sensing, motor-sensing
+                     exclusions, end-of-limb 6-DOF F/T sensor spec
   actuation.yaml    Motor and drivetrain parameters (stub — not yet populated)
   power.yaml        Power system parameters (stub — not yet populated)
   .meta.yaml        Schema/metadata for the design directory
 ```
+
+`design/sensors.yaml` is the only place the F/T-sensor spec and joint-encoder
+policy live — check it before concluding this project has no force/torque
+sensing story. (It used to live undisclosed inside `geometry.yaml`, and the
+rendered docs didn't even source it from YAML; both were fixed together.)
 
 ### Key Design Constants (do not change without an explicit design revision)
 

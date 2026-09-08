@@ -12,6 +12,9 @@ REQUIRED_PATHS = [
     ("anthropometrics", "ankle_to_sole_offset_mm"),
     ("leg_structure", "twin_rail", "inner_face_spacing_mm"),
     ("joints", "shafting", "standard_diameter_mm"),
+]
+
+REQUIRED_SENSOR_PATHS = [
     ("end_of_limb_sensing", "ft_sensor", "form_factor", "diameter_mm"),
     ("end_of_limb_sensing", "ft_sensor", "form_factor", "height_mm"),
 ]
@@ -19,6 +22,8 @@ REQUIRED_PATHS = [
 def main():
     with open(REPO_ROOT / "design" / "geometry.yaml", "r") as f:
         data = yaml.safe_load(f)
+    with open(REPO_ROOT / "design" / "sensors.yaml", "r") as f:
+        sensors_data = yaml.safe_load(f)
 
     errors = []
 
@@ -27,6 +32,14 @@ def main():
         for key in path:
             if key not in cursor:
                 errors.append("Missing geometry path: " + ".".join(path))
+                break
+            cursor = cursor[key]
+
+    for path in REQUIRED_SENSOR_PATHS:
+        cursor = sensors_data
+        for key in path:
+            if key not in cursor:
+                errors.append("Missing sensors path: " + ".".join(path))
                 break
             cursor = cursor[key]
 

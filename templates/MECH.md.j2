@@ -113,12 +113,12 @@ The lower-leg module consists of the complete shank structural assembly from the
 ### 5.1 General Joint Requirements
 
 All joints must:
-- Use **joint-mounted absolute encoders**
-- Measure true output angle
+- Use **{{ sensing.joint_position_sensing.type }}s**
+- Measure {{ sensing.joint_position_sensing.measures }}
 - Be serviceable and inspectable
 - Carry primary loads in double shear
 
-Motor-mounted encoders are explicitly disallowed.
+{{ "Motor-mounted encoders are explicitly disallowed." if not sensing.joint_position_sensing.motor_mounted_encoders_allowed else "Motor-mounted encoders are permitted." }}
 
 ### 5.2 Hip Joint Assembly
 
@@ -174,7 +174,7 @@ Each foot has one **6-DOF force/torque sensor** that measures ground reaction fo
 **Mounting and integration:**
 - Sensor is mounted directly to the distal termination bulkhead of the lower-leg module
 - Located immediately proximal to the foot/end-effector
-- Form factor (cylindrical shape, diameter, height): defined in `design/geometry.yaml`
+- Form factor: {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.shape }}, {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.diameter_mm }}mm diameter × {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.height_mm }}mm height (defined in `design/sensors.yaml`)
 - Mechanical constraint: treated as hard structural envelope
 
 **Load path requirements:**

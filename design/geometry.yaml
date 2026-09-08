@@ -108,25 +108,8 @@ foot_stack:
     bending_moments_allowed: false
   notes: >
     Stack order and constraints ensure force/torque sensors are not subjected
-    to parasitic bending moments.
-
-end_of_limb_sensing:
-  ft_sensor:
-    form_factor:
-      shape: "cylindrical"
-      diameter_mm: 107          # STRUCTURAL — mechanical envelope constraint
-      height_mm: 56             # STRUCTURAL — mechanical envelope constraint
-    mounting_location: distal_face_of_lower_leg_module
-    mechanical_constraint: "hard"
-    cost_accounting: "excluded"
-    load_path_requirement: >
-      Ground reaction forces must pass axially through the sensor before entering
-      the lower-leg module structure.
-    notes: >
-      The F/T sensor is mounted directly to the distal termination bulkhead of the
-      lower-leg module and immediately proximal to the foot/end-effector.
-      Its geometry is treated as a fixed structural envelope and must be fully
-      accommodated by the shank design.
+    to parasitic bending moments. The F/T sensor's own form factor and
+    mounting spec are defined in design/sensors.yaml, not here.
 
 torso:
   structure:
