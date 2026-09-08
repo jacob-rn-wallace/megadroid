@@ -7,6 +7,49 @@ first if you haven't already.
 
 ---
 
+## Reference Material
+
+`reference-material/` (gitignored, not in this repo — check `git status`
+if unsure it's there) holds copied research/provenance PDFs curated from
+the personal paper library at `~/Documents/Scientific papers/`. Nothing
+in the build reads these; they exist to check design and control
+decisions against primary sources instead of general knowledge, matching
+this project's own "verify before trusting" discipline (see the
+sim_walk_lipm.py/sim_walk_recede.py entries below for how this already
+happens in practice — e.g. "confirmed against Zhu & Thomas 2023...
+Section 6.1"). Cite the specific paper/section whenever a decision is
+checked against one.
+
+```
+reference-material/
+  humanoid-robotics/      ~70 papers on bipedal/humanoid robots, incl.
+                           HRP-2/3/4, LOLA, TORO, iCub, WABIAN-2, ASIMO,
+                           WALK-MAN, and other major reference platforms
+    KAIST/                 HUBO lineage (KHR-2, KHR-3/HUBO, DRC-HUBO) —
+                           this project's own stated existence proof
+    Waseda/                 WABIAN lineage — human-like biped walking
+  force-torque-sensors/   9 papers on 6-axis F/T sensor design,
+                           calibration, and ZMP-measurement use in
+                           humanoids — relevant now that
+                           design/sensors.yaml specifies a per-foot F/T
+                           sensor not yet modeled in simulation
+  actuators/               MIT Cheetah proprioceptive actuator design
+                           (the foot's own stated inspiration, SPEC.md
+                           Sec 5) + a low-cost modular actuator paper
+  MPC-RL-based bipedal robot control.pdf   Roux 2024 thesis — source of
+                           the capture-point footstep-placement law used
+                           in sim_walk_recede.py
+```
+
+Curated, not comprehensive: the source library has ~150 other papers
+(car design, computing history, unrelated hardware) not copied here as
+irrelevant to a walking humanoid. If a research question doesn't fit
+what's indexed above, the fuller library is still at
+`~/Documents/Scientific papers/` (outside this repo) — check there
+before concluding nothing exists on a topic.
+
+---
+
 **Simulation framework:** MuJoCo (installed: `pip install mujoco`).
 
 **What exists and works:**

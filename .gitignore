@@ -43,3 +43,9 @@ slprj/
 *.zip
 *.tar
 *.tar.gz
+
+# Local reference-only research material (copyrighted third-party PDFs,
+# not ours to redistribute) - copied from ~/Documents/Scientific papers/,
+# kept for context only, nothing in the build reads these. See
+# tools/CLAUDE.md for what's here and why.
+reference-material/
