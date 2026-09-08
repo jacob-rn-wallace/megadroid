@@ -89,18 +89,22 @@ walking generators of the ASIMO/HRP/Valkyrie generation:
      against MuJoCo FK before the next stage is trusted -- run
      `--selftest` before touching anything downstream of a change here.
 
-  6. MUJOCO DRIVE LOOP — the offline-planned trajectory (1-5, all pure
-     Python/NumPy + FK, no mj_step) is interpolated at the sim's real elapsed
-     time and applied directly as position-actuator ctrl targets (existing
-     act_{side}_{jointname} actuators, kp=150, unchanged). A LIGHT ZMP
-     feedback trim (reusing sim_zmp_balance.compute_zmp's real contact-force
-     ZMP) is layered on top, targeting the PLANNED, time-varying zmp_reference
-     -- not a fixed point like the old gait's stance target -- to correct for
-     the real MuJoCo dynamics not being an exact point-mass LIPM (segment
-     inertia, contact compliance, discretization). This is a correction on an
-     already-good plan, not the primary stability mechanism, which is the
-     qualitative reason this should hold much smaller tilts than the old
-     gait's double-digit-degree corrections.
+  6. MUJOCO DRIVE LOOP with DCM TRACKING CONTROL (run_walk) — the
+     offline-planned trajectory (1-5, all pure Python/NumPy + FK, no
+     mj_step) sets the FEEDFORWARD pelvis/CoM path, but the actual joint
+     targets are computed LIVE every step by re-running leg_ik against a
+     CORRECTED pelvis position target: the plan's x_com(t) plus a
+     correction proportional to the gap between the DCM implied by the
+     robot's real, measured state (MuJoCo's true CoM position and
+     velocity, via mj_subtreeVel) and the DCM the offline plan predicted
+     at that instant. This replaced an earlier, simpler design (a small
+     ZMP-error-based ankle/hip_roll trim layered on top of open-loop
+     trajectory replay) that hit a hard wall no amount of gain tuning
+     could move past -- see the module docstring's VALIDATED STATE /
+     HISTORY section and the full derivation above K_DCM for why, and why
+     the fix is a well-established one (Kajita et al.'s 2003 ZMP preview
+     control, and the Capture-Point/DCM tracking control line of work
+     after it), not something invented for this file.
 
 CoM height is NOT approximated as pelvis height, and the difference is not
 cosmetic: at this robot's nominal crouch, the whole-body CoM
@@ -112,45 +116,40 @@ CoM=/=pelvis is a real effect here, not a hypothetical one. Using pelvis
 height for Tc=sqrt(z_c/g) would be off by ~8% in the time constant that
 governs the whole trajectory's dynamics. See solve_whole_body_com_height.
 
-VALIDATED STATE (Stage 6/7): 3 steps, driven with real MuJoCo dynamics
-(mj_step, not just the offline kinematic plan) -- max pelvis tilt 16.9deg
-(the old sim_walk_gait.py's own baseline is ~20deg) and, for the first time,
-NET-FORWARD pelvis translation (+358mm over 3 steps) -- the headline fix
-this rewrite was for, since the old gait's pelvis net moved BACKWARD
-(-213mm) even while it appeared to "work." 4 steps reliably falls (tilt
-climbs past 85deg). This is the same "3 works, 4 fails" pattern as the old
-gait, but from an unrelated cause: this design has no ankle_roll actuator,
-so hip_roll is the ONLY active mechanism correcting lateral balance once
-single support narrows the support base to one ~80mm-wide foot (see
-ROLL_TRIM_KP's comment for the full investigation, including a real
-measured finding along the way -- a commanded weight shift settles at only
-~70% of its target under plain P-control, a genuine steady-state error, not
-a timing issue). The lateral error this leaves compounds step over step;
-by step 4 it's large enough that even a strongly-tuned hip_roll trim
-(matched to the old gait's own proven ROLL_KP magnitude) can't recover
-before the next single-support window. Two follow-up gain-tuning attempts
-were made and BOTH ruled out (parameter-swept directly against real MuJoCo
-runs, not guessed): an integral term on the hip_roll trim (targeting the
-measured steady-state P-control error) and a derivative/damping term on the
-pelvis's own lateral velocity (data.qvel[1], targeting oscillation growth
-directly) -- neither prevented the step-4 fall across a reasonably wide
-sweep of gains (P: 1.5-9.0, I: 3-20, D: 0.05-0.8), and some combinations
-made the tilt worse before falling, not better. Tracing pelvis_y through
-the run shows why: it's not a steady offset that a stronger correction
-would close, it's a GROWING lateral oscillation, swinging to the wrong
-side and back with larger amplitude every step (peak deviation ~30mm at
-step 1, ~55mm at step 2, ~80mm at step 4) -- a resonance-like instability
-between the stepping cadence and the trim loop, not a simple gain
-shortfall. This means straightforward hip_roll PID tuning is very likely
-the wrong lever; more promising untried directions: periodic re-centering
-of the footstep plan's assumed pelvis-y baseline (stops the error from
-compounding into the PLAN itself, rather than trying to cancel it after
-the fact every step), retuning ZMP_TRIM_FILTER_ALPHA or the control rate
-(the growing oscillation's period looks close to one step_duration, hinting
-at a genuine phase-lag/resonance between the correction and the gait cycle,
-not just gain magnitude), or a real per-step replan (using the ACTUAL
-measured pelvis state as the next step's DCM boundary condition instead of
-open-loop offline trajectory tracking).
+VALIDATED STATE (Stage 6/7, current): 9 steps, driven with real MuJoCo
+dynamics (mj_step, not the offline kinematic plan) -- max pelvis tilt
+9.0deg (identical across every n_steps from 3 to 9 -- the correction
+settles into a bounded oscillation, not a growing one) and NET-FORWARD
+pelvis translation throughout (+683mm over 9 steps). This is the second,
+architecturally different control loop this file has used; the first
+(history below) hit a hard wall at 3-4 steps that gain tuning alone could
+not fix, and the fix that actually worked -- real DCM/Capture-Point
+TRACKING CONTROL, not a bigger trim -- is documented in full above K_DCM.
+10 steps reliably falls; not yet root-caused (n=9's own final single
+support is fine, so it isn't simply "10 is too many" -- see run_walk's
+docstring).
+
+HISTORY (why the control loop was rearchitected): the first working
+version used a small ad-hoc "ZMP-error -> hip_roll/ankle_pitch trim" on
+top of the same offline plan, matching this rewrite's original Stage 6
+design. That got 3 steps working (16.9deg peak tilt, +358mm net-forward)
+but reliably fell at a 4th, and unlike every other step-count wall found
+while building this file, gain tuning alone could not move it: a wide
+P/I/D sweep on that trim (P: 1.5-9.0, I: 3-20, D: 0.05-0.8) never
+prevented the step-4 fall, and some combinations made it worse. Tracing
+pelvis_y showed why -- not a steady offset a stronger correction would
+close, but a GROWING lateral oscillation (peak deviation ~30mm at step 1,
+~80mm at step 4), the signature of an uncorrected open-loop-unstable
+mode, not insufficient gain on a stable one. That diagnosis turned out to
+be exactly right: xi's own dynamics (see solve_dcm_backward) are
+open-loop unstable by construction, "divergent" is in the name, and a
+ZMP-error-only trim has no mechanism to reject it because it never
+measures the CoM velocity that determines whether the divergence is
+accelerating. Replacing it with real DCM tracking control -- confirmed
+against a paper in this project's own reference library (Zhu & Thomas
+2023, cited in full above K_DCM) -- fixed it immediately and then some:
+not just a working 4th step, but 3 to 9 all landing on the exact same
+bounded 9.0deg peak.
 
 Scope for this version (all confirmed reasonable, not load-bearing for basic
 straight-line walking quality -- see the plan this was built from):
@@ -906,36 +905,70 @@ def _selftest_stage5(model):
 
 
 # ---- Stage 6: MuJoCo drive loop --------------------------------------------
-
-# Sagittal (ankle_pitch) trim: light, as the plan intended — corrects for
-# the plan's assumed point-mass CoM height/Tc not exactly matching MuJoCo's
-# real dynamics. Reuses sb.compute_zmp's real contact-force ZMP and the same
-# EMA filtering constant sim_zmp_balance.py validated (raw per-contact ZMP
-# is noisy frame to frame — see that file's module docstring point 2).
-ANKLE_TRIM_KP = 0.3
-MAX_ANKLE_TRIM_RAD = math.radians(3.0)
-ZMP_TRIM_FILTER_ALPHA = 0.02
-
-# Lateral (hip_roll) trim: NOT light in practice, despite the plan's a
-# priori assumption that it would need "far less magnitude" than the old
-# gait's ROLL_KP. Verified directly (see WALK_AX_MARGIN_M's finding above,
-# same investigation): commanding a full weight-shift and just holding it
-# with the plain stance-leg IK (P-only position actuators, no active
-# feedback) settles at only ~70% of the target lateral CoM shift — a real
-# steady-state control error, not a timing/Tc issue, since it doesn't close
-# even given several extra seconds. That ~15mm shortfall is tolerable with
-# TWO feet on the ground (large support polygon) but not with one: this
-# design has no ankle_roll actuator, so hip_roll is the ONLY mechanism that
-# can correct lateral balance once single support narrows the support
-# polygon to one ~80mm-wide foot (the plan's own Risk #1). A trim this
-# small (kp=0.3, 3deg clamp, matching the sagittal one) let the robot fall
-# over completely (90deg tilt) every time single support began, regardless
-# of how long the preceding weight-shift phase was made. Retuned to the old
-# gait's ROLL_KP / MAX_ROLL_CORRECTION_RAD (1.5 rad/m, 10deg clamp) —
-# proven values for single-support lateral balance on this exact robot —
-# rather than trust the plan's un-verified assumption over this measurement.
-ROLL_TRIM_KP = 1.5
-MAX_ROLL_TRIM_RAD = math.radians(10.0)
+#
+# REARCHITECTED from a small ad-hoc "ZMP-error -> hip_roll/ankle_pitch trim"
+# (kept only as a superseded reference in git history) to real DCM/Capture-
+# Point TRACKING CONTROL, after a wide P/I/D gain sweep on that trim (P:
+# 1.5-9.0, I: 3-20, D: 0.05-0.8) failed to prevent a 4th-step fall in every
+# configuration tried. That failure was not a tuning problem: xi's own
+# defining ODE (xidot = (xi-p)/Tc, see solve_dcm_backward) is OPEN-LOOP
+# UNSTABLE by construction -- literally why it's called the "divergent"
+# component of motion -- so any open-loop trajectory replay, no matter how
+# well-planned, has NO mechanism to reject the natural exponential growth
+# of any real-world deviation from that plan (segment inertia, actuator
+# lag, contact compliance -- all the things this file's own docstring
+# already flagged as point-mass-model gaps). Tracing pelvis_y confirmed
+# this exactly: not a steady offset, a GROWING oscillation with period
+# close to one step_duration -- the signature of an uncorrected unstable
+# mode, not insufficient gain on a stable one. A pure ZMP-error trim also
+# structurally can't fix this: it reacts to CoM position error only, never
+# to the CoM velocity error that determines whether the DCM's growth is
+# accelerating or already decaying -- exactly the information the DCM
+# itself (xi = x_com + Tc*xcom_dot) is defined to carry.
+#
+# This IS a solved problem, and not a new one: Kajita et al.'s 2003 ZMP
+# preview control (used on HRP-2, closing the loop on the unstable ZMP-
+# tracking mode via an LQR preview gain) and the later Capture-Point/DCM
+# tracking control law (Pratt et al. 2006, formalized by Englsberger et
+# al.) are both standard, well-documented answers from exactly this
+# problem's research lineage -- confirmed directly against a paper in this
+# project's own reference library (Zhu & Thomas 2023, "Mechanical Design
+# of a Biped Robot FORREST and an Extended Capture-Point-Based Walking
+# Pattern Generator," Section 6.1), which gives the DCM tracking control
+# law used below almost verbatim:
+#
+#   xi_d_dot - xi_dot = -k*(xi_d - xi)      (a STABLE error ODE, any k>0)
+#   p_cmd = p_d + (1 + k/omega)*(xi - xi_d)  (the corrected ZMP command)
+#
+# using the MEASURED xi (real CoM position + velocity, from MuJoCo's
+# mj_subtreeVel), not the planned one -- the crux of the fix. That paper's
+# p_cmd feeds a torque-based Cartesian controller; this file has no
+# force/torque loop (position actuators only, kp=150, unchanged per the
+# original plan), so the same correction is applied directly to the
+# PELVIS POSITION TARGET that already feeds leg_ik every step, rather than
+# to a ZMP command: pelvis_xy_cmd(t) = x_com_planned(t) + offset +
+# K_DCM*(xi_actual(t) - xi_planned(t)).
+#
+# K_DCM's SIGN is opposite the paper's ZMP-domain law, and this was found
+# by direct measurement, not derivation -- worth flagging since it's easy
+# to get backwards. The paper's correction pushes the ZMP command FURTHER
+# in the direction of a growing xi error, which is correct there because
+# moving the ZMP (support point) *decelerates* the CoM away from it
+# (xddot_com = omega^2*(x_com - p) -- CoM accelerates AWAY from p). This
+# file instead corrects a PELVIS POSITION target that a position-controlled
+# leg actively drives toward, which has the opposite effective sign: a
+# same-direction correction on a position target amplifies the error
+# instead of arresting it. Confirmed directly: K_DCM=+1.0 made every run
+# catastrophically worse (max DCM error grew from ~75mm to ~900mm within
+# 3-4 steps); flipping to K_DCM=-1.0 immediately gave a damped, bounded
+# oscillation and, for the first time, sustained walking well past the
+# earlier 3-4 step wall (see run_walk's docstring for the validated count).
+# A small gain sweep around -1.0 (-0.6 to -1.5) showed a fairly narrow
+# stable band, not a gentle gradient -- consistent with a real feedback
+# stability margin rather than a free parameter to push arbitrarily.
+K_DCM = -1.0                             # dimensionless gain on the DCM correction
+MAX_DCM_CORRECTION_M = 0.08              # safety clamp -- keeps a bad transient from
+                                          # commanding an unreachable IK target outright
 
 
 def interpolate_plan(ts, arr, t):
@@ -945,11 +978,20 @@ def interpolate_plan(ts, arr, t):
     return np.array([np.interp(t, ts, arr[:, k]) for k in range(arr.shape[1])])
 
 
-def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True):
-    """Build the full offline plan (Stages 0-5), then drive it with real
-    MuJoCo dynamics (mj_step), applying the planned joint angles as
-    position-actuator targets plus a light ZMP feedback trim (see comment
-    above). Returns a summary dict; optionally renders an offscreen GIF."""
+def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, k_dcm=K_DCM):
+    """Build the offline DCM/CoM/footstep plan (Stages 0-3), then drive it
+    with real MuJoCo dynamics (mj_step). Unlike Stages 5's pure offline
+    plan, joint targets here are computed LIVE every step from real
+    measured state via DCM tracking control (see the comment above K_DCM):
+    the pelvis position target fed to leg_ik each step is the offline
+    plan's x_com(t) corrected by K_DCM times the gap between the actual
+    and planned Divergent Component of Motion. VALIDATED: 9 steps clean
+    (peak tilt 9.0deg, flat/identical across n=3..9 -- the correction
+    reaches a bounded steady oscillation, not a growing one, this time).
+    10 steps reliably falls, apparently specific to the last step's
+    single-support window rather than a hard count limit (n=9's own final
+    single support is fine) -- not yet root-caused. Returns a summary
+    dict; optionally renders an offscreen GIF."""
     data = mujoco.MjData(model)
 
     pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
@@ -962,25 +1004,34 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True):
     ts, xi = solve_dcm_backward(phases, t_end, dt_plan, Tc)
     x0 = np.array(phases[0]["zmp_p0"])
     x_com = integrate_com_forward(ts, xi, x0, Tc)
-    plan = build_kinematic_plan(phases, ts, x_com, pelvis_com_offset_xy, pelvis_z)
 
     act_index = {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i): i
                  for i in range(model.nu)}
-    foot_body_ids = sb._foot_body_ids(model)
+
+    # t=0 initial state: actual == planned, so no DCM correction is needed
+    # yet -- IK the offline plan's own t=0 targets directly.
+    pelvis_xyz0 = np.array([x_com[0, 0] + pelvis_com_offset_xy[0],
+                             x_com[0, 1] + pelvis_com_offset_xy[1], pelvis_z])
+    phase0 = _phase_at(0.0, phases)
+    foot_target0 = {side: (xy[0], xy[1], 0.0) for side, xy in phase0["foot_xy"].items()}
 
     mujoco.mj_resetData(model, data)
-    data.qpos[0] = x_com[0, 0] + pelvis_com_offset_xy[0]
-    data.qpos[1] = x_com[0, 1] + pelvis_com_offset_xy[1]
+    data.qpos[0] = pelvis_xyz0[0]
+    data.qpos[1] = pelvis_xyz0[1]
     data.qpos[2] = pelvis_z
     for side in ("left", "right"):
-        for jn, val in zip(("hip_roll", "hip_pitch", "knee_pitch", "ankle_pitch"), plan[side][0]):
+        hip_origin = hip_origin_for_side(pelvis_xyz0, side)
+        roll, hip, knee, ankle = leg_ik(hip_origin, foot_target0[side])
+        for jn, val in zip(("hip_roll", "hip_pitch", "knee_pitch", "ankle_pitch"),
+                            (roll, hip, knee, ankle)):
             jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_{jn}")
             data.qpos[model.jnt_qposadr[jid]] = val
-        data.ctrl[act_index[f"act_{side}_hip_roll"]] = plan[side][0][0]
-        data.ctrl[act_index[f"act_{side}_hip_pitch"]] = plan[side][0][1]
-        data.ctrl[act_index[f"act_{side}_knee_pitch"]] = plan[side][0][2]
-        data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = plan[side][0][3]
+        data.ctrl[act_index[f"act_{side}_hip_roll"]] = roll
+        data.ctrl[act_index[f"act_{side}_hip_pitch"]] = hip
+        data.ctrl[act_index[f"act_{side}_knee_pitch"]] = knee
+        data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = ankle
     mujoco.mj_forward(model, data)
+    mujoco.mj_subtreeVel(model, data)   # populate subtree_linvel for the first DCM measurement
 
     pelvis_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
 
@@ -996,38 +1047,61 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True):
         cam.lookat = np.array([0.0, 0.0, 0.45])
     frames = []
 
-    zmp_filtered = np.array(zmp_reference(0.0, phases))
     sim_dt = model.opt.timestep
     n_sim_steps = int(t_end / sim_dt)
 
     pelvis_x0 = data.xpos[pelvis_id, 0]
     max_tilt = 0.0
+    max_dcm_err_m = 0.0
     diverged = False
 
     for step in range(n_sim_steps):
         t = data.time
 
-        zmp_x, zmp_y, _ = sb.compute_zmp(model, data, foot_body_ids)
-        if zmp_x is not None:
-            raw = np.array([zmp_x, zmp_y])
-            zmp_filtered = (1 - ZMP_TRIM_FILTER_ALPHA) * zmp_filtered + ZMP_TRIM_FILTER_ALPHA * raw
+        # Real DCM tracking control (see comment above K_DCM): correct the
+        # pelvis position target using the MEASURED capture point, not just
+        # the planned time-indexed trajectory.
+        com_actual_xy = data.subtree_com[0][:2].copy()
+        comvel_actual_xy = data.subtree_linvel[0][:2].copy()
+        xi_actual = com_actual_xy + Tc * comvel_actual_xy
+        xi_planned = np.array([np.interp(t, ts, xi[:, 0]), np.interp(t, ts, xi[:, 1])])
+        x_com_planned = np.array([np.interp(t, ts, x_com[:, 0]), np.interp(t, ts, x_com[:, 1])])
 
-        ref = np.array(zmp_reference(t, phases))
-        err = zmp_filtered - ref
-        ankle_trim = float(np.clip(ANKLE_TRIM_KP * err[0], -MAX_ANKLE_TRIM_RAD, MAX_ANKLE_TRIM_RAD))
-        roll_trim = float(np.clip(-ROLL_TRIM_KP * err[1], -MAX_ROLL_TRIM_RAD, MAX_ROLL_TRIM_RAD))
+        dcm_err = xi_actual - xi_planned
+        max_dcm_err_m = max(max_dcm_err_m, float(np.linalg.norm(dcm_err)))
+        correction = np.clip(k_dcm * dcm_err, -MAX_DCM_CORRECTION_M, MAX_DCM_CORRECTION_M)
+        pelvis_xy_cmd = x_com_planned + np.asarray(pelvis_com_offset_xy) + correction
+        pelvis_xyz_cmd = np.array([pelvis_xy_cmd[0], pelvis_xy_cmd[1], pelvis_z])
+
+        phase = _phase_at(t, phases)
+        foot_target = {side: (xy[0], xy[1], 0.0) for side, xy in phase["foot_xy"].items()}
+        if phase["kind"] == "single":
+            foot_target[phase["swing_side"]] = swing_foot_target(
+                t, phase["swing_from_xy"], phase["swing_to_xy"],
+                phase["step_height"], phase["t0"], phase["t1"])
 
         for side in ("left", "right"):
-            roll, hip, knee, ankle = interpolate_plan(ts, plan[side], t)
-            data.ctrl[act_index[f"act_{side}_hip_roll"]] = roll + roll_trim
+            hip_origin = hip_origin_for_side(pelvis_xyz_cmd, side)
+            try:
+                roll, hip, knee, ankle = leg_ik(hip_origin, foot_target[side])
+            except UnreachableTarget:
+                # A transient DCM correction pushed the IK target just out
+                # of reach -- hold the last commanded angles for this leg
+                # rather than crash the whole run over one bad sample.
+                roll = data.ctrl[act_index[f"act_{side}_hip_roll"]]
+                hip = data.ctrl[act_index[f"act_{side}_hip_pitch"]]
+                knee = data.ctrl[act_index[f"act_{side}_knee_pitch"]]
+                ankle = data.ctrl[act_index[f"act_{side}_ankle_pitch"]]
+            data.ctrl[act_index[f"act_{side}_hip_roll"]] = roll
             data.ctrl[act_index[f"act_{side}_hip_pitch"]] = hip
             data.ctrl[act_index[f"act_{side}_knee_pitch"]] = knee
-            data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = ankle + ankle_trim
+            data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = ankle
 
         for jn in ("torso_pitch", "torso_roll", "torso_yaw"):
             data.ctrl[act_index[f"act_{jn}"]] = 0.0
 
         mujoco.mj_step(model, data)
+        mujoco.mj_subtreeVel(model, data)
 
         if not np.all(np.isfinite(data.qpos)) or not np.all(np.isfinite(data.qvel)):
             diverged = True
@@ -1052,15 +1126,18 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True):
             print(f"  wrote {len(frames)} frames to {render_path}")
 
     return dict(diverged=diverged, max_tilt_deg=max_tilt, net_forward_m=net_forward,
-                sim_time=data.time, n_steps=n_steps)
+                sim_time=data.time, n_steps=n_steps, max_dcm_err_m=max_dcm_err_m)
 
 
 def _selftest_stage6(model):
-    result = run_walk(model, n_steps=3, verbose=False)
-    print(f"[stage 6] 3-step run: diverged={result['diverged']}  "
+    # 8 steps: comfortably inside the validated flat/stable range (n=3..9
+    # all give an identical 9.0deg peak tilt — see run_walk's docstring),
+    # with one step of margin below the n=10 failure boundary.
+    result = run_walk(model, n_steps=8, verbose=False)
+    print(f"[stage 6] 8-step run: diverged={result['diverged']}  "
           f"max_tilt={result['max_tilt_deg']:.2f}deg  net_forward={result['net_forward_m']*1000:.1f}mm  "
-          f"sim_time={result['sim_time']:.3f}s")
-    assert not result["diverged"], "simulation diverged within 3 steps"
+          f"max_dcm_err={result['max_dcm_err_m']*1000:.1f}mm  sim_time={result['sim_time']:.3f}s")
+    assert not result["diverged"], "simulation diverged within 8 steps"
     assert result["net_forward_m"] > 0.0, \
         "pelvis net motion is not forward — the headline stumbling-fix regressed"
     assert result["max_tilt_deg"] < 20.0, \
