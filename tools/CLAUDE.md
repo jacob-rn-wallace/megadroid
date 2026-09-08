@@ -41,6 +41,46 @@ reference-material/
                            in sim_walk_recede.py
 ```
 
+**Priority reading**, triaged 2026-09-08 against the problems below (full
+per-file rationale not kept — re-triage if this list goes stale):
+
+- *Growing-discontinuity wall / state estimation* — `Humanoid Robot LOLA`
+  (near-identical sensor suite to megadroid's, minus the IMU it lacks);
+  `On the Hardware Design and Control Architecture of the Humanoid Robot
+  Kangaroo` (attributes real landing failures to state-estimation/force-
+  mapping issues); `Tsinghua Hephaestus 2019` (DCM+VSP with a CoM
+  estimator fed by F/T + gyro + joint angles); `Discussion on the
+  Stiffness of the Drive Chain in the Legs of Biped Robots` (plausible
+  cause of sim_walk_lipm.py's own ~70%-of-commanded weight-shift finding).
+- *HUBO-style local-feedback architecture* — `KAIST/Development of
+  Humanoid Robots in HUBO Laboratory, KAIST` (primary source for the
+  local-sensor control scheme behind the KHR-3/HUBO paper); `Compliance
+  Control for Stabilizing the Humanoid on the Changing Slope` (admittance
+  control for position-controlled actuators + foot F/T sensors — this
+  project's own actuation architecture); `KAIST/System Design and Dynamic
+  Walking of Humanoid Robot KHR-2` (direct KHR-3/HUBO precursor).
+- *F/T sensor physical design* (spec'd in design/sensors.yaml, unbuilt) —
+  `force-torque-sensors/A compact six-axis force:torque sensor using
+  photocouplers for impact robustness` (KAIST, journal not arXiv version
+  — 56mm×18mm, <$250, built for legged-robot feet); `force-torque-
+  sensors/Multi-Axis Force:Torque Sensors for Measuring Zero-Moment Point
+  in Humanoid Robots A Review`; `force-torque-sensors/Overload Protection
+  Mechanism for 6-axis Force:Torque Sensor` (Waseda — matches the
+  axial-only load path already in geometry.yaml's foot_stack).
+- *Actuator philosophy counter-argument* — `actuators/Proprioceptive
+  Actuator Design in the MIT Cheetah` argues low-gear-ratio + motor-
+  current sensing eliminates the need for F/T sensors entirely — the
+  opposite tradeoff from megadroid's committed high-gear-ratio + F/T +
+  no-current-sensing design. Worth reading to stress-test that choice,
+  not to copy it.
+- *Stair climbing* (stated MVS goal, SPEC.md Sec 2.2, not yet started) —
+  `Climbing of Stairs of an Autonomous Bipedal Robot`; `Walking of the
+  iCub humanoid robot in different scenarios` (quantitative stair
+  success-rate data); `Overview of the torque-controlled humanoid robot
+  TORO` (also has real stair data, up to 5cm).
+- *Closest philosophical/mechanical analog* — `MEVITA Open-Source Bipedal
+  Robot Assembled from E-Commerce Components via Sheet Metal Welding`.
+
 Curated, not comprehensive: the source library has ~150 other papers
 (car design, computing history, unrelated hardware) not copied here as
 irrelevant to a walking humanoid. If a research question doesn't fit
