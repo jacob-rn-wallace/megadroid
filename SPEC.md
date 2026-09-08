@@ -49,21 +49,22 @@ authoritative joint model defined in `design/joints.yaml`.
 - Hip Pitch (pitch)
 - Hip Roll (roll)
 - Knee Pitch (pitch)
+- Ankle Pitch (pitch)
 
 **Torso:**
 - Torso Pitch (pitch)
 - Torso Roll (roll)
 - Torso Yaw (yaw)
 
-**Total actuated DOF:** **9**
+**Total actuated DOF:** **11**
 <!-- END AUTO-GENERATED: DOF -->
 
 ### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
 
-The robot supports modular lower-leg assemblies. The MVS lower-leg module includes actuated ankle pitch. A future module may add ankle roll and alternate feet without requiring redesign of the pelvis, thigh, knee, or control stack.
+The robot supports modular lower-leg assemblies. The MVS lower-leg module includes actuated ankle pitch and a passive ankle roll. A future module may upgrade ankle roll to an actuated joint and add alternate feet without requiring redesign of the pelvis, thigh, knee, or control stack.
 
 ### 3.3 Non-Actuated / Out-of-Scope (MVS)
-- Ankle roll: not actuated in the MVS.
+- Ankle roll: installed in the MVS as a passive, spring-centered joint (not actuated — no motor drives it). See Section 5.
 - Arms: not installed in the MVS.
 
 ---
@@ -80,10 +81,16 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 
 ## 5. Feet and Ground Contact
 
-- Foot type (MVS module): Deformable ball foot (MIT Cheetah Mini–inspired)
+- Foot type (MVS module): Flat sole plate, resting on its bottom face, with a compliant
+  sole pad for vertical shock absorption (the plate itself is rigid — compliance comes
+  from the pad and from ankle roll below, not from the plate's own shape)
+- Ankle roll: a passive, spring-centered joint (not motorized) sits between ankle pitch
+  and the F/T sensor — see `design/joints.yaml` and Section 3.3. It provides lateral
+  ground-conformance compliance, allowing the sole to tilt to match small terrain
+  irregularities without requiring active control.
 - Function:
-  - Passive compliance
-  - Shock absorption
+  - Vertical shock absorption (compliant sole pad)
+  - Lateral ground-conformance compliance (ankle roll)
   - Tolerance of foot placement errors
 - End-of-limb sensing (6-DOF force/torque sensor per foot): see Section 7.3
 
@@ -95,7 +102,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - All actuators use **775 brushed DC motors**
 - Nominal motor voltage: **24 V**
 - Motors mounted as proximally as possible to minimize distal inertia
-- Total motor count (MVS): **9**
+- Total motor count (MVS): **11**
 
 ### 6.2 Gear Reduction
 - Standardized gearbox classes reused across joints
