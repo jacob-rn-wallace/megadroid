@@ -111,12 +111,40 @@ REPLAN_PERIOD_S, N_FUTURE_STEPS, and K_DCM did not find a combination
 extending cleanly past ~12 steps; disabling replanning after the first
 window (reverting close to a single short fixed-horizon solve) fails even
 faster, ruling out "replanning itself is destabilizing" as the explanation
-too. Untried next steps: smoothly BLENDING the fast loop's reference
-across a replan boundary instead of hard-switching to the new window
-(addresses the symptom, not yet tested); investigating whether the
-short-horizon model's own Tc/dynamics assumptions systematically
-mismatch real MuJoCo behavior in a way that compounds specifically over
-many replans (addresses a hypothesized root cause, not yet confirmed).
+too.
+
+ONE HYPOTHESIS TESTED AND RULED OUT: research grounded in the same paper
+the footstep-placement law came from (Roux 2024, eq. 24) showed real
+receding-horizon controllers terminate each short window at the DCM
+offset implied by CONTINUING to walk nominally (xi(t_end)=p(t_end)+
+b_nom), not at rest -- build_horizon_phases originally ended every window
+with a fabricated double-support+dwell (rest) sequence, forcing each
+short-horizon solve to plan a full stop that never actually happens, a
+real, literature-confirmed design flaw. Fixed via a closed-form
+correction on replan_horizon's output (xi's ODE is linear, so shifting
+the terminal condition by b_nom is just adding b_nom*exp((t-t_end)/Tc) to
+the existing lw.solve_dcm_backward result, no need to modify that reused
+function -- see replan_horizon's docstring for the full derivation).
+Verified harmless (Stage 2's zero-disturbance regression numbers improved
+slightly) but did NOT resolve the wall -- the growing-discontinuity
+pattern traced afterward is essentially unchanged in magnitude and
+timing. This rules out mis-specified terminal cost as the DOMINANT cause,
+though the fix is correct and worth keeping regardless. Still-untried
+next steps, in order of what the ruled-out result makes most likely:
+investigating whether the short-horizon model's own Tc/point-mass-LIPM
+dynamics assumptions systematically mismatch real MuJoCo behavior (this
+project already found one concrete instance of exactly this kind of gap
+-- sim_walk_lipm.py's own module docstring documents a commanded weight
+shift settling at only ~70% of target under plain position control, a
+steady-state error the idealized model doesn't predict; a state
+estimator that only low-pass-filters a single derived signal, like this
+file's EMA, has no independent way to detect or correct that kind of
+systematic bias, unlike e.g. a Kalman filter fusing an independent
+absolute reference -- research surfaced this concern but did not confirm
+it as the specific cause here); smoothly BLENDING the fast loop's
+reference across a replan boundary instead of hard-switching to the new
+window (addresses the symptom directly, regardless of root cause,
+still not attempted).
 
 PUSH RECOVERY -- tested directly (Stage 5), not claimed: swept external
 pelvis forces (5-30N, 0.1s, this design's own ~8.9kg mass -- NOT the
@@ -281,7 +309,7 @@ def retargeted_swing_foot_target(t, pos_now_xy, vel_now_xy, touchdown_xy,
 def build_horizon_phases(remaining_swing_s, stance_side, stance_xy, swing_side,
                           swing_from_xy, swing_to_xy, n_future_steps,
                           step_length=0.08, step_width=2 * lw.HIP_Y, step_height=0.02,
-                          step_duration=0.6, ds_fraction=0.4, dwell_s=0.8):
+                          step_duration=0.6, ds_fraction=0.4):
     """Build a SHORT rolling-horizon phases list (same dict shape as
     lw.plan_footsteps) anchored at the CURRENT swing in progress, instead of
     starting fresh at t=0 for an entire N-step walk. The current swing's
@@ -291,12 +319,23 @@ def build_horizon_phases(remaining_swing_s, stance_side, stance_xy, swing_side,
     lookahead uses plain nominal step_length/step_width offsets (see the
     plan's scope: adapting footsteps beyond the immediately-swinging one is
     out of scope for v1, since the closed-form placement law is only exact
-    within a single phase -- see capture_point_footstep's docstring). Ends
-    with a terminal double-support + dwell (rest condition for THIS short
-    window), exactly like lw.plan_footsteps's own ending -- this is what
-    removes the fixed-whole-walk horizon: the terminal condition is always
-    just "rest a few steps from now," recomputed fresh every replan, never
-    "rest at the end of THE walk."
+    within a single phase -- see capture_point_footstep's docstring).
+
+    Does NOT end with a terminal double-support + dwell (rest condition) --
+    an earlier version did, matching lw.plan_footsteps's own ending, and
+    that was a real, verified-by-literature design bug, not a
+    simplification: research grounded against the same paper the footstep-
+    placement law came from (Roux 2024, eq. 24, terminal cost design)
+    showed real receding-horizon controllers terminate each window at the
+    DCM offset implied by CONTINUING to walk nominally, never at rest --
+    forcing every short window to decelerate to a full stop, when the
+    robot is never actually about to stop, injects a systematic bias that
+    a fixed-gain feedback loop reproduces every single replan, compounding
+    into the growing (not bounded) discontinuity this file's module
+    docstring documents finding empirically before this fix. The caller
+    (replan_horizon) applies the correct "continue walking" terminal
+    condition via a closed-form correction on top of lw.solve_dcm_backward
+    (reused unchanged) rather than this function faking a rest phase.
 
     Times in the returned phases are WINDOW-RELATIVE (t=0 at the replan
     instant / start of the current swing), NOT absolute simulation time --
@@ -364,34 +403,52 @@ def build_horizon_phases(remaining_swing_s, stance_side, stance_xy, swing_side,
 
         stance_side = nswing_side
 
-    final_stance_xy = foot_xy[stance_side]
-    centroid = lw._centroid(foot_xy)
-    phases.append(dict(kind="double", t0=t, t1=t + t_ds,
-                        zmp_p0=final_stance_xy, zmp_p1=centroid,
-                        foot_xy=dict(foot_xy)))
-    t += t_ds
-
-    phases.append(dict(kind="dwell", t0=t, t1=t + dwell_s,
-                        zmp_p0=centroid, zmp_p1=centroid,
-                        foot_xy=dict(foot_xy)))
-    t += dwell_s
-
     return phases, t
 
 
 def replan_horizon(remaining_swing_s, stance_side, stance_xy, swing_side,
                     swing_from_xy, swing_to_xy, x0_xy, Tc, n_future_steps=2,
-                    dt_plan=0.002, **footstep_kwargs):
+                    dt_plan=0.002, step_length=0.08, step_duration=0.6,
+                    ds_fraction=0.4, **footstep_kwargs):
     """Build a short rolling-horizon phases list (build_horizon_phases) and
     solve its DCM/CoM trajectory, starting the CoM forward integration from
     x0_xy -- the robot's ACTUAL (EMA-filtered upstream by the caller, see
     the plan's highest-flagged risk) current CoM position, not an
-    assumed-at-rest value. Returns (phases, ts, xi, x_com, t_end), all in
-    the SAME window-relative time as build_horizon_phases."""
+    assumed-at-rest value.
+
+    TERMINAL CONDITION CORRECTION (the fix for the growing-discontinuity
+    limitation this file's module docstring documented): lw.solve_dcm_
+    backward (reused unchanged) always solves toward xi(t_end)=p(t_end),
+    i.e. AT REST over the final footstep -- correct for a whole walk that
+    really does end there, wrong for a short rolling window where the
+    robot is never actually about to stop. Confirmed against the same
+    literature the footstep-placement law came from (Roux 2024, eq. 24):
+    real receding-horizon controllers terminate each window at the DCM
+    offset implied by CONTINUING to walk nominally, xi(t_end)=p(t_end)+
+    b_nom, not at rest. Because xi's ODE is linear in xi, the closed-form
+    fix doesn't require re-deriving or modifying solve_dcm_backward: if
+    xi_rest(t) is its unmodified output, the corrected trajectory is
+        xi(t) = xi_rest(t) + b_nom * exp((t - t_end) / Tc)
+    (the homogeneous solution of xi_dot=xi/Tc integrated backward from
+    d(t_end)=b_nom, d(t)=b_nom*exp((t-t_end)/Tc) -- decays to ~0 influence
+    for t far before t_end, exactly ~b_nom right at t_end). x_com is then
+    re-integrated forward (lw.integrate_com_forward, also reused
+    unchanged) against this corrected xi, from the SAME real x0.
+
+    Returns (phases, ts, xi, x_com, t_end), all in the SAME window-relative
+    time as build_horizon_phases."""
     phases, t_end = build_horizon_phases(remaining_swing_s, stance_side, stance_xy,
                                           swing_side, swing_from_xy, swing_to_xy,
-                                          n_future_steps, **footstep_kwargs)
-    ts, xi = lw.solve_dcm_backward(phases, t_end, dt_plan, Tc)
+                                          n_future_steps, step_length=step_length,
+                                          step_duration=step_duration,
+                                          ds_fraction=ds_fraction, **footstep_kwargs)
+    ts, xi_rest = lw.solve_dcm_backward(phases, t_end, dt_plan, Tc)
+
+    omega = 1.0 / Tc
+    t_ss = step_duration * (1.0 - ds_fraction)
+    b_nom = np.array([nominal_dcm_offset(step_length, t_ss, omega), 0.0])
+    xi = xi_rest + b_nom[np.newaxis, :] * np.exp((ts - t_end) / Tc)[:, np.newaxis]
+
     x_com = lw.integrate_com_forward(ts, xi, np.asarray(x0_xy, dtype=float), Tc)
     return phases, ts, xi, x_com, t_end
 

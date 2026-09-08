@@ -265,14 +265,36 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   *growing* discontinuity (single-digit mm early in a walk, hundreds of
   mm by the time it falls), and a wide sweep of the replan cadence,
   lookahead depth, and `K_DCM` didn't find a combination extending
-  cleanly past ~12 steps. **Push recovery was tested, not just claimed,
-  and the result is an honest open finding**: sweeping external pelvis
-  forces (5–30N, 0.1s, scaled to this design's actual ~8.9kg mass) mid-
-  walk, footstep adaptation does not yet show a clear, consistent
-  advantage over the plain fast-loop correction alone — the mechanism is
-  verified mathematically correct and does shift the footstep target in
-  response to a real disturbance, but that doesn't yet translate into
-  measurably better recovery at the magnitudes tested.
+  cleanly past ~12 steps. **One specific, literature-grounded hypothesis
+  was tested and ruled out**: research (same paper the footstep-placement
+  law came from) showed real receding-horizon controllers terminate each
+  short window at the DCM offset for *continuing* the gait, not at rest —
+  this file's rolling horizon originally ended every window with a
+  fabricated "come to rest" dwell, a real, literature-confirmed design
+  flaw. Fixed with a closed-form correction (documented in
+  `replan_horizon`'s docstring) that measurably improved the Stage 2
+  self-test numbers but did **not** resolve the wall — the growing-
+  discontinuity pattern is essentially unchanged afterward, ruling out
+  mis-specified terminal cost as the *dominant* cause (the fix is correct
+  and worth keeping regardless). Leading remaining suspect: the short-
+  horizon model's own constant-`Tc` point-mass assumption may
+  systematically mismatch real MuJoCo dynamics in a way that compounds
+  specifically over repeated replans — this project already found one
+  concrete instance of exactly this class of gap (`sim_walk_lipm.py`
+  documents a commanded weight shift settling at only ~70% of target
+  under plain position control, an error the idealized model doesn't
+  predict), and a plain EMA filter has no independent reference to detect
+  that kind of bias, unlike e.g. a Kalman filter fusing kinematics with
+  IMU data — a real state-estimation paper in the project's reference
+  library uses exactly that, but this hasn't been confirmed as the actual
+  cause here, only flagged as the most likely remaining lead. **Push
+  recovery was tested, not just claimed, and the result is an honest open
+  finding**: sweeping external pelvis forces (5–30N, 0.1s, scaled to this
+  design's actual ~8.9kg mass) mid-walk, footstep adaptation does not yet
+  show a clear, consistent advantage over the plain fast-loop correction
+  alone — the mechanism is verified mathematically correct and does shift
+  the footstep target in response to a real disturbance, but that doesn't
+  yet translate into measurably better recovery at the magnitudes tested.
 
 **Where work stopped:**
 Five P3 simulation milestones are done: fixed-base static load
@@ -291,12 +313,21 @@ horizon replan's own prediction and the next replan's real measured
 state — ruling out the footstep-placement law as the sole cause, and
 ruling out both "replanning itself is destabilizing" (disabling it after
 the first window fails even faster) and a wide `REPLAN_PERIOD_S`/
-`N_FUTURE_STEPS`/`K_DCM` sweep as fixes. Candidates for investigating this
-(none started, no decision made yet): smoothly blending the fast loop's
+`N_FUTURE_STEPS`/`K_DCM` sweep as fixes. One specific, literature-grounded
+hypothesis (mis-specified terminal cost — the rolling horizon was ending
+each window "at rest" instead of at the DCM offset for continuing to
+walk, per Roux 2024 eq. 24) WAS tried and fixed, and measurably improved
+the Stage 2 self-test numbers, but did not resolve the wall — ruled out
+as the dominant cause, not just untried. Remaining candidates (none
+started, no decision made yet): smoothly blending the fast loop's
 reference across a replan boundary instead of hard-switching to the new
 window (addresses the symptom); checking whether the short-horizon
-model's own Tc/dynamics assumptions systematically mismatch real MuJoCo
-behavior in a way that specifically compounds over many replans
+model's own constant-Tc point-mass assumption systematically mismatches
+real MuJoCo dynamics in a way that specifically compounds over many
+replans, possibly needing a more principled state estimator (e.g. a
+Kalman filter fusing kinematics + IMU, as used in a paper already in the
+project's reference library) rather than the current plain EMA, which
+has no independent reference to detect that kind of systematic bias
 (addresses a hypothesized root cause, unconfirmed). Push recovery itself
 (once a longer validated range exists) also needs real tuning work: the
 current footstep-adaptation clamps/gains don't yet show a measurable
