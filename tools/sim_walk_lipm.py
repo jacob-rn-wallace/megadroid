@@ -116,40 +116,59 @@ CoM=/=pelvis is a real effect here, not a hypothetical one. Using pelvis
 height for Tc=sqrt(z_c/g) would be off by ~8% in the time constant that
 governs the whole trajectory's dynamics. See solve_whole_body_com_height.
 
-VALIDATED STATE (Stage 6/7, current): 9 steps, driven with real MuJoCo
+VALIDATED STATE (Stage 6/7, current): 15 steps, driven with real MuJoCo
 dynamics (mj_step, not the offline kinematic plan) -- max pelvis tilt
-9.0deg (identical across every n_steps from 3 to 9 -- the correction
-settles into a bounded oscillation, not a growing one) and NET-FORWARD
-pelvis translation throughout (+683mm over 9 steps). This is the second,
-architecturally different control loop this file has used; the first
-(history below) hit a hard wall at 3-4 steps that gain tuning alone could
-not fix, and the fix that actually worked -- real DCM/Capture-Point
-TRACKING CONTROL, not a bigger trim -- is documented in full above K_DCM.
-10 steps reliably falls; not yet root-caused (n=9's own final single
-support is fine, so it isn't simply "10 is too many" -- see run_walk's
-docstring).
+<=7.8deg across every n_steps from 3 to 15, and NET-FORWARD pelvis
+translation throughout (+1197mm over 15 steps). This is the THIRD
+control-loop iteration this file has used; the first two (history below)
+each hit a hard wall that gain tuning alone could not fix, and both real
+fixes were architectural/measurement changes, not bigger gains: DCM/
+Capture-Point TRACKING CONTROL (documented above K_DCM) replaced open-
+loop trajectory replay to fix a 3-4 step wall, then EMA-filtering that
+control loop's own DCM measurement (documented above DCM_FILTER_ALPHA)
+fixed a SECOND, slower wall that tracking control alone left at ~9-10
+steps. 16 steps degrades (42.7deg peak, not a full fall) rather than
+failing sharply -- not yet root-caused further, but the same
+slow-resonance-from-measurement-noise mechanism DCM_FILTER_ALPHA was
+found for is the leading suspect (see that comment for why onset time
+being independent of total plan length was the key diagnostic clue both
+times).
 
-HISTORY (why the control loop was rearchitected): the first working
-version used a small ad-hoc "ZMP-error -> hip_roll/ankle_pitch trim" on
-top of the same offline plan, matching this rewrite's original Stage 6
-design. That got 3 steps working (16.9deg peak tilt, +358mm net-forward)
-but reliably fell at a 4th, and unlike every other step-count wall found
-while building this file, gain tuning alone could not move it: a wide
-P/I/D sweep on that trim (P: 1.5-9.0, I: 3-20, D: 0.05-0.8) never
-prevented the step-4 fall, and some combinations made it worse. Tracing
-pelvis_y showed why -- not a steady offset a stronger correction would
-close, but a GROWING lateral oscillation (peak deviation ~30mm at step 1,
-~80mm at step 4), the signature of an uncorrected open-loop-unstable
-mode, not insufficient gain on a stable one. That diagnosis turned out to
-be exactly right: xi's own dynamics (see solve_dcm_backward) are
-open-loop unstable by construction, "divergent" is in the name, and a
-ZMP-error-only trim has no mechanism to reject it because it never
-measures the CoM velocity that determines whether the divergence is
-accelerating. Replacing it with real DCM tracking control -- confirmed
-against a paper in this project's own reference library (Zhu & Thomas
-2023, cited in full above K_DCM) -- fixed it immediately and then some:
-not just a working 4th step, but 3 to 9 all landing on the exact same
-bounded 9.0deg peak.
+HISTORY (why the control loop was rearchitected, twice): the first
+working version used a small ad-hoc "ZMP-error -> hip_roll/ankle_pitch
+trim" on top of the offline plan, matching this rewrite's original Stage
+6 design. That got 3 steps working (16.9deg peak tilt, +358mm
+net-forward) but reliably fell at a 4th, and unlike every other
+step-count wall found while building this file, gain tuning alone could
+not move it: a wide P/I/D sweep on that trim (P: 1.5-9.0, I: 3-20, D:
+0.05-0.8) never prevented the step-4 fall, and some combinations made it
+worse. Tracing pelvis_y showed why -- not a steady offset a stronger
+correction would close, but a GROWING lateral oscillation (peak deviation
+~30mm at step 1, ~80mm at step 4), the signature of an uncorrected
+open-loop-unstable mode, not insufficient gain on a stable one. That
+diagnosis turned out to be exactly right: xi's own dynamics (see
+solve_dcm_backward) are open-loop unstable by construction, "divergent"
+is in the name, and a ZMP-error-only trim has no mechanism to reject it
+because it never measures the CoM velocity that determines whether the
+divergence is accelerating. Replacing it with real DCM tracking control
+-- confirmed against a paper in this project's own reference library
+(Zhu & Thomas 2023, cited in full above K_DCM) -- fixed it immediately
+and then some: not just a working 4th step, but 3 through 9 all landing
+on the exact same bounded 9.0deg peak. That still left a SECOND, much
+slower wall around step 10, which behaved identically in kind to the
+first (a growing oscillation crossing a threshold at a fixed elapsed
+time, confirmed by testing n_steps=10/12/15/20 and finding the >15deg
+onset at the identical t=6.93s across all of them, ruling out "close to
+the plan's own end" as the cause) but different in ROOT CAUSE: the DCM
+tracking control law itself is provably stable given a clean
+measurement, but the raw per-step xi computed from mj_subtreeVel is
+noisy, and that noise was slowly pumping the same kind of resonance back
+in through the correction loop -- the same category of lesson
+sim_zmp_balance.py already learned about raw contact-force ZMP (that
+file's module docstring point 2), rediscovered here for a different
+signal. EMA-filtering xi (alpha=0.02, found by direct sweep -- same
+value sim_zmp_balance.py converged on for ZMP, not copied on faith)
+pushed the clean range from 9 steps to 15.
 
 Scope for this version (all confirmed reasonable, not load-bearing for basic
 straight-line walking quality -- see the plan this was built from):
@@ -970,6 +989,24 @@ K_DCM = -1.0                             # dimensionless gain on the DCM correct
 MAX_DCM_CORRECTION_M = 0.08              # safety clamp -- keeps a bad transient from
                                           # commanding an unreachable IK target outright
 
+# DCM_FILTER_ALPHA: the raw xi measurement (from mj_subtreeVel's per-step
+# subtree_com/subtree_linvel) is noisy frame to frame -- the same lesson
+# sim_zmp_balance.py already learned about raw per-contact ZMP (see that
+# file's module docstring point 2), just for a different signal. Without
+# filtering, K_DCM=-1.0 sustains real walking but with a SLOWLY GROWING
+# lateral oscillation that eventually crosses an instability threshold at
+# a roughly fixed elapsed time regardless of how many more steps the plan
+# continues for -- confirmed directly: n_steps=10, 12, 15, and 20 all
+# first exceeded 15deg tilt at the identical t=6.93s, which rules out
+# "approaching the plan's own end" as the cause (t_end differed by nearly
+# 2x across those runs) and points instead to a slow resonance building
+# from measurement noise feeding back through the correction every single
+# timestep. EMA-filtering xi the same way sim_zmp_balance.py filters ZMP
+# (same alpha=0.02, found by direct sweep, not copied on faith) pushed the
+# clean/validated range from 9 steps to 15 (42.7deg tilt at 16 -- degraded,
+# not yet root-caused further; see run_walk's docstring).
+DCM_FILTER_ALPHA = 0.02
+
 
 def interpolate_plan(ts, arr, t):
     """Linear interpolation of an (N, 4) joint-angle trajectory at time t
@@ -984,14 +1021,17 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     plan, joint targets here are computed LIVE every step from real
     measured state via DCM tracking control (see the comment above K_DCM):
     the pelvis position target fed to leg_ik each step is the offline
-    plan's x_com(t) corrected by K_DCM times the gap between the actual
-    and planned Divergent Component of Motion. VALIDATED: 9 steps clean
-    (peak tilt 9.0deg, flat/identical across n=3..9 -- the correction
-    reaches a bounded steady oscillation, not a growing one, this time).
-    10 steps reliably falls, apparently specific to the last step's
-    single-support window rather than a hard count limit (n=9's own final
-    single support is fine) -- not yet root-caused. Returns a summary
-    dict; optionally renders an offscreen GIF."""
+    plan's x_com(t) corrected by K_DCM times the gap between the (EMA-
+    filtered -- see DCM_FILTER_ALPHA) actual and planned Divergent
+    Component of Motion. VALIDATED: 15 steps clean (peak tilt <=7.8deg
+    across n=3..15). 16 steps degrades (42.7deg peak, not a full fall)
+    rather than failing sharply; not yet root-caused further -- likely
+    the same slow-resonance mechanism DCM_FILTER_ALPHA was found for,
+    just pushed later rather than eliminated (onset time was independent
+    of total plan length both before and after adding that filter, which
+    is why n_steps well past the currently-clean range degrades instead
+    of running indefinitely). Returns a summary dict; optionally renders
+    an offscreen GIF."""
     data = mujoco.MjData(model)
 
     pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
@@ -1032,6 +1072,7 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
         data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = ankle
     mujoco.mj_forward(model, data)
     mujoco.mj_subtreeVel(model, data)   # populate subtree_linvel for the first DCM measurement
+    xi_filtered = data.subtree_com[0][:2].copy() + Tc * data.subtree_linvel[0][:2].copy()
 
     pelvis_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
 
@@ -1060,14 +1101,17 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
 
         # Real DCM tracking control (see comment above K_DCM): correct the
         # pelvis position target using the MEASURED capture point, not just
-        # the planned time-indexed trajectory.
+        # the planned time-indexed trajectory. The measurement is EMA-
+        # filtered (see DCM_FILTER_ALPHA) — using it raw sustains walking
+        # but with a slowly growing oscillation that eventually diverges.
         com_actual_xy = data.subtree_com[0][:2].copy()
         comvel_actual_xy = data.subtree_linvel[0][:2].copy()
-        xi_actual = com_actual_xy + Tc * comvel_actual_xy
+        xi_raw = com_actual_xy + Tc * comvel_actual_xy
+        xi_filtered = (1 - DCM_FILTER_ALPHA) * xi_filtered + DCM_FILTER_ALPHA * xi_raw
         xi_planned = np.array([np.interp(t, ts, xi[:, 0]), np.interp(t, ts, xi[:, 1])])
         x_com_planned = np.array([np.interp(t, ts, x_com[:, 0]), np.interp(t, ts, x_com[:, 1])])
 
-        dcm_err = xi_actual - xi_planned
+        dcm_err = xi_filtered - xi_planned
         max_dcm_err_m = max(max_dcm_err_m, float(np.linalg.norm(dcm_err)))
         correction = np.clip(k_dcm * dcm_err, -MAX_DCM_CORRECTION_M, MAX_DCM_CORRECTION_M)
         pelvis_xy_cmd = x_com_planned + np.asarray(pelvis_com_offset_xy) + correction
@@ -1130,14 +1174,14 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
 
 
 def _selftest_stage6(model):
-    # 8 steps: comfortably inside the validated flat/stable range (n=3..9
-    # all give an identical 9.0deg peak tilt — see run_walk's docstring),
-    # with one step of margin below the n=10 failure boundary.
-    result = run_walk(model, n_steps=8, verbose=False)
-    print(f"[stage 6] 8-step run: diverged={result['diverged']}  "
+    # 12 steps: comfortably inside the validated stable range (n=3..15 all
+    # stay under 8deg peak tilt — see run_walk's docstring), with margin
+    # below the n=16 degradation point.
+    result = run_walk(model, n_steps=12, verbose=False)
+    print(f"[stage 6] 12-step run: diverged={result['diverged']}  "
           f"max_tilt={result['max_tilt_deg']:.2f}deg  net_forward={result['net_forward_m']*1000:.1f}mm  "
           f"max_dcm_err={result['max_dcm_err_m']*1000:.1f}mm  sim_time={result['sim_time']:.3f}s")
-    assert not result["diverged"], "simulation diverged within 8 steps"
+    assert not result["diverged"], "simulation diverged within 12 steps"
     assert result["net_forward_m"] > 0.0, \
         "pelvis net motion is not forward — the headline stumbling-fix regressed"
     assert result["max_tilt_deg"] < 20.0, \
