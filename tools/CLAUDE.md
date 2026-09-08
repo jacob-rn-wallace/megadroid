@@ -355,9 +355,23 @@ before concluding nothing exists on a topic.
   that kind of bias, unlike e.g. a Kalman filter fusing kinematics with
   IMU data — a real state-estimation paper in the project's reference
   library uses exactly that, but this hasn't been confirmed as the actual
-  cause here, only flagged as the most likely remaining lead. **Push
-  recovery was tested, not just claimed, and the result is an honest open
-  finding**: sweeping external pelvis forces (5–30N, 0.1s, scaled to this
+  cause here, only flagged as the most likely remaining lead. **A second,
+  more specific untested hypothesis** (found reading Kajita et al.'s
+  *Introduction to Humanoid Robotics* directly — the actual primary
+  source behind the ZMP preview control already cited secondhand above,
+  not derived from memory): the book's own preview controller (Sec. 4.4.3)
+  includes an explicit integral-action term (`K_s * Σ(p_ref − p)`,
+  accumulated ZMP tracking error) alongside state feedback and the
+  future-reference feedforward, but `K_DCM`'s fast-loop correction here is
+  purely proportional, with no analog. A small, systematic, *repeating*
+  model-mismatch bias — exactly what a proportional-only correction
+  cannot reject, since it only reacts to the instantaneous error, not the
+  accumulated pattern — would produce precisely the observed symptom
+  (single-digit mm early, growing to hundreds of mm), consistent with
+  (though not proof of) the same short-horizon-model-mismatch suspect
+  above. Not yet implemented or tested; a natural next experiment before
+  reaching for a full state estimator. **Push recovery was tested, not
+  just claimed, and the result is an honest open finding**: sweeping external pelvis forces (5–30N, 0.1s, scaled to this
   design's actual ~8.9kg mass) mid-walk, footstep adaptation does not yet
   show a clear, consistent advantage over the plain fast-loop correction
   alone — the mechanism is verified mathematically correct and does shift
