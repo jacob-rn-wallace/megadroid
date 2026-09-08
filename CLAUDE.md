@@ -119,29 +119,80 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
   reproduces the committed baseline before trusting any diff from it.
 - `simulation/mujoco/megadroid_mvs.xml` — full MuJoCo scene with dynamics,
   position actuators (kp=150), foot contact geometry, ground plane
+- `tools/sim_walk_lipm.py` — **P3 smooth-walking rearchitecture, three
+  steps validated with real MuJoCo dynamics.** Supersedes
+  `sim_walk_gait.py`'s reactive phase-based state machine for the goal of
+  SMOOTH, ASIMO-like walking (kept as reference/fallback): that gait's
+  validated 3 steps look like stumbling on video — pelvis nets ~213mm
+  BACKWARD even as the swing foot lands forward, because tilt is only
+  corrected reactively after it's already large, with no planned CoM
+  trajectory. This file replaces that with a real model-based generator —
+  footstep plan → piecewise ZMP reference → CoM trajectory via the DCM
+  (Divergent Component of Motion / Capture Point) method, RK4-integrated
+  → per-leg inverse kinematics (new to this codebase) → MuJoCo drive loop
+  with a light ZMP feedback trim — the standard technique behind
+  ASIMO/HRP/Valkyrie-generation walking generators. `python3
+  tools/sim_walk_lipm.py --selftest` runs the full numerical
+  self-verification chain (IK round-trip, footstep-plan invariants,
+  implied-ZMP self-consistency, swing-trajectory endpoints, full-plan
+  FK/joint-limit verification, a 3-step MuJoCo drive); `--steps 3` (or
+  `--steps N --render out.gif`) runs the real thing. Validated: **16.9°
+  peak tilt (vs. the old gait's ~20°) and, for the first time, NET-FORWARD
+  pelvis motion (+358mm over 3 steps)** — the headline fix this rewrite
+  was for. `--steps 4` reliably fails (tilt beyond 85°), the same "3
+  works, 4 fails" pattern as the old gait but from an unrelated cause:
+  this design has no ankle_roll actuator, so hip_roll is the only active
+  lateral-balance mechanism once single support narrows the support base
+  to one ~80mm-wide foot. Two real findings surfaced building this,
+  documented in the script's module docstring and in comments above
+  `WALK_AX_MARGIN_M`/`ROLL_TRIM_KP` — worth reading before touching gait
+  code: (1) at `sim_zmp_balance.py`'s pure-standing crouch (knee bent only
+  12°), the leg already sits at 99.45% of max reach with zero horizontal
+  offset — real walking excursions (measured up to 114mm) need a
+  *deeper* walking-specific crouch (knee ~27°, pelvis ~1.4cm lower) than
+  pure standing needs, purely a reach-margin finding, independent of gait
+  timing; (2) a commanded lateral weight-shift, held under plain P-only
+  position control with no active feedback, settles at only ~70% of its
+  target — a genuine steady-state control error, not a Tc/timing issue —
+  which is tolerable in double support (two feet) but not single support,
+  and is why the hip_roll trim ended up needing gains comparable to the
+  old gait's own `ROLL_KP`/`MAX_ROLL_CORRECTION_RAD` rather than the
+  "light trim" the rearchitecture plan originally assumed.
 
 **Where work stopped:**
-Three P3 simulation milestones are done: fixed-base static load
-validation, the floating-base ZMP ankle-pitch standing controller, and
-three validated steps of quasi-static walking. Sustained multi-step
-walking is NOT done. The next task, if continuing the gait work: the
-partial correction (alpha=0.9) is an empirical result, not a derived
-one — there's no first-principles reason 0.9 is special, only that it's
-what worked for the gains checked. Candidates for extending past 3
-steps: re-sweep alpha jointly with the gains over a wider grid (the
-search so far has been coarse); or address the mechanism directly —
-periodic re-centering (bring hip_pitch back toward -1.19° over multiple
-steps rather than letting it accumulate without bound) or a properly
-re-tuned full correction (alpha=1) that accounts for the shorter-
-pendulum dynamics it creates instead of reusing the old gains.
+Four P3 simulation milestones are done: fixed-base static load
+validation, the floating-base ZMP ankle-pitch standing controller, three
+validated steps of quasi-static (stumbling) walking, and three validated
+steps of the new smooth LIPM/DCM-planned walking with real MuJoCo
+dynamics. Sustained multi-step smooth walking is NOT done — both gaits
+independently hit a "3 works, 4 fails" wall, for unrelated reasons.
+Extending `sim_walk_lipm.py` past 3 steps was attempted and did NOT
+succeed: an integral term and a velocity-damping (derivative) term were
+both added to the hip_roll trim and swept over a wide gain range (P:
+1.5–9.0, I: 3–20, D: 0.05–0.8, all tested directly against real MuJoCo
+runs) — none prevented the step-4 fall, and some made it worse. Tracing
+pelvis_y through the run shows why straightforward PID tuning is very
+likely the wrong lever: it's not a steady offset a stronger correction
+would close, it's a *growing lateral oscillation* (peak deviation ~30mm
+at step 1, ~80mm at step 4) — a resonance-like effect between the
+stepping cadence and the trim loop, documented in full in
+`sim_walk_lipm.py`'s module docstring. More promising untried directions
+(none started, no decision made yet): periodic re-centering of the
+footstep plan's assumed pelvis-y baseline (stops the error compounding
+into the plan itself, rather than cancelling it after the fact every
+step); retuning the ZMP filter/control rate, since the oscillation's
+period looks close to one `step_duration`, hinting at a phase-lag/
+resonance issue rather than a gain-magnitude one; or a real per-step
+replan using the actual measured pelvis state as the next step's DCM
+boundary condition, instead of open-loop offline trajectory tracking.
 Other next directions (none started, no decision made yet):
-  - Extend the ZMP controller to reject external disturbances (a push),
-    which will likely need a hip/torso strategy layered on top of the
-    ankle strategy (see sim_zmp_balance.py's known limitation).
-  - Move toward P4 physical prototyping — premature before multi-step
-    walking is validated, since walking is likely to stress-test
-    mechanical dimensions and motor torque budgets that standing alone
-    doesn't touch.
+  - Extend either ZMP controller to reject external disturbances (a
+    push), which will likely need a hip/torso strategy layered on top of
+    the ankle strategy (see sim_zmp_balance.py's known limitation).
+  - Move toward P4 physical prototyping — premature before sustained
+    multi-step walking is validated, since walking is likely to
+    stress-test mechanical dimensions and motor torque budgets that
+    standing alone doesn't touch.
 
 ---
 
@@ -242,7 +293,8 @@ unless the user explicitly initiates a design revision.
 | MuJoCo load test | `python3 tools/sim_load_test.py` |
 | P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
 | P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |
-| P3 walking gait validation (3 steps) | `python3 tools/sim_walk_gait.py` |
+| P3 walking gait validation (3 steps, stumbling) | `python3 tools/sim_walk_gait.py` |
+| P3 smooth walking validation (3 steps, LIPM/DCM) | `python3 tools/sim_walk_lipm.py --steps 3` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |
 | Print DOF summary | `python3 tools/generate_spec_dof.py` |
@@ -307,7 +359,8 @@ tools/
   sim_load_test.py              MuJoCo load/sanity check (run after generate_mjcf.py)
   sim_static_pose.py            P3 fixed-base static load validation — passing
   sim_zmp_balance.py            P3 floating-base ZMP ankle-pitch balance controller — passing
-  sim_walk_gait.py              P3 walking gait — 3 steps validated, 4th fails (partial-balance limit)
+  sim_walk_gait.py              P3 walking gait (reactive, stumbles) — 3 steps validated, 4th fails; superseded by sim_walk_lipm.py
+  sim_walk_lipm.py               P3 smooth walking (LIPM/DCM-planned) — 3 steps validated, 4th fails (lateral hip_roll limit)
   visualize_urdf.py             matplotlib-based 3D visualizer (macOS-compatible)
   analyze_workspace.py          Workspace sampling via forward kinematics
   generate_spec_dof.py          Generate DOF table markdown from joints.yaml

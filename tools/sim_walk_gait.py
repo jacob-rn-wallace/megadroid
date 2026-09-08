@@ -2,6 +2,17 @@
 """
 P3 Quasi-Static Walking Gait — floating-base, three steps validated.
 
+SUPERSEDED for the goal of SMOOTH walking by tools/sim_walk_lipm.py (a
+planned footstep/ZMP/DCM trajectory generator, not this file's reactive
+phase-based state machine) — this file's own validated 3 steps look
+visibly like stumbling (pelvis nets ~213mm BACKWARD even while the swing
+foot lands forward), since tilt is only corrected reactively after it's
+already large, with no planned CoM trajectory underneath it. Kept here as
+reference/fallback and as the record of the real bugs documented below.
+sim_walk_lipm.py's own validated range is also 3 steps, but tilt stays
+lower (~17deg vs ~20deg here) and pelvis motion is net FORWARD, for an
+unrelated reason it fails past 3 steps — see that file's module docstring.
+
 Builds on sim_zmp_balance.py's proven standing-balance techniques (the
 balanced-crouch nominal pose, filtered contact-point ZMP, ankle-pitch
 sagittal feedback) to take steps forward. Validated for THREE

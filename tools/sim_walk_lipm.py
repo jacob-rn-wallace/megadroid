@@ -1,0 +1,1113 @@
+#!/usr/bin/env python3
+"""
+P3 Walking Gait — LIPM/DCM trajectory generator (smooth, planned walking).
+
+Supersedes sim_walk_gait.py's heuristic phase-based state machine (SHIFT ->
+SWING -> SETTLE, hand-tuned PD gains) for the specific goal of SMOOTH walking.
+That script is kept as-is, as reference/fallback — it's still the validated
+record of what a purely-reactive ZMP controller can do (3 steps, ~20deg peak
+tilt) and of several real, hard-won bugs (see its own docstring). This file
+exists because fixing that approach's *smoothness* was never really possible:
+even within its validated 3 steps, the pelvis nets ~-213mm (backward) while
+the swing foot lands ~+214mm (forward) — the body recoils backward while a
+leg kicks forward to catch it, because the only thing driving the gait is
+ZMP-error feedback correcting tilt AFTER it's already grown to double-digit
+degrees. There was never a planned, continuous CoM trajectory. That's a
+structural problem, not a tuning gap, hence the rewrite rather than another
+tuning pass.
+
+Architecture (footstep plan -> ZMP reference -> CoM trajectory -> IK,
+feedback trim only at the end) is the standard technique behind real bipedal
+walking generators of the ASIMO/HRP/Valkyrie generation:
+
+  1. FOOTSTEP PLANNER (plan_footsteps) — straight-line only in this version
+     (no turning): alternating left/right foot placements at a fixed
+     step_length/step_width, with an explicit initial AND terminal
+     double-support "dwell" phase. The initial dwell matters more than it
+     looks: without it, the DCM backward pass below has no reason to start
+     from the actual at-rest state, and step zero gets a kink baked in from
+     the very first frame — found by checking the trajectory generator's own
+     self-consistency (see solve_dcm_backward), not by observing a bad sim
+     run first.
+
+  2. ZMP REFERENCE p(t) (zmp_reference) — piecewise: constant at the stance
+     foot during single support, smoothly (ease()) blended between the
+     previous and next stance foot during double support.
+
+  3. CoM TRAJECTORY via the Divergent Component of Motion (DCM / Capture
+     Point) method (solve_dcm_backward, integrate_com_forward). With CoM
+     height z_c held constant and Tc = sqrt(z_c/g), the DCM
+     xi = x_com + Tc*xdot_com obeys the simple first-order ODE
+     xidot = (xi - p(t))/Tc. That ODE is UNSTABLE integrated forward but
+     exactly equivalent to a STABLE one integrated backward — so it's solved
+     backward from a chosen terminal condition (ends at rest over the last
+     footstep). CoM position is then recovered by forward-integrating a
+     SEPARATE, stable ODE: xdot_com = (xi(t) - x_com(t))/Tc. Both are done
+     with plain numerical RK4, not a hand-derived closed form: p(t)'s
+     double-support blend has no clean closed form, and — see point 5 below —
+     hand-derived closed-form trig/hyperbolic solutions in this exact problem
+     domain have already produced a real, silent sign error once. Numerical
+     integration of two individually well-conditioned first-order ODEs sidesteps
+     that risk entirely.
+
+  4. SWING FOOT TRAJECTORY (swing_foot_target) — smooth Cartesian motion
+     (eased horizontal, half-sine vertical lift), not a joint-angle schedule.
+     This -- planning in Cartesian space and only converting to joint angles
+     at the very last step via IK -- is the main mechanical reason this
+     should look smooth where the old phase-based joint-angle schedule
+     didn't: joint angles now emerge continuously from a continuous
+     Cartesian plan instead of being scripted per-phase.
+
+  5. PER-LEG INVERSE KINEMATICS (leg_ik) — nothing like this existed
+     anywhere in this codebase before (confirmed: no "ik"/"inverse_kinematics"
+     hits anywhere in tools/). The chain is hip_roll (rotates about local x)
+     -> hip_pitch -> knee_pitch -> ankle_pitch (all three about local y) ->
+     foot (rigid offset, +0.05m fwd / -0.08m down from the ankle). Because
+     hip_roll is first in the chain and rotates about x, it does NOT disturb
+     the shared y-axis the three pitch joints rotate about below it — they
+     add as plain scalar rotations of one rigid sagittal-plane chain, and
+     hip_roll just rotates that whole plane about x. That makes the
+     roll/sagittal decoupling used here EXACT for this robot's actual axis
+     wiring, not a small-angle approximation. Levelness is also enforced
+     throughout (theta_hip + theta_knee + theta_ankle = 0, same relation as
+     sim_zmp_balance.py's foot_level_ankle_deg), which is what turns the
+     foot's fixed (fwd, down) offset into a non-rotating constant vector --
+     a deliberate simplification, not an oversight (no toe-off in this
+     version).
+
+     A real sign error was found and fixed while deriving these equations:
+     the first hand-derived hip_roll formula (via straightforward R_x
+     algebra) gave atan2(-dy, -dz), which looked internally consistent and
+     even passed a zero-lateral-offset check -- but was wrong. It was only
+     caught by doing exactly what this project's tooling culture already
+     demands elsewhere (verify_urdf_dimensions.py, solve_hip_roll_shift,
+     StanceKneeTable): setting a nonzero hip_roll in the real MJCF, running
+     mj_forward, and checking whether IK on the resulting foot position
+     recovered the same angle. It didn't -- right magnitude, wrong sign. The
+     corrected formula is atan2(dy, -dz) (see leg_ik). This is the concrete
+     reason every stage in this file is gated on a numerical self-check
+     against MuJoCo FK before the next stage is trusted -- run
+     `--selftest` before touching anything downstream of a change here.
+
+  6. MUJOCO DRIVE LOOP — the offline-planned trajectory (1-5, all pure
+     Python/NumPy + FK, no mj_step) is interpolated at the sim's real elapsed
+     time and applied directly as position-actuator ctrl targets (existing
+     act_{side}_{jointname} actuators, kp=150, unchanged). A LIGHT ZMP
+     feedback trim (reusing sim_zmp_balance.compute_zmp's real contact-force
+     ZMP) is layered on top, targeting the PLANNED, time-varying zmp_reference
+     -- not a fixed point like the old gait's stance target -- to correct for
+     the real MuJoCo dynamics not being an exact point-mass LIPM (segment
+     inertia, contact compliance, discretization). This is a correction on an
+     already-good plan, not the primary stability mechanism, which is the
+     qualitative reason this should hold much smaller tilts than the old
+     gait's double-digit-degree corrections.
+
+CoM height is NOT approximated as pelvis height, and the difference is not
+cosmetic: at this robot's nominal crouch, the whole-body CoM
+(data.subtree_com[0], cross-checked against a manual mass-weighted average of
+data.xipos to 6 significant figures) sits at z=0.5713m, while the pelvis
+itself is at z=0.6746m -- 15% higher. Torso+pelvis are 39% of the total mass
+(design/mass.yaml) and the torso's own CoM sits well above the pelvis, so
+CoM=/=pelvis is a real effect here, not a hypothetical one. Using pelvis
+height for Tc=sqrt(z_c/g) would be off by ~8% in the time constant that
+governs the whole trajectory's dynamics. See solve_whole_body_com_height.
+
+VALIDATED STATE (Stage 6/7): 3 steps, driven with real MuJoCo dynamics
+(mj_step, not just the offline kinematic plan) -- max pelvis tilt 16.9deg
+(the old sim_walk_gait.py's own baseline is ~20deg) and, for the first time,
+NET-FORWARD pelvis translation (+358mm over 3 steps) -- the headline fix
+this rewrite was for, since the old gait's pelvis net moved BACKWARD
+(-213mm) even while it appeared to "work." 4 steps reliably falls (tilt
+climbs past 85deg). This is the same "3 works, 4 fails" pattern as the old
+gait, but from an unrelated cause: this design has no ankle_roll actuator,
+so hip_roll is the ONLY active mechanism correcting lateral balance once
+single support narrows the support base to one ~80mm-wide foot (see
+ROLL_TRIM_KP's comment for the full investigation, including a real
+measured finding along the way -- a commanded weight shift settles at only
+~70% of its target under plain P-control, a genuine steady-state error, not
+a timing issue). The lateral error this leaves compounds step over step;
+by step 4 it's large enough that even a strongly-tuned hip_roll trim
+(matched to the old gait's own proven ROLL_KP magnitude) can't recover
+before the next single-support window. Two follow-up gain-tuning attempts
+were made and BOTH ruled out (parameter-swept directly against real MuJoCo
+runs, not guessed): an integral term on the hip_roll trim (targeting the
+measured steady-state P-control error) and a derivative/damping term on the
+pelvis's own lateral velocity (data.qvel[1], targeting oscillation growth
+directly) -- neither prevented the step-4 fall across a reasonably wide
+sweep of gains (P: 1.5-9.0, I: 3-20, D: 0.05-0.8), and some combinations
+made the tilt worse before falling, not better. Tracing pelvis_y through
+the run shows why: it's not a steady offset that a stronger correction
+would close, it's a GROWING lateral oscillation, swinging to the wrong
+side and back with larger amplitude every step (peak deviation ~30mm at
+step 1, ~55mm at step 2, ~80mm at step 4) -- a resonance-like instability
+between the stepping cadence and the trim loop, not a simple gain
+shortfall. This means straightforward hip_roll PID tuning is very likely
+the wrong lever; more promising untried directions: periodic re-centering
+of the footstep plan's assumed pelvis-y baseline (stops the error from
+compounding into the PLAN itself, rather than trying to cancel it after
+the fact every step), retuning ZMP_TRIM_FILTER_ALPHA or the control rate
+(the growing oscillation's period looks close to one step_duration, hinting
+at a genuine phase-lag/resonance between the correction and the gait cycle,
+not just gain magnitude), or a real per-step replan (using the ACTUAL
+measured pelvis state as the next step's DCM boundary condition instead of
+open-loop offline trajectory tracking).
+
+Scope for this version (all confirmed reasonable, not load-bearing for basic
+straight-line walking quality -- see the plan this was built from):
+straight-line walking only (no turning), a fixed footstep count planned in
+advance rather than true infinite-horizon receding-horizon replanning, no
+torso lean/counter-rotation (torso held at nominal/0 throughout), no
+variable walking speed, and no motor-torque validation (design/actuation.yaml
+is still an empty stub -- blocked on that being populated, not in scope here).
+
+Usage:
+    python3 tools/sim_walk_lipm.py --selftest       # IK + trajectory-generator gates
+    python3 tools/sim_walk_lipm.py --steps 15
+    python3 tools/sim_walk_lipm.py --render out.gif
+"""
+
+import math
+import argparse
+import numpy as np
+import mujoco
+
+import sim_zmp_balance as sb
+
+MJCF_PATH = sb.MJCF_PATH
+
+# ---- Stage 0: reference constants -----------------------------------------
+
+L1 = 0.3     # thigh length, m (design/geometry.yaml: thigh_length_mm=300)
+L2 = 0.3     # shin length, m (design/geometry.yaml: shin_length_mm=300)
+FOOT_FWD = 0.05    # foot body offset forward of ankle, m (generate_mjcf.py, hardcoded there too)
+FOOT_DOWN = 0.08   # foot body offset below ankle, m (design/geometry.yaml: ankle_to_sole_offset_mm=80)
+HIP_Y = 0.05       # hip lateral half-spacing, m (design/geometry.yaml: twin_rail spacing/2)
+G = 9.81
+
+# Reachability limit. NOT 0.95*(L1+L2) as originally planned — verified
+# directly that the nominal crouch itself (knee bent only 12deg, i.e. nearly
+# a straight leg) already sits at r=0.5967m, 99.45% of L1+L2=0.6m. A 95% cap
+# would reject the robot's own resting pose. Use the true kinematic limit
+# instead (acos's clip already makes the boundary numerically safe) and warn
+# separately when a configuration is close enough to full extension that the
+# IK Jacobian is poorly conditioned there (near-singular, not unreachable).
+R_MAX = L1 + L2
+
+
+def solve_whole_body_com_height(model):
+    """FK at sb.NOMINAL_POSE; returns (z_c, pelvis_com_offset_xy) where z_c is
+    the whole-body CoM height (data.subtree_com[0], NOT pelvis height — see
+    module docstring) and pelvis_com_offset_xy is the constant (dx, dy) from
+    CoM to pelvis at this pose, used later to convert a planned CoM (x, y)
+    trajectory into a pelvis (x, y) target for IK."""
+    data = mujoco.MjData(model)
+    root_z, _, _ = sb.solve_nominal_geometry(model)
+    sb.set_initial_state(model, data, root_z)
+
+    com = data.subtree_com[0].copy()
+    pid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+    pelvis_xyz = data.xpos[pid].copy()
+
+    z_c = com[2]
+    pelvis_com_offset_xy = (pelvis_xyz[0] - com[0], pelvis_xyz[1] - com[1])
+    return z_c, pelvis_com_offset_xy
+
+
+# ---- Walking crouch pose (deeper than sb's pure-standing NOMINAL_POSE) -----
+#
+# Reach-margin finding (caught by Stage 5's own FK-verification gate, exactly
+# the class of thing this file's self-verification discipline exists to
+# catch before it reaches MuJoCo): at sb.NOMINAL_POSE's pure-standing height
+# (knee bent only 12deg), the leg already uses 99.45% of its max reach with
+# ZERO horizontal offset -- only 3.3mm of slack. The full offline kinematic
+# plan showed real CoM-to-planted-foot horizontal excursions up to ~114mm
+# during double support (the far foot, still planted at its pre-step
+# position, trails behind the advancing CoM) -- far beyond that 3.3mm/80mm
+# budget. The fix is NOT a smaller step_length: even the plan's conservative
+# 80mm steps exceed the standing-height budget on their own. It's a deeper
+# standing crouch for WALKING than for static balance -- which also happens
+# to be thematically apt, since ASIMO is well known for exactly this
+# bent-knee gait, for the same reach-margin reason. Because the leg starts
+# this close to full extension, crouch depth vs. reach margin is sharply
+# nonlinear (near-singular Jacobian at full extension -- flagged as a risk
+# while planning this file).
+#
+# 0.20 (200mm, ~1.75x the observed worst case) was the first value tried,
+# but it over-corrected: deepening the REST crouch pushes the rest ankle
+# angle closer to its own -30deg limit, and the swing foot's ~20-30mm lift
+# shortens the hip-to-foot distance during swing, bending the knee MORE
+# (not less) and driving ankle_pitch further negative on top of that already
+# eaten-into rest angle -- a second joint-limit failure the first fix
+# introduced. Swept jointly against step_height (see plan_footsteps):
+# WALK_AX_MARGIN_M=0.15 (still ~1.3x the 114mm worst case) paired with
+# step_height=0.02 keeps ankle_pitch's swing-lift minimum at -26.6deg,
+# comfortably inside the +-1deg margin gate, while max knee_pitch (41.0deg)
+# and hip_pitch stay well clear of their own limits too.
+WALK_AX_MARGIN_M = 0.15   # target max |hip_x - foot_x| budget, see above
+
+
+def solve_walk_pose(model):
+    """Exact closed-form (same relations leg_ik uses, solved in reverse):
+    the pelvis height at which a leg at full extension (r=R_MAX) has exactly
+    WALK_AX_MARGIN_M of horizontal slack. Returns (pelvis_z, hip_deg,
+    knee_deg, ankle_deg) for a foot centered exactly under the hip (roll=0,
+    dx=0) at that height -- NOT sb.NOMINAL_POSE's (shallower) height."""
+    az_budget = math.sqrt(R_MAX**2 - WALK_AX_MARGIN_M**2)
+    pelvis_z = FOOT_DOWN + az_budget
+
+    hip_origin = np.array([0.0, HIP_Y, pelvis_z])
+    foot_target = np.array([0.0, HIP_Y, 0.0])
+    roll, hip, knee, ankle = leg_ik(hip_origin, foot_target)
+    assert abs(roll) < 1e-9, "centered target must give exactly zero hip_roll"
+    return pelvis_z, math.degrees(hip), math.degrees(knee), math.degrees(ankle)
+
+
+def solve_walk_com_height(model, pelvis_z, hip_deg, knee_deg, ankle_deg):
+    """FK the full symmetric walking pose (both legs, pelvis freejoint z set
+    directly to pelvis_z -- see solve_walk_pose's docstring on why this is
+    exact, not approximate, given leg_ik/leg_fk's already-validated <2mm
+    round-trip) to get its whole-body CoM height/offset. Analogous to
+    solve_whole_body_com_height, but for this deeper walking crouch rather
+    than sb.NOMINAL_POSE."""
+    data = mujoco.MjData(model)
+    mujoco.mj_resetData(model, data)
+    data.qpos[2] = pelvis_z   # freejoint qpos layout: [x, y, z, qw, qx, qy, qz]
+    for side in ("left", "right"):
+        for jn, deg in (("hip_pitch", hip_deg), ("knee_pitch", knee_deg),
+                        ("ankle_pitch", ankle_deg)):
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_{jn}")
+            data.qpos[model.jnt_qposadr[jid]] = math.radians(deg)
+    mujoco.mj_forward(model, data)
+
+    com = data.subtree_com[0].copy()
+    pid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+    pelvis_xyz = data.xpos[pid].copy()
+    z_c = com[2]
+    offset_xy = (pelvis_xyz[0] - com[0], pelvis_xyz[1] - com[1])
+    return z_c, offset_xy, pelvis_xyz, data
+
+
+# ---- Stage 1: per-leg inverse kinematics -----------------------------------
+
+class UnreachableTarget(ValueError):
+    pass
+
+
+def leg_ik(hip_origin, foot_target):
+    """Solve (hip_roll, hip_pitch, knee_pitch, ankle_pitch) in RADIANS for a
+    single leg, given the hip_roll joint's world origin and the desired
+    world-frame foot sole target — both (x, y, z) tuples/arrays.
+
+    See module docstring point 5 for the derivation and for the sign error
+    this caught. Do not "simplify" theta_roll's sign without re-running
+    --selftest — a plausible-looking wrong version of this passed a
+    zero-offset check before."""
+    hip_origin = np.asarray(hip_origin, dtype=float)
+    foot_target = np.asarray(foot_target, dtype=float)
+    dx, dy, dz = foot_target - hip_origin
+
+    theta_roll = math.atan2(dy, -dz)
+
+    rx = dx
+    rz = -math.sqrt(dy**2 + dz**2)
+
+    ax = rx - FOOT_FWD
+    az = rz - (-FOOT_DOWN)
+    r = math.sqrt(ax**2 + az**2)
+    eps = 1e-6   # floating-point safety margin at the r=L1+L2 boundary
+    if r > R_MAX + eps or r < abs(L1 - L2) - eps:
+        raise UnreachableTarget(
+            f"leg_ik: target unreachable, r={r:.4f}m (limits "
+            f"[{abs(L1-L2):.4f}, {R_MAX:.4f}]m) for foot_target={foot_target}, "
+            f"hip_origin={hip_origin}")
+
+    cos_k = np.clip((r**2 - L1**2 - L2**2) / (2 * L1 * L2), -1.0, 1.0)
+    theta_k = math.acos(cos_k)          # knee_pitch, flexion-only branch, >= 0
+    alpha = math.atan2(-ax, -az)
+    gamma = math.atan2(L2 * math.sin(theta_k), L1 + L2 * math.cos(theta_k))
+    theta_h = alpha - gamma             # hip_pitch — NOT alpha+gamma (hyperextension branch)
+    theta_a = -(theta_h + theta_k)      # ankle_pitch, enforces level foot
+
+    return theta_roll, theta_h, theta_k, theta_a
+
+
+def leg_fk(model, data, side, hip_roll, hip_pitch, knee_pitch, ankle_pitch):
+    """Forward-kinematic a leg's joint angles (radians) via the real MJCF and
+    return the resulting world-frame foot body position. Used only for
+    self-verification (--selftest), never in the hot path."""
+    mujoco.mj_resetData(model, data)
+    for jn, val in (("hip_roll", hip_roll), ("hip_pitch", hip_pitch),
+                    ("knee_pitch", knee_pitch), ("ankle_pitch", ankle_pitch)):
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_{jn}")
+        data.qpos[model.jnt_qposadr[jid]] = val
+    mujoco.mj_forward(model, data)
+    fid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{side}_foot")
+    return data.xpos[fid].copy()
+
+
+def leg_fk_full(model, data, pelvis_xyz, side, hip_roll, hip_pitch, knee_pitch, ankle_pitch):
+    """Like leg_fk, but also places the pelvis freejoint at pelvis_xyz
+    (identity orientation — consistent with this file's no-lean
+    simplification) instead of leaving it at the model's default reset
+    position. leg_fk alone is only valid when the caller's hip_origin was
+    itself derived from that same default reset pose (true in Stage 1's
+    round-trip tests); Stage 5's plan uses a time-varying walking-pose
+    pelvis position, so its FK verification needs this variant instead."""
+    mujoco.mj_resetData(model, data)
+    data.qpos[0:3] = pelvis_xyz
+    for jn, val in (("hip_roll", hip_roll), ("hip_pitch", hip_pitch),
+                    ("knee_pitch", knee_pitch), ("ankle_pitch", ankle_pitch)):
+        jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_{jn}")
+        data.qpos[model.jnt_qposadr[jid]] = val
+    mujoco.mj_forward(model, data)
+    fid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{side}_foot")
+    return data.xpos[fid].copy()
+
+
+def hip_origin_for_side(pelvis_xyz, side):
+    y_sign = 1.0 if side == "left" else -1.0
+    return np.array([pelvis_xyz[0], pelvis_xyz[1] + y_sign * HIP_Y, pelvis_xyz[2]])
+
+
+# ---- Stage 2: footstep planner --------------------------------------------
+
+def ease(s):
+    """Smooth 0->1 ease (raised cosine). Copied from sim_walk_gait.py — same
+    helper, no behavior change."""
+    return 0.5 - 0.5 * math.cos(math.pi * s)
+
+
+def _centroid(foot_xy):
+    lx, ly = foot_xy["left"]
+    rx, ry = foot_xy["right"]
+    return ((lx + rx) / 2.0, (ly + ry) / 2.0)
+
+
+def plan_footsteps(n_steps, step_length=0.08, step_width=2 * HIP_Y, step_height=0.02,
+                    step_duration=0.6, ds_fraction=0.3, dwell_s=0.8,
+                    start_stance_side="right"):
+    """Straight-line-only footstep plan: alternating left/right placements at
+    a fixed step_length/step_width, wrapped in an initial and terminal
+    double-support dwell (see module docstring point 1 — the initial dwell
+    is required for solve_dcm_backward's boundary condition to be
+    consistent with the robot actually starting at rest, not optional
+    polish) PLUS an explicit initial weight-shift and final weight-shift-back
+    ("double"-kind phases, identical in kind to every other step's
+    double-support transition): standing centered (dwell) and standing on
+    one foot about to swing the other (the first single-support phase's
+    target) are genuinely different ZMP targets — (0,0) vs. the first stance
+    foot's (0, +-hip_y) — so going straight from one to the other without an
+    explicit blend is a real step discontinuity in p(t) itself, not just a
+    derivative kink. This was caught by the implied-ZMP self-consistency
+    check (see _selftest_stage3): the very first version of this planner
+    omitted these shifts and the check failed with a sharp error spike
+    exactly at the dwell/single-support boundary. The old sim_walk_gait.py
+    had the same mechanism under a different name (its "SHIFT" phase, run
+    before every swing) — this generalizes it to just the start/end of the
+    whole walk, since mid-walk it's already covered by every step's
+    "double" phase blending toward the next stance foot.
+
+    step_height defaults to 20mm, not a rounder 30mm — see the comment above
+    WALK_AX_MARGIN_M: a larger lift shortens the swing leg's hip-to-foot
+    distance enough to push ankle_pitch past its -30deg limit given this
+    design's tight reach margin. 20mm is the value a joint sweep of lift
+    height against walking-crouch depth settled on.
+
+    Returns (phases, t_end). Each phase is a dict:
+      kind: "dwell" | "single" | "double"
+      t0, t1: phase time window
+      zmp_p0, zmp_p1: ZMP reference (x, y) at phase start/end (equal for
+        "dwell"/"single" — constant; blended between for "double")
+      foot_xy: {side: (x, y)} for every foot that is PLANTED throughout this
+        phase (both feet for dwell/double; just the stance foot for single)
+      swing_side, swing_from_xy, swing_to_xy, step_height: only present for
+        "single" phases — feed directly to swing_foot_target.
+    """
+    half_w = step_width / 2.0
+    foot_xy = {"left": (0.0, half_w), "right": (0.0, -half_w)}
+
+    phases = []
+    t = 0.0
+    t_ss = step_duration * (1.0 - ds_fraction)
+    t_ds = step_duration * ds_fraction
+
+    centroid = _centroid(foot_xy)
+    phases.append(dict(kind="dwell", t0=t, t1=t + dwell_s,
+                        zmp_p0=centroid, zmp_p1=centroid,
+                        foot_xy=dict(foot_xy)))
+    t += dwell_s
+
+    first_stance_xy = foot_xy[start_stance_side]
+    phases.append(dict(kind="double", t0=t, t1=t + t_ds,
+                        zmp_p0=centroid, zmp_p1=first_stance_xy,
+                        foot_xy=dict(foot_xy)))
+    t += t_ds
+
+    stance_side = start_stance_side
+    step_x = 0.0
+
+    for _ in range(n_steps):
+        swing_side = "left" if stance_side == "right" else "right"
+        step_x += step_length
+        new_xy = (step_x, foot_xy[swing_side][1])
+        stance_xy = foot_xy[stance_side]
+
+        phases.append(dict(kind="single", t0=t, t1=t + t_ss,
+                            zmp_p0=stance_xy, zmp_p1=stance_xy,
+                            foot_xy={stance_side: stance_xy},
+                            swing_side=swing_side,
+                            swing_from_xy=foot_xy[swing_side],
+                            swing_to_xy=new_xy,
+                            step_height=step_height))
+        t += t_ss
+
+        foot_xy[swing_side] = new_xy
+
+        phases.append(dict(kind="double", t0=t, t1=t + t_ds,
+                            zmp_p0=stance_xy, zmp_p1=new_xy,
+                            foot_xy=dict(foot_xy)))
+        t += t_ds
+
+        stance_side = swing_side
+
+    final_stance_xy = foot_xy[stance_side]
+    centroid = _centroid(foot_xy)
+    phases.append(dict(kind="double", t0=t, t1=t + t_ds,
+                        zmp_p0=final_stance_xy, zmp_p1=centroid,
+                        foot_xy=dict(foot_xy)))
+    t += t_ds
+
+    phases.append(dict(kind="dwell", t0=t, t1=t + dwell_s,
+                        zmp_p0=centroid, zmp_p1=centroid,
+                        foot_xy=dict(foot_xy)))
+    t += dwell_s
+
+    return phases, t
+
+
+# ---- Stage 3: ZMP reference + DCM/CoM trajectory ---------------------------
+
+def zmp_reference(t, phases):
+    """Planned ZMP reference (x, y) at time t. Constant during dwell/single
+    support; ease()-blended between the previous and next stance foot during
+    double support. Clamps t to the plan's time range."""
+    if t <= phases[0]["t0"]:
+        return phases[0]["zmp_p0"]
+    if t >= phases[-1]["t1"]:
+        return phases[-1]["zmp_p1"]
+    for p in phases:
+        if p["t0"] <= t <= p["t1"]:
+            if p["kind"] == "double":
+                s = (t - p["t0"]) / (p["t1"] - p["t0"])
+                e = ease(s)
+                x = p["zmp_p0"][0] + e * (p["zmp_p1"][0] - p["zmp_p0"][0])
+                y = p["zmp_p0"][1] + e * (p["zmp_p1"][1] - p["zmp_p0"][1])
+                return (x, y)
+            return p["zmp_p0"]
+    raise ValueError(f"t={t} not within any phase")
+
+
+def solve_dcm_backward(phases, t_end, dt, Tc):
+    """Solve xi_dot = (xi - p(t))/Tc BACKWARD in time (RK4, negative dt) from
+    a terminal condition xi(t_end) = p(t_end) — the robot ends at rest over
+    the last footstep. This ODE is unstable integrated forward but exactly
+    equivalent to a stable one integrated backward — see module docstring
+    point 3. Each RK4 stage evaluates zmp_reference at its own true
+    (decreasing) t, not at t_end. Returns (ts, xi) as dense arrays ascending
+    in t, ts[0]=0, ts[-1]=t_end."""
+    n = int(round(t_end / dt))
+    ts = np.linspace(0.0, t_end, n + 1)
+    xi = np.zeros((n + 1, 2))
+    xi[-1] = zmp_reference(t_end, phases)
+
+    def deriv(t, xi_val):
+        p = np.array(zmp_reference(t, phases))
+        return (xi_val - p) / Tc
+
+    h = -dt
+    for i in range(n, 0, -1):
+        t, y = ts[i], xi[i]
+        k1 = deriv(t, y)
+        k2 = deriv(t + h / 2, y + h / 2 * k1)
+        k3 = deriv(t + h / 2, y + h / 2 * k2)
+        k4 = deriv(t + h, y + h * k3)
+        xi[i - 1] = y + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    return ts, xi
+
+
+def integrate_com_forward(ts, xi, x0, Tc):
+    """Solve the SEPARATE, stable ODE xdot_com = (xi(t) - x_com(t))/Tc
+    FORWARD in time (RK4) from x_com(0)=x0, using the dense xi(t) array from
+    solve_dcm_backward (same time grid; xi at RK4 midpoints is linearly
+    interpolated between grid points, which is accurate given dt is small
+    relative to Tc). x0 should be phases[0]["zmp_p0"] (the initial dwell's
+    centroid), consistent with the robot starting at rest there. Returns
+    x_com as a dense array on the same ts grid."""
+    n = len(ts) - 1
+    dt = ts[1] - ts[0]
+    x_com = np.zeros((n + 1, 2))
+    x_com[0] = x0
+
+    for i in range(n):
+        xi_t, xi_t1 = xi[i], xi[i + 1]
+        xi_mid = (xi_t + xi_t1) / 2.0
+        y = x_com[i]
+        k1 = (xi_t - y) / Tc
+        k2 = (xi_mid - (y + dt / 2 * k1)) / Tc
+        k3 = (xi_mid - (y + dt / 2 * k2)) / Tc
+        k4 = (xi_t1 - (y + dt * k3)) / Tc
+        x_com[i + 1] = y + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+    return x_com
+
+
+# ---- Stage 4: swing foot trajectory ----------------------------------------
+
+def swing_foot_target(t, liftoff_xy, touchdown_xy, step_height, t_start, t_end):
+    """Cartesian (x, y, z) target for a swinging foot's sole point at time t,
+    relative to the ground (z=0 planted). Horizontal motion is ease()'d
+    (zero velocity at both endpoints, matching the ZMP double-support blend's
+    smoothness); vertical motion is a half-sine lift peaking at step_height
+    at mid-swing and returning to exactly 0 at both endpoints (needed so the
+    foot is flush with the ground the instant it plants — no impact residual
+    baked into the plan itself)."""
+    s = min(max((t - t_start) / (t_end - t_start), 0.0), 1.0)
+    e = ease(s)
+    x = liftoff_xy[0] + e * (touchdown_xy[0] - liftoff_xy[0])
+    y = liftoff_xy[1] + e * (touchdown_xy[1] - liftoff_xy[1])
+    z = step_height * math.sin(math.pi * s)
+    return (x, y, z)
+
+
+# ---- Self-test ---------------------------------------------------------
+
+def _selftest_stage0(model):
+    z_c, offset = solve_whole_body_com_height(model)
+    Tc = math.sqrt(z_c / G)
+    print(f"[stage 0] z_c={z_c:.5f} m (expect ~0.5713)  Tc={Tc:.4f} s (expect ~0.241)"
+          f"  pelvis_com_offset_xy={offset}")
+    assert abs(z_c - 0.5713) < 0.001, "z_c does not match verified whole-body CoM height"
+    assert abs(Tc - 0.241) < 0.002, "Tc does not match verified value"
+    print("[stage 0] OK")
+
+
+def _selftest_stage0b(model):
+    pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
+    print(f"[stage 0b] walking crouch: pelvis_z={pelvis_z:.4f}m (sb standing: "
+          f"{sb.solve_nominal_geometry(model)[0] + 0:.4f}m via root_z)  "
+          f"hip={hip_deg:+.2f}deg knee={knee_deg:.2f}deg ankle={ankle_deg:+.2f}deg")
+
+    z_c, offset_xy, pelvis_xyz, data = solve_walk_com_height(
+        model, pelvis_z, hip_deg, knee_deg, ankle_deg)
+    Tc = math.sqrt(z_c / G)
+    print(f"[stage 0b] z_c_walk={z_c:.5f}m  Tc_walk={Tc:.4f}s  "
+          f"pelvis_com_offset_xy={offset_xy}  pelvis actual z={pelvis_xyz[2]:.5f}")
+    assert abs(pelvis_xyz[2] - pelvis_z) < 1e-9, "pelvis freejoint z != requested pelvis_z"
+
+    for side in ("left", "right"):
+        fid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{side}_foot")
+        foot_z = data.xpos[fid, 2]
+        assert abs(foot_z) < 2e-3, f"{side} foot not at ground level at walking pose: z={foot_z}"
+
+    limits = _joint_limits_deg(model)
+    margin_deg = 1.0
+    for side in ("left", "right"):
+        for jn, deg in (("hip_pitch", hip_deg), ("knee_pitch", knee_deg), ("ankle_pitch", ankle_deg)):
+            lo, hi = limits[(side, jn)]
+            assert lo + margin_deg < deg < hi - margin_deg, \
+                f"{side}_{jn}={deg:.2f} outside limit margin ({lo:.1f}, {hi:.1f})"
+
+    ax_check = math.sqrt(R_MAX**2 - WALK_AX_MARGIN_M**2) - (pelvis_z - FOOT_DOWN)
+    print(f"[stage 0b] reach-margin closed-form self-consistency: {ax_check:.2e} (expect ~0)")
+    assert abs(ax_check) < 1e-9, "solve_walk_pose's closed form is self-inconsistent"
+    print("[stage 0b] OK — walking crouch deeper than standing, feet grounded, within joint limits")
+
+
+def _selftest_stage1(model):
+    data = mujoco.MjData(model)
+
+    # (a) round-trip against sb.NOMINAL_POSE's own FK'd foot positions.
+    root_z, _, _ = sb.solve_nominal_geometry(model)
+    sb.set_initial_state(model, data, root_z)
+    pid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+    pelvis_xyz = data.xpos[pid].copy()
+
+    max_err = 0.0
+    for side in ("left", "right"):
+        fid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{side}_foot")
+        foot_xyz = data.xpos[fid].copy()
+        hip_origin = hip_origin_for_side(pelvis_xyz, side)
+        roll, hip, knee, ankle = leg_ik(hip_origin, foot_xyz)
+
+        expect_hip = math.radians(sb.NOMINAL_HIP_DEG)
+        expect_knee = math.radians(sb.NOMINAL_KNEE_DEG)
+        err = max(abs(roll - 0.0), abs(hip - expect_hip), abs(knee - expect_knee))
+        max_err = max(max_err, err)
+        print(f"[stage 1a] {side}: roll={math.degrees(roll):+.6f} "
+              f"hip={math.degrees(hip):+.6f} (expect {sb.NOMINAL_HIP_DEG:+.6f}) "
+              f"knee={math.degrees(knee):+.6f} (expect {sb.NOMINAL_KNEE_DEG:+.6f})")
+    assert max_err < 1e-6, f"nominal-pose IK round-trip error too large: {max_err}"
+    print("[stage 1a] OK — nominal-pose round-trip within 1e-6 rad")
+
+    # (b) round-trip at nonzero hip_roll, both signs, both sides — this is
+    # the check that actually catches the sign error described in the module
+    # docstring; (a) alone would not (dy=0 there).
+    max_pos_err = 0.0
+    max_angle_err = 0.0
+    for side in ("left", "right"):
+        for test_deg in (8.0, -5.0, -12.0):
+            mujoco.mj_resetData(model, data)
+            for jn, deg in (("hip_pitch", sb.NOMINAL_HIP_DEG), ("knee_pitch", sb.NOMINAL_KNEE_DEG),
+                            ("ankle_pitch", sb.NOMINAL_ANKLE_DEG), ("hip_roll", test_deg)):
+                jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_{jn}")
+                data.qpos[model.jnt_qposadr[jid]] = math.radians(deg)
+            mujoco.mj_forward(model, data)
+            fid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, f"{side}_foot")
+            foot_xyz = data.xpos[fid].copy()
+            pid2 = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+            hip_origin = hip_origin_for_side(data.xpos[pid2], side)
+
+            roll, hip, knee, ankle = leg_ik(hip_origin, foot_xyz)
+            angle_err = abs(math.degrees(roll) - test_deg)
+            max_angle_err = max(max_angle_err, angle_err)
+
+            fk_check = leg_fk(model, data, side, roll, hip, knee, ankle)
+            pos_err = float(np.linalg.norm(fk_check - foot_xyz))
+            max_pos_err = max(max_pos_err, pos_err)
+            print(f"[stage 1b] {side} hip_roll={test_deg:+.1f}deg -> "
+                  f"recovered={math.degrees(roll):+.4f}deg  FK-check pos err={pos_err*1000:.4f}mm")
+    assert max_angle_err < 1e-4, f"hip_roll sign/magnitude round-trip error too large: {max_angle_err}"
+    assert max_pos_err < 2e-3, f"FK round-trip position error too large: {max_pos_err}"
+    print("[stage 1b] OK — nonzero-hip_roll round-trip within 1e-4 deg / 2mm")
+
+
+def _selftest_stage2():
+    step_length, step_width = 0.08, 2 * HIP_Y
+    phases, t_end = plan_footsteps(n_steps=5, step_length=step_length, step_width=step_width)
+    print(f"[stage 2] {len(phases)} phases, t_end={t_end:.3f}s")
+
+    single_phases = [p for p in phases if p["kind"] == "single"]
+    assert len(single_phases) == 5, f"expected 5 single-support phases, got {len(single_phases)}"
+
+    last_x = -1.0
+    for i, p in enumerate(single_phases):
+        landing_x, landing_y = p["swing_to_xy"]
+        assert landing_x > last_x, f"step {i}: x did not advance ({landing_x} <= {last_x})"
+        last_x = landing_x
+        stance_side = "left" if p["swing_side"] == "right" else "right"
+        stance_y = p["foot_xy"][stance_side][1]
+        y_gap = abs(landing_y - stance_y)
+        assert abs(y_gap - step_width) < 1e-9, \
+            f"step {i}: lateral gap {y_gap} != step_width {step_width}"
+        print(f"[stage 2]   step {i}: swing={p['swing_side']:5s} "
+              f"landing=({landing_x:.3f}, {landing_y:+.3f})  y_gap={y_gap:.3f}")
+
+    assert phases[0]["kind"] == "dwell" and phases[-1]["kind"] == "dwell", \
+        "plan must start and end with a double-support dwell"
+    print("[stage 2] OK — monotonic x, alternating sides, correct lateral spacing, dwell at both ends")
+
+
+def _selftest_stage3(model):
+    z_c, _ = solve_whole_body_com_height(model)
+    Tc = math.sqrt(z_c / G)
+    phases, t_end = plan_footsteps(n_steps=5, step_length=0.08, step_width=2 * HIP_Y, dwell_s=0.8)
+    dt = 0.002  # matches the MJCF's sim timestep
+
+    ts, xi = solve_dcm_backward(phases, t_end, dt, Tc)
+    x0 = np.array(phases[0]["zmp_p0"])
+    x_com = integrate_com_forward(ts, xi, x0, Tc)
+
+    p0 = np.array(phases[0]["zmp_p0"])
+    p_end = np.array(phases[-1]["zmp_p1"])
+    xi0_err = float(np.linalg.norm(xi[0] - p0))
+    xcom0_err = float(np.linalg.norm(x_com[0] - p0))
+    xcom_end_err = float(np.linalg.norm(x_com[-1] - p_end))
+    print(f"[stage 3] boundary: xi(0) err={xi0_err*1000:.3f}mm  x_com(0) err={xcom0_err*1000:.3f}mm  "
+          f"x_com(t_end) err={xcom_end_err*1000:.3f}mm")
+    assert xi0_err < 5e-3, f"xi(0) does not converge to p0 within the initial dwell: {xi0_err}"
+    assert xcom0_err < 5e-3, f"x_com(0) inconsistent with initial dwell: {xcom0_err}"
+    assert xcom_end_err < 1e-2, f"x_com(t_end) does not converge to the final footstep centroid: {xcom_end_err}"
+
+    # Implied-ZMP self-consistency check: p_implied = x_com - (z_c/g)*xcom_ddot
+    # should track the planned reference everywhere except right at the
+    # double-support blend corners (p's acceleration is genuinely
+    # discontinuous there — ease()'s second derivative jumps from 0 to
+    # nonzero at s=0/1 — not a numerical artifact). Get xcom_dot from the
+    # ODE's own defining relation (exact, no finite-differencing) rather
+    # than differentiating x_com numerically, then finite-difference that
+    # ONCE for acceleration instead of twice — halves the differentiation
+    # noise this check would otherwise be dominated by.
+    xcom_dot = (xi - x_com) / Tc
+    xcom_ddot = np.gradient(xcom_dot, dt, axis=0)
+    p_implied = x_com - (Tc**2) * xcom_ddot
+    p_ref = np.array([zmp_reference(t, phases) for t in ts])
+    err = np.linalg.norm(p_implied - p_ref, axis=1)
+
+    mask = np.ones(len(ts), dtype=bool)
+    margin = 0.05
+    for p in phases:
+        if p["kind"] == "double":
+            lo = np.searchsorted(ts, p["t0"] - margin)
+            hi = np.searchsorted(ts, p["t1"] + margin)
+            mask[lo:hi] = False
+    masked_max = float(err[mask].max()) if mask.any() else 0.0
+    print(f"[stage 3] implied-ZMP tracking error: overall max={err.max()*1000:.2f}mm  "
+          f"away from double-support corners max={masked_max*1000:.2f}mm")
+    assert masked_max < 0.02, f"implied ZMP doesn't track the reference away from DS corners: {masked_max}"
+    print("[stage 3] OK")
+
+
+def _selftest_stage4():
+    liftoff, touchdown, h, t0, t1 = (0.0, 0.05), (0.08, 0.05), 0.03, 1.0, 1.6
+
+    x0, y0, z0 = swing_foot_target(t0, liftoff, touchdown, h, t0, t1)
+    x1, y1, z1 = swing_foot_target(t1, liftoff, touchdown, h, t0, t1)
+    assert abs(z0) < 1e-9 and abs(z1) < 1e-9, f"z must be 0 at both endpoints: {z0}, {z1}"
+    assert abs(x0 - liftoff[0]) < 1e-9 and abs(x1 - touchdown[0]) < 1e-9, "endpoint x mismatch"
+
+    t_mid = (t0 + t1) / 2.0
+    _, _, z_mid = swing_foot_target(t_mid, liftoff, touchdown, h, t0, t1)
+    assert abs(z_mid - h) < 1e-9, f"peak z at mid-swing should equal step_height: {z_mid} vs {h}"
+
+    # Zero horizontal velocity at both endpoints (finite difference near each end).
+    eps = 1e-6
+    xa, _, _ = swing_foot_target(t0 + eps, liftoff, touchdown, h, t0, t1)
+    xb, _, _ = swing_foot_target(t1 - eps, liftoff, touchdown, h, t0, t1)
+    v_start = (xa - x0) / eps
+    v_end = (x1 - xb) / eps
+    print(f"[stage 4] endpoint z=({z0:.2e}, {z1:.2e})  mid z={z_mid:.4f} (expect {h})  "
+          f"endpoint horiz. vel~=({v_start:.2e}, {v_end:.2e})")
+    assert abs(v_start) < 1e-3, f"nonzero horizontal velocity at liftoff: {v_start}"
+    assert abs(v_end) < 1e-3, f"nonzero horizontal velocity at touchdown: {v_end}"
+    print("[stage 4] OK — swing endpoints flush with ground, zero horiz. velocity, correct peak height")
+
+
+# ---- Stage 5: full offline kinematic plan ----------------------------------
+
+def _phase_at(t, phases):
+    """The phase dict containing time t (clamped to the plan's range)."""
+    if t <= phases[0]["t0"]:
+        return phases[0]
+    if t >= phases[-1]["t1"]:
+        return phases[-1]
+    for p in phases:
+        if p["t0"] <= t <= p["t1"]:
+            return p
+    raise ValueError(f"t={t} not within any phase")
+
+
+def build_kinematic_plan(phases, ts, x_com, pelvis_com_offset_xy, pelvis_z):
+    """Compose Stages 1-4: for every sample in ts, resolve the swinging foot's
+    Cartesian target (if any phase is "single" at that t) and every planted
+    foot's fixed target, convert the planned CoM (x, y) into a pelvis target
+    (holding pelvis z at the nominal standing height throughout — no lean in
+    this version), and solve leg_ik per side. Returns a dict:
+      {"ts": ts, "left": (N,4) array, "right": (N,4) array}
+    each row (hip_roll, hip_pitch, knee_pitch, ankle_pitch) in radians."""
+    n = len(ts)
+    joints = {"left": np.zeros((n, 4)), "right": np.zeros((n, 4))}
+
+    for i, t in enumerate(ts):
+        phase = _phase_at(t, phases)
+        pelvis_xyz = np.array([x_com[i, 0] + pelvis_com_offset_xy[0],
+                                x_com[i, 1] + pelvis_com_offset_xy[1],
+                                pelvis_z])
+
+        foot_target = {side: (xy[0], xy[1], 0.0) for side, xy in phase["foot_xy"].items()}
+        if phase["kind"] == "single":
+            foot_target[phase["swing_side"]] = swing_foot_target(
+                t, phase["swing_from_xy"], phase["swing_to_xy"],
+                phase["step_height"], phase["t0"], phase["t1"])
+
+        for side in ("left", "right"):
+            hip_origin = hip_origin_for_side(pelvis_xyz, side)
+            joints[side][i] = leg_ik(hip_origin, foot_target[side])
+
+    return {"ts": ts, "left": joints["left"], "right": joints["right"]}
+
+
+def _joint_limits_deg(model):
+    """{(side, jointname): (lo_deg, hi_deg)} read from the compiled model —
+    the same limits as design/joints.yaml, already baked into the MJCF by
+    generate_urdf.py/generate_mjcf.py."""
+    limits = {}
+    for side in ("left", "right"):
+        for jn in ("hip_roll", "hip_pitch", "knee_pitch", "ankle_pitch"):
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_{jn}")
+            lo, hi = model.jnt_range[jid]
+            limits[(side, jn)] = (math.degrees(lo), math.degrees(hi))
+    return limits
+
+
+def _selftest_stage5(model):
+    # Use the deeper WALKING crouch (solve_walk_pose), not sb's shallow
+    # pure-standing pose — see the module-level comment above solve_walk_pose
+    # for why the standing height leaves essentially no reach margin for any
+    # real CoM excursion during single/double support.
+    pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
+    z_c, pelvis_com_offset_xy, _, _ = solve_walk_com_height(
+        model, pelvis_z, hip_deg, knee_deg, ankle_deg)
+    Tc = math.sqrt(z_c / G)
+
+    phases, t_end = plan_footsteps(n_steps=5, step_length=0.08, step_width=2 * HIP_Y, dwell_s=0.8)
+    dt = 0.002
+    ts, xi = solve_dcm_backward(phases, t_end, dt, Tc)
+    x0 = np.array(phases[0]["zmp_p0"])
+    x_com = integrate_com_forward(ts, xi, x0, Tc)
+
+    plan = build_kinematic_plan(phases, ts, x_com, pelvis_com_offset_xy, pelvis_z)
+    print(f"[stage 5] built kinematic plan: {len(ts)} samples over {t_end:.3f}s")
+
+    limits = _joint_limits_deg(model)
+    margin_deg = 1.0
+    joint_names = ("hip_roll", "hip_pitch", "knee_pitch", "ankle_pitch")
+
+    data = mujoco.MjData(model)
+    max_fk_err = 0.0
+    max_jump_deg = 0.0
+    check_stride = 5   # FK-verify every 5th sample (~10ms) — exact enough, keeps selftest fast
+
+    for side in ("left", "right"):
+        arr_deg = np.degrees(plan[side])
+        for jn_idx, jn in enumerate(joint_names):
+            lo, hi = limits[(side, jn)]
+            col = arr_deg[:, jn_idx]
+            assert col.min() > lo + margin_deg and col.max() < hi - margin_deg, (
+                f"{side}_{jn} exceeds limit margin: min={col.min():.2f} max={col.max():.2f} "
+                f"limits=({lo:.2f},{hi:.2f})")
+
+        jumps = np.abs(np.diff(arr_deg, axis=0)).max()
+        max_jump_deg = max(max_jump_deg, jumps)
+
+        for i in range(0, len(ts), check_stride):
+            t = ts[i]
+            phase = _phase_at(t, phases)
+            target = (phase["foot_xy"][side][0], phase["foot_xy"][side][1], 0.0) \
+                if side in phase["foot_xy"] else None
+            if phase["kind"] == "single" and phase["swing_side"] == side:
+                target = swing_foot_target(t, phase["swing_from_xy"], phase["swing_to_xy"],
+                                            phase["step_height"], phase["t0"], phase["t1"])
+            assert target is not None, f"no target resolved for {side} at t={t}"
+
+            pelvis_xyz = np.array([x_com[i, 0] + pelvis_com_offset_xy[0],
+                                    x_com[i, 1] + pelvis_com_offset_xy[1], pelvis_z])
+            roll, hip, knee, ankle = plan[side][i]
+            fk_pos = leg_fk_full(model, data, pelvis_xyz, side, roll, hip, knee, ankle)
+            pos_err = float(np.linalg.norm(fk_pos - np.array(target)))
+            max_fk_err = max(max_fk_err, pos_err)
+
+    assert max_fk_err < 2e-3, f"FK round-trip position error too large: {max_fk_err}"
+    print(f"[stage 5] max FK round-trip position error={max_fk_err*1000:.4f}mm "
+          f"(checked every {check_stride}th sample)")
+    print(f"[stage 5] max joint-limit margin held: {margin_deg:.1f}deg  "
+          f"max per-sample joint jump={max_jump_deg:.4f}deg")
+    print("[stage 5] OK")
+
+
+# ---- Stage 6: MuJoCo drive loop --------------------------------------------
+
+# Sagittal (ankle_pitch) trim: light, as the plan intended — corrects for
+# the plan's assumed point-mass CoM height/Tc not exactly matching MuJoCo's
+# real dynamics. Reuses sb.compute_zmp's real contact-force ZMP and the same
+# EMA filtering constant sim_zmp_balance.py validated (raw per-contact ZMP
+# is noisy frame to frame — see that file's module docstring point 2).
+ANKLE_TRIM_KP = 0.3
+MAX_ANKLE_TRIM_RAD = math.radians(3.0)
+ZMP_TRIM_FILTER_ALPHA = 0.02
+
+# Lateral (hip_roll) trim: NOT light in practice, despite the plan's a
+# priori assumption that it would need "far less magnitude" than the old
+# gait's ROLL_KP. Verified directly (see WALK_AX_MARGIN_M's finding above,
+# same investigation): commanding a full weight-shift and just holding it
+# with the plain stance-leg IK (P-only position actuators, no active
+# feedback) settles at only ~70% of the target lateral CoM shift — a real
+# steady-state control error, not a timing/Tc issue, since it doesn't close
+# even given several extra seconds. That ~15mm shortfall is tolerable with
+# TWO feet on the ground (large support polygon) but not with one: this
+# design has no ankle_roll actuator, so hip_roll is the ONLY mechanism that
+# can correct lateral balance once single support narrows the support
+# polygon to one ~80mm-wide foot (the plan's own Risk #1). A trim this
+# small (kp=0.3, 3deg clamp, matching the sagittal one) let the robot fall
+# over completely (90deg tilt) every time single support began, regardless
+# of how long the preceding weight-shift phase was made. Retuned to the old
+# gait's ROLL_KP / MAX_ROLL_CORRECTION_RAD (1.5 rad/m, 10deg clamp) —
+# proven values for single-support lateral balance on this exact robot —
+# rather than trust the plan's un-verified assumption over this measurement.
+ROLL_TRIM_KP = 1.5
+MAX_ROLL_TRIM_RAD = math.radians(10.0)
+
+
+def interpolate_plan(ts, arr, t):
+    """Linear interpolation of an (N, 4) joint-angle trajectory at time t
+    (clamped to [ts[0], ts[-1]])."""
+    t = min(max(t, ts[0]), ts[-1])
+    return np.array([np.interp(t, ts, arr[:, k]) for k in range(arr.shape[1])])
+
+
+def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True):
+    """Build the full offline plan (Stages 0-5), then drive it with real
+    MuJoCo dynamics (mj_step), applying the planned joint angles as
+    position-actuator targets plus a light ZMP feedback trim (see comment
+    above). Returns a summary dict; optionally renders an offscreen GIF."""
+    data = mujoco.MjData(model)
+
+    pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
+    z_c, pelvis_com_offset_xy, _, _ = solve_walk_com_height(
+        model, pelvis_z, hip_deg, knee_deg, ankle_deg)
+    Tc = math.sqrt(z_c / G)
+
+    phases, t_end = plan_footsteps(n_steps=n_steps)
+    dt_plan = 0.002
+    ts, xi = solve_dcm_backward(phases, t_end, dt_plan, Tc)
+    x0 = np.array(phases[0]["zmp_p0"])
+    x_com = integrate_com_forward(ts, xi, x0, Tc)
+    plan = build_kinematic_plan(phases, ts, x_com, pelvis_com_offset_xy, pelvis_z)
+
+    act_index = {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i): i
+                 for i in range(model.nu)}
+    foot_body_ids = sb._foot_body_ids(model)
+
+    mujoco.mj_resetData(model, data)
+    data.qpos[0] = x_com[0, 0] + pelvis_com_offset_xy[0]
+    data.qpos[1] = x_com[0, 1] + pelvis_com_offset_xy[1]
+    data.qpos[2] = pelvis_z
+    for side in ("left", "right"):
+        for jn, val in zip(("hip_roll", "hip_pitch", "knee_pitch", "ankle_pitch"), plan[side][0]):
+            jid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_{jn}")
+            data.qpos[model.jnt_qposadr[jid]] = val
+        data.ctrl[act_index[f"act_{side}_hip_roll"]] = plan[side][0][0]
+        data.ctrl[act_index[f"act_{side}_hip_pitch"]] = plan[side][0][1]
+        data.ctrl[act_index[f"act_{side}_knee_pitch"]] = plan[side][0][2]
+        data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = plan[side][0][3]
+    mujoco.mj_forward(model, data)
+
+    pelvis_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+
+    # Same offscreen-renderer / tracking-camera pattern as sim_walk_gait.py's
+    # run() — a side-on (azimuth=90) view following the pelvis in x so the
+    # walk stays framed regardless of how far it travels.
+    renderer = None
+    cam = None
+    if render_path:
+        renderer = mujoco.Renderer(model, height=360, width=480)
+        cam = mujoco.MjvCamera()
+        cam.azimuth, cam.elevation, cam.distance = 90, -12, 2.0
+        cam.lookat = np.array([0.0, 0.0, 0.45])
+    frames = []
+
+    zmp_filtered = np.array(zmp_reference(0.0, phases))
+    sim_dt = model.opt.timestep
+    n_sim_steps = int(t_end / sim_dt)
+
+    pelvis_x0 = data.xpos[pelvis_id, 0]
+    max_tilt = 0.0
+    diverged = False
+
+    for step in range(n_sim_steps):
+        t = data.time
+
+        zmp_x, zmp_y, _ = sb.compute_zmp(model, data, foot_body_ids)
+        if zmp_x is not None:
+            raw = np.array([zmp_x, zmp_y])
+            zmp_filtered = (1 - ZMP_TRIM_FILTER_ALPHA) * zmp_filtered + ZMP_TRIM_FILTER_ALPHA * raw
+
+        ref = np.array(zmp_reference(t, phases))
+        err = zmp_filtered - ref
+        ankle_trim = float(np.clip(ANKLE_TRIM_KP * err[0], -MAX_ANKLE_TRIM_RAD, MAX_ANKLE_TRIM_RAD))
+        roll_trim = float(np.clip(-ROLL_TRIM_KP * err[1], -MAX_ROLL_TRIM_RAD, MAX_ROLL_TRIM_RAD))
+
+        for side in ("left", "right"):
+            roll, hip, knee, ankle = interpolate_plan(ts, plan[side], t)
+            data.ctrl[act_index[f"act_{side}_hip_roll"]] = roll + roll_trim
+            data.ctrl[act_index[f"act_{side}_hip_pitch"]] = hip
+            data.ctrl[act_index[f"act_{side}_knee_pitch"]] = knee
+            data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = ankle + ankle_trim
+
+        for jn in ("torso_pitch", "torso_roll", "torso_yaw"):
+            data.ctrl[act_index[f"act_{jn}"]] = 0.0
+
+        mujoco.mj_step(model, data)
+
+        if not np.all(np.isfinite(data.qpos)) or not np.all(np.isfinite(data.qvel)):
+            diverged = True
+            if verbose:
+                print(f"  simulation diverged at t={t:.3f}s")
+            break
+
+        max_tilt = max(max_tilt, sb.pelvis_tilt_deg(model, data))
+
+        if renderer is not None and step % render_every == 0:
+            cam.lookat[0] = data.xpos[pelvis_id, 0]
+            renderer.update_scene(data, camera=cam)
+            frames.append(renderer.render().copy())
+
+    pelvis_x_final = data.xpos[pelvis_id, 0]
+    net_forward = pelvis_x_final - pelvis_x0
+
+    if render_path and frames:
+        import imageio
+        imageio.mimsave(render_path, frames, fps=int(1.0 / (sim_dt * render_every)))
+        if verbose:
+            print(f"  wrote {len(frames)} frames to {render_path}")
+
+    return dict(diverged=diverged, max_tilt_deg=max_tilt, net_forward_m=net_forward,
+                sim_time=data.time, n_steps=n_steps)
+
+
+def _selftest_stage6(model):
+    result = run_walk(model, n_steps=3, verbose=False)
+    print(f"[stage 6] 3-step run: diverged={result['diverged']}  "
+          f"max_tilt={result['max_tilt_deg']:.2f}deg  net_forward={result['net_forward_m']*1000:.1f}mm  "
+          f"sim_time={result['sim_time']:.3f}s")
+    assert not result["diverged"], "simulation diverged within 3 steps"
+    assert result["net_forward_m"] > 0.0, \
+        "pelvis net motion is not forward — the headline stumbling-fix regressed"
+    assert result["max_tilt_deg"] < 20.0, \
+        f"max tilt {result['max_tilt_deg']:.2f}deg not below old gait's ~20deg baseline"
+    print("[stage 6] OK — stable, net-forward pelvis motion, tilt held below old gait's baseline")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--selftest", action="store_true",
+                        help="Run the numerical self-verification gates and exit.")
+    parser.add_argument("--steps", type=int, default=None,
+                        help="Run n_steps of the walking gait in MuJoCo.")
+    parser.add_argument("--render", type=str, default=None,
+                        help="Path to write an offscreen-rendered GIF (used with --steps).")
+    args = parser.parse_args()
+
+    if not MJCF_PATH.exists():
+        print(f"ERROR: MJCF not found at {MJCF_PATH}")
+        print("Run: python3 tools/generate_mjcf.py")
+        raise SystemExit(1)
+
+    model = mujoco.MjModel.from_xml_path(str(MJCF_PATH))
+
+    if args.selftest:
+        _selftest_stage0(model)
+        _selftest_stage0b(model)
+        _selftest_stage1(model)
+        _selftest_stage2()
+        _selftest_stage3(model)
+        _selftest_stage4()
+        _selftest_stage5(model)
+        _selftest_stage6(model)
+        print()
+        print("All implemented self-tests passed.")
+        return
+
+    if args.steps is not None:
+        result = run_walk(model, n_steps=args.steps, render_path=args.render)
+        print()
+        print(f"{args.steps}-step run: diverged={result['diverged']}  "
+              f"max_tilt={result['max_tilt_deg']:.2f}deg  "
+              f"net_forward={result['net_forward_m']*1000:.1f}mm  sim_time={result['sim_time']:.3f}s")
+        return
+
+    print("Nothing to do — pass --selftest or --steps N.")
+
+
+if __name__ == "__main__":
+    main()
