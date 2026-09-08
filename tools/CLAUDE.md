@@ -98,7 +98,8 @@ before concluding nothing exists on a topic.
   also excludes self-collision pairs (pelvis↔thigh, and the non-adjacent
   pairs among the stacked torso_pitch/torso_roll/torso links) where
   collision-proxy geometry inevitably overlaps by construction
-- `tools/sim_load_test.py` — model loads cleanly (15 bodies, 11 actuators) ✓
+- `tools/sim_load_test.py` — model loads cleanly (17 bodies, 11 actuators — the
+  passive ankle_roll joint added 2 bodies without adding actuators) ✓
 - `tools/sim_static_pose.py` — **P3 fixed-base milestone, passing.** Welds
   the pelvis to the world (like a test-stand bolt), holds the nominal
   standing pose (knees bent 12°), and validates the weld's vertical

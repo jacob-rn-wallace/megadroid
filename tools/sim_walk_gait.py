@@ -26,8 +26,10 @@ why, and what the (already-tried, already-ruled-out) "obvious" fixes
 were.
 
 Two balance mechanisms had to be added beyond the standing controller,
-both because the MVS has no ankle_roll joint — nothing at the ankle can
-shift the ZMP sideways:
+both because the MVS has no *actuated* ankle_roll — a passive, spring-
+centered ankle_roll joint now exists physically (design/joints.yaml) but
+is not driven by this or any controller, so nothing at the ankle can
+actively shift the ZMP sideways:
 
 1. Lateral weight transfer via hip_roll. Rotating both hip_roll joints
    by the SAME angle, with both feet planted, shifts the *pelvis*

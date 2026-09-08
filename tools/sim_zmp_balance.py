@@ -44,10 +44,13 @@ range), and going further would mean a hip/torso strategy too. That's
 out of scope for the MVS's ankle-pitch-only DOF set and is future work,
 not a bug in this controller.
 
-Scope: sagittal (front-back) balance only, matching the MVS DOF set —
-there is no ankle_roll joint, so lateral correction is out of scope.
-The nominal double-support stance is laterally symmetric, so no lateral
-disturbance is expected in this test.
+Scope: sagittal (front-back) balance only. The MVS has no *actuated* lateral
+ankle DOF — ankle_roll (design/joints.yaml) exists physically as a passive,
+spring-centered joint, but nothing in this controller drives or reads it; it
+simply settles under gravity/contact/spring forces in the sim like any other
+unactuated MuJoCo joint. Active lateral correction is out of scope here by
+design, not by omission. The nominal double-support stance is laterally
+symmetric, so no lateral disturbance is expected in this test.
 
 Usage:
     python3 tools/sim_zmp_balance.py
