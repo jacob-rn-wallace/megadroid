@@ -8,7 +8,7 @@ authority: derived
 
 **Status:** Authoritative (MVS)  
 **Scope:** Mechanical implementation details for the Minimum Viable System  
-**Last rehydrated:** 2026-06-26
+**Last rehydrated:** 2026-09-08
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -114,7 +114,7 @@ The lower-leg module consists of the complete shank structural assembly from the
 
 All joints must:
 - Use **joint-mounted absolute encoders**
-- Measure true output angle
+- Measure true joint output angle
 - Be serviceable and inspectable
 - Carry primary loads in double shear
 
@@ -174,7 +174,7 @@ Each foot has one **6-DOF force/torque sensor** that measures ground reaction fo
 **Mounting and integration:**
 - Sensor is mounted directly to the distal termination bulkhead of the lower-leg module
 - Located immediately proximal to the foot/end-effector
-- Form factor (cylindrical shape, diameter, height): defined in `design/geometry.yaml`
+- Form factor: cylindrical, 107mm diameter × 56mm height (defined in `design/sensors.yaml`)
 - Mechanical constraint: treated as hard structural envelope
 
 **Load path requirements:**

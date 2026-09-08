@@ -8,7 +8,7 @@ authority: authoritative
 
 **Status:** Authoritative  
 **Scope:** Minimum Viable System (MVS)  
-**Last rehydrated:** 2026-06-26
+**Last rehydrated:** 2026-09-08
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -85,12 +85,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
   - Passive compliance
   - Shock absorption
   - Tolerance of foot placement errors
-
-### 5.1 End-of-Limb Sensing
-- Each foot includes a **6-DOF force/torque sensor**
-- Sensor form factor: defined in `design/geometry.yaml`
-- Sensor geometry is treated as a hard mechanical constraint
-- F/T sensors are **excluded from MVS cost accounting**
+- End-of-limb sensing (6-DOF force/torque sensor per foot): see Section 7.3
 
 ---
 
@@ -122,6 +117,13 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 ### 7.2 Motor Sensing
 - No motor current sensing
 - No motor-side velocity sensing
+
+### 7.3 End-of-Limb Force/Torque Sensing
+- Each foot includes a **6-DOF force/torque sensor**
+- Form factor: cylindrical, 107mm diameter × 56mm height
+- Mounting: distal_face_of_lower_leg_module
+- Sensor geometry is treated as a hard mechanical constraint
+- F/T sensors are **excluded from MVS cost accounting**
 
 ---
 
