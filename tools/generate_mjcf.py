@@ -254,13 +254,33 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
                       name=f"{s}_ankle_roll_geom", type="sphere", size="0.020",
                       rgba="0.8 0.4 0.1 1")
 
+        # F/T sensor mount point — zero-DOF, zero-mass pass-through body
+        # (matching the co-located, zero-offset convention already used for
+        # ankle_roll itself), matching design/geometry.yaml's foot_stack
+        # order: ankle_roll -> ft_sensor -> foot. Zero mass is deliberate,
+        # not an oversight: the real sensor's mass is unknown pending P6
+        # physical selection, and its speced envelope (107mm diameter,
+        # design/sensors.yaml) is already wider than this shank model's
+        # 70mm-diameter thigh cylinder — a known, already-flagged structural
+        # placeholder mismatch this generator does not attempt to resolve.
+        # No design/mass.yaml entry, so no new design value is invented here.
+        ft_sensor = ET.SubElement(ankle_roll, "body",
+                                   name=f"{s}_ft_sensor",
+                                   pos="0 0 0")
+
         # Foot (visual + contact) — a flat box resting on its bottom face,
         # not a sphere; SPEC.md's historical "ball foot" language never
         # matched what this generator has actually produced (see SPEC.md
         # Sec 5 for the corrected framing).
-        foot = ET.SubElement(ankle_roll, "body",
+        foot = ET.SubElement(ft_sensor, "body",
                              name=f"{s}_foot",
                              pos=f"0.05 0 {-ankle_off:.4f}")
+        # Sensor site lives on the CHILD (foot) body, at its origin --
+        # MuJoCo's force/torque sensor types measure the reaction between a
+        # site's body and its PARENT (ft_sensor here), so this reads the
+        # ground-reaction load path passing from foot into ft_sensor/leg,
+        # matching design/sensors.yaml's load-path description directly.
+        ET.SubElement(foot, "site", name=f"{s}_ft_site", pos="0 0 0")
         ixx, iyy, izz = box_inertia(masses["foot"], 0.075, 0.040, 0.020)
         add_inertial(foot, masses["foot"], (0, 0, 0), ixx, iyy, izz)
         # pos z=+0.020 raises geom center above foot body origin so the
@@ -369,6 +389,15 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
     ET.SubElement(sensor, "framequat",
                   name="pelvis_quat",
                   objtype="body", objname="pelvis")
+
+    # Per-foot 6-DOF F/T sensor (design/sensors.yaml) — reads the reaction
+    # force/torque between each foot body and its ft_sensor parent, at the
+    # {s}_ft_site defined on the foot body in add_leg(). Requires
+    # mujoco.mj_rnePostConstraint(model, data) after every mj_step for
+    # these to populate (see tools/CLAUDE.md's dated entry).
+    for s in ("left", "right"):
+        ET.SubElement(sensor, "force", name=f"{s}_ft_force", site=f"{s}_ft_site")
+        ET.SubElement(sensor, "torque", name=f"{s}_ft_torque", site=f"{s}_ft_site")
 
     return mujoco
 

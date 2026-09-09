@@ -990,39 +990,67 @@ def _selftest_stage5(model):
 
 
 def _selftest_stage5c(model):
-    """Validates lateral_zmp_correction's sign and compute_zmp's y-output
+    """Validates the F/T sensor's reading and ankle_roll_admittance's sign
     BEFORE trusting either inside the real Stage 6 drive loop -- matching
-    every other stage in this file (see the module docstring's own
-    discipline note). A sign mistake here is exactly the class of bug that
-    silently DESTABILIZES instead of correcting (see K_DCM's own history),
-    so this is checked directly, not assumed from the algebra."""
-    # compute_zmp reads ~0 laterally at the nominal symmetric standing pose
-    # (double support, weight evenly split) -- same fixture sim_zmp_balance.py
-    # itself uses to validate compute_zmp.
+    every other stage in this file's discipline. A sign mistake here is
+    exactly the class of bug that silently DESTABILIZES instead of
+    correcting (see K_DCM's own history) -- and this one is a genuine trap:
+    a "push back against the measured moment" derivation LOOKS right and
+    is actually backwards for this sensor's reaction-force convention
+    (confirmed by testing both signs against a real transient push -- see
+    ankle_roll_admittance's own docstring). So this checks the REAL
+    dynamic outcome, not just an algebraic sign."""
+    # F/T sensor reads ~0 roll torque at the nominal symmetric standing pose
+    # (double support, weight evenly split).
     data = mujoco.MjData(model)
     root_z, _, _ = sb.solve_nominal_geometry(model)
     sb.set_initial_state(model, data, root_z)
     mujoco.mj_forward(model, data)
-    foot_body_ids = sb._foot_body_ids(model)
-    _, zy0, fz0 = sb.compute_zmp(model, data, foot_body_ids)
-    assert zy0 is not None and fz0 > 0.0, "no foot contact at nominal standing pose"
-    assert abs(zy0) < 0.005, f"lateral ZMP not ~0 at symmetric standing pose: {zy0:.5f}m"
-    print(f"[stage 5c] compute_zmp lateral reading at nominal stance: {zy0*1000:.3f}mm (expect ~0)")
+    mujoco.mj_rnePostConstraint(model, data)
+    ft_torque_adr = {
+        side: mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR, f"{side}_ft_torque")
+        for side in ("left", "right")
+    }
+    ft_torque_adr = {side: model.sensor_adr[sid] for side, sid in ft_torque_adr.items()}
+    for side in ("left", "right"):
+        tau_x0 = data.sensordata[ft_torque_adr[side]]
+        assert abs(tau_x0) < 0.05, f"{side} roll torque not ~0 at symmetric standing pose: {tau_x0:.4f}Nm"
+    print(f"[stage 5c] F/T sensor roll-torque reading at nominal stance: "
+          f"L={data.sensordata[ft_torque_adr['left']]:.4f} R={data.sensordata[ft_torque_adr['right']]:.4f} Nm (expect ~0)")
 
-    # Sign check: if the target is to the LEFT (+y) of the measured ZMP, the
-    # correction must be POSITIVE (this file's ankle_roll axis/positive
-    # direction, design/kinematics.yaml: "eversion, sole tilts laterally
-    # away from body midline" -- a positive command tilts the sole's near
-    # edge down, shifting the sole's ground-pressure centroid toward +y,
-    # i.e. toward the target). A restoring correction must shrink the error
-    # if applied; check the SIGN directly rather than trust the algebra.
-    corr_pos_error = lateral_zmp_correction(zy_filtered=0.0, target_y=0.05)
-    corr_neg_error = lateral_zmp_correction(zy_filtered=0.05, target_y=0.0)
-    assert corr_pos_error > 0.0, f"positive lateral error produced non-restoring correction: {corr_pos_error}"
-    assert corr_neg_error < 0.0, f"negative lateral error produced non-restoring correction: {corr_neg_error}"
-    assert abs(corr_pos_error) <= MAX_ANKLE_ROLL_CORRECTION_RAD + 1e-9, "correction exceeds its own clamp"
-    print(f"[stage 5c] correction sign OK: +5cm error -> {math.degrees(corr_pos_error):+.2f}deg, "
-          f"-5cm error -> {math.degrees(corr_neg_error):+.2f}deg")
+    # Real dynamic outcome check: a transient +y pelvis push, WITH vs
+    # WITHOUT the admittance correction active, at a fixed test gain.
+    # Assert the corrected run's peak tilt is not worse than uncorrected --
+    # this is what actually caught the sign trap during development.
+    def _push_run(k_adm_test):
+        d = mujoco.MjData(model)
+        rz, _, _ = sb.solve_nominal_geometry(model)
+        sb.set_initial_state(model, d, rz)
+        pid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+        act_idx = {mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i): i
+                   for i in range(model.nu)}
+        mujoco.mj_forward(model, d)
+        mujoco.mj_rnePostConstraint(model, d)
+        peak = 0.0
+        for _ in range(1000):
+            t = d.time
+            d.xfrc_applied[pid, 1] = 15.0 if t < 0.1 else 0.0
+            for side in ("left", "right"):
+                tau_x = d.sensordata[ft_torque_adr[side]]
+                d.ctrl[act_idx[f"act_{side}_ankle_roll"]] = ankle_roll_admittance(
+                    tau_x, k_adm=k_adm_test)
+            mujoco.mj_step(model, d)
+            mujoco.mj_rnePostConstraint(model, d)
+            peak = max(peak, sb.pelvis_tilt_deg(model, d))
+        return peak
+
+    peak_uncorrected = _push_run(0.0)
+    peak_corrected = _push_run(300.0)
+    assert peak_corrected <= peak_uncorrected + 0.5, (
+        f"admittance correction made a real push WORSE: "
+        f"{peak_uncorrected:.2f}deg -> {peak_corrected:.2f}deg -- sign or gain regression")
+    print(f"[stage 5c] push-test sign OK: uncorrected={peak_uncorrected:.3f}deg, "
+          f"corrected(k_adm=300)={peak_corrected:.3f}deg")
     print("[stage 5c] OK")
 
 
@@ -1139,7 +1167,7 @@ MAX_DCM_CORRECTION_M = 0.04
 # not yet root-caused further; see run_walk's docstring).
 DCM_FILTER_ALPHA = 0.02
 
-# ---- Local lateral ZMP feedback (ankle_roll) -------------------------------
+# ---- Local lateral ZMP feedback (ankle_roll) -- SUPERSEDED -----------------
 #
 # HUBO's own architecture (Heo, Lee, Oh, "Development of Humanoid Robots in
 # HUBO Laboratory, KAIST", 2012) is not a single monolithic controller: an
@@ -1148,9 +1176,9 @@ DCM_FILTER_ALPHA = 0.02
 # feedback controllers, balancing control first -- "a damping controller and
 # a ZMP compensator... play the most important role for not only stable
 # walking but also for balanced standing itself." Everything above this
-# point in the file is the offline pattern. What follows is a balancing
-# layer using ankle_roll (now actuated -- tools/CLAUDE.md's dated
-# 2026-09-08 entries): a direct port of sim_zmp_balance.py's already-
+# point in the file is the offline pattern. This block was the first
+# balancing layer added using ankle_roll (now actuated -- tools/CLAUDE.md's
+# dated 2026-09-08 entries): a direct port of sim_zmp_balance.py's already-
 # validated ankle-pitch ZMP compensator to the lateral axis.
 #
 # HONEST RESULT, not the original hypothesis: this layer alone did NOT fix
@@ -1158,19 +1186,18 @@ DCM_FILTER_ALPHA = 0.02
 # comment above for the real cause (a sagittal gain-margin regression from
 # ankle_roll's added mass, found by decomposing the fall into roll/pitch
 # instead of assuming it was lateral). With K_DCM retuned, a small K_ZMP_Y
-# is still a real, validated improvement (6.42deg -> 6.36deg at n=3..14,
-# swept directly: 0.02-0.05 clean, 0.10+ causes an abrupt fall -- another
-# narrow-band margin, not a gentle gradient) and is kept because it's
-# genuine local lateral feedback (this project's actual goal, HUBO's own
-# "ZMP compensator" pattern), not because it was the fix for this
-# particular fall.
+# was still a real, validated improvement (6.42deg -> 6.36deg at n=3..14).
 #
-# sim_zmp_balance.py's compute_zmp() already returns BOTH x and y ZMP from
-# real contact points; its own run() only ever used x (ankle-pitch standing
-# control). The y component was already being computed and silently
-# discarded. The MEASURED signal here is that same y; the TARGET is
-# zmp_reference(t, phases)'s own y component -- the identical planned
-# reference the sagittal DCM math already tracks, not a new plan.
+# SUPERSEDED 2026-09-08 by ankle_roll_admittance (below): this ZMP
+# compensator infers lateral load indirectly from contact-point geometry
+# (compute_zmp); the F/T sensor now modeled in the MJCF (tools/CLAUDE.md's
+# dated entry) measures the actual roll-axis moment directly, is the real
+# mechanism this project's own design commits to, and needs no phase/plan
+# bookkeeping to know which foot is loaded. Kept here, unused, as the
+# historical record of what was tried first and why it wasn't the final
+# answer -- not deleted, matching this file's own practice for
+# superseded-but-instructive prior control-loop iterations (see the
+# module docstring's own history section).
 K_ZMP_Y = 0.05                           # proportional gain, rad per meter of lateral ZMP error --
                                           # swept directly (0.0-0.3); 0.05 is inside the clean
                                           # 0.02-0.05 band, 0.10+ falls abruptly
@@ -1181,17 +1208,79 @@ MAX_ANKLE_ROLL_CORRECTION_RAD = math.radians(10.0)   # stays inside ankle_roll's
 
 def lateral_zmp_correction(zy_filtered, target_y, k_zmp_y=K_ZMP_Y,
                             max_correction_rad=MAX_ANKLE_ROLL_CORRECTION_RAD):
-    """Proportional ankle_roll correction from planned-vs-measured lateral
-    ZMP error -- HUBO's own 'ZMP compensator' pattern (see the block comment
-    above), structurally identical to sim_zmp_balance.py's ankle_pitch
-    standing controller applied to the other axis. Positive error (target
-    ahead of measured, in +y) must produce a positive correction that pulls
-    the sole toward it -- verified directly in _selftest_stage5c, not just by
-    inspection, since a sign mistake here would silently DESTABILIZE rather
-    than correct (this file's own K_DCM history is exactly this class of
-    bug: see the comment above K_DCM)."""
+    """SUPERSEDED -- see the block comment above. Proportional ankle_roll
+    correction from planned-vs-measured lateral ZMP error. Kept for
+    reference; no longer called from run_walk()."""
     error = target_y - zy_filtered
     return float(np.clip(k_zmp_y * error, -max_correction_rad, max_correction_rad))
+
+
+# ---- F/T-sensor-based admittance control (ankle_roll) ----------------------
+#
+# The real mechanism, not an approximation of it: design/sensors.yaml specs
+# a per-foot 6-DOF F/T sensor for exactly this purpose, now modeled in
+# generate_mjcf.py ({s}_ft_force/{s}_ft_torque sensors, {s}_ft_site on the
+# foot body -- see that file's add_leg()). COMAN's admittance-control paper
+# (Li, Zhou, Tsagarakis, Caldwell 2016, "Compliance Control for Stabilizing
+# the Humanoid on the Changing Slope...") achieves compliant balancing
+# using ONLY position-controlled actuators + F/T feedback -- no torque
+# control anywhere, directly compatible with SPEC.md Sec 8.1's locked
+# architecture. Their general law (Eq. 10) accounts for series-elastic
+# joint compliance (Ks); megadroid's joints are rigid, high-gear-ratio
+# position servos, so their own Ks->infinity simplification applies
+# (Eq. 12): the joint's position reference is modulated directly by
+# measured torque error, rendering a virtual spring at the joint.
+#
+# NOT full compliance: this project already found (the passive
+# spring-centered ankle_roll design, tools/CLAUDE.md's earlier dated
+# entries) that a genuinely compliant ankle_roll destabilizes this design
+# regardless of gain, all the way from 15 Nm/rad to 1e4 Nm/rad (short of
+# de facto rigid). K_ADM must render a STIFF virtual spring -- a small
+# reactive trim to real disturbance, not softness -- and is swept
+# accordingly, not assumed.
+K_ADM = 2500   # swept directly (0-15000, both this file and sim_walk_recede.py): a narrow
+                # unsafe band at 500-1500 (falls, 37-95deg) and another at 5000-8000 (falls
+                # again, 79-90deg) sandwich a clean zone at 2000-4000 -- non-monotonic, not a
+                # gradient, consistent with every other gain margin found this session. 2500
+                # sits in the middle of that zone for both files (no separate _RECEDE variant
+                # needed this time). HONEST RESULT: this improves nominal walking (see
+                # run_walk's docstring) but does NOT meaningfully improve push-recovery at the
+                # 5-30N range already characterized this session -- see tools/CLAUDE.md's
+                # dated entry.
+MAX_ADM_CORRECTION_RAD = math.radians(10.0)   # same clamp as the superseded ZMP compensator
+
+
+def ankle_roll_admittance(tau_x_measured, tau_x_target=0.0, k_adm=K_ADM,
+                           max_correction_rad=MAX_ADM_CORRECTION_RAD):
+    """Admittance control for ankle_roll (COMAN paper's rigid-actuation
+    Ks->infinity case -- see the block comment above): render a virtual
+    spring at the joint by modulating its POSITION reference from measured
+    roll-axis torque, entirely within position control. Applied PER FOOT
+    using that foot's own sensor reading -- a foot in the air reads ~0
+    force/torque so its correction naturally goes to ~0 too, with no
+    phase/plan bookkeeping needed to know which foot is loaded (unlike the
+    superseded lateral_zmp_correction above).
+
+    correction = (tau_measured - tau_target) / k_adm
+
+    NOTE ON SIGN: this is the OPPOSITE of what a naive "restoring spring"
+    derivation suggests (push back against the measured moment). Verified
+    directly against a real transient push in the actual model, not
+    derived from spring theory: at a fixed magnitude, the "push back"
+    sign made a real disturbance WORSE (1.6deg -> 2.4deg peak tilt) while
+    this sign made it better (1.6deg -> 1.8deg, improving further with a
+    stiffer gain). The likely reason -- not fully chased down, flagged
+    for anyone revisiting this -- is that the sensor's reaction-force
+    convention (force the foot exerts ON its parent, Newton's-third-law
+    opposite of "the ground pushing the foot") flips the naive intuition
+    once. This project's own K_DCM history is exactly this class of bug
+    (a sign that LOOKS right from the physics but is backwards for THIS
+    measurement's convention) -- test the real model, don't trust the
+    derivation, exactly as done here."""
+    if k_adm == 0.0:
+        return 0.0
+    correction = (tau_x_measured - tau_x_target) / k_adm
+    return float(np.clip(correction, -max_correction_rad, max_correction_rad))
 
 
 def interpolate_plan(ts, arr, t):
@@ -1202,7 +1291,7 @@ def interpolate_plan(ts, arr, t):
 
 
 def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, k_dcm=K_DCM,
-             k_zmp_y=K_ZMP_Y):
+             k_adm=K_ADM):
     """Build the offline DCM/CoM/footstep plan (Stages 0-3), then drive it
     with real MuJoCo dynamics (mj_step). Unlike Stages 5's pure offline
     plan, joint targets here are computed LIVE every step from real
@@ -1210,17 +1299,36 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     the pelvis position target fed to leg_ik each step is the offline
     plan's x_com(t) corrected by K_DCM times the gap between the (EMA-
     filtered -- see DCM_FILTER_ALPHA) actual and planned Divergent
-    Component of Motion, clamped by MAX_DCM_CORRECTION_M, PLUS a local
-    lateral ZMP compensator driving ankle_roll (see the block comment above
-    K_ZMP_Y -- HUBO's own "ZMP compensator" balancing layer, ankle_roll now
-    actuated). VALIDATED (current model, ankle_roll actuated): 14 steps
-    clean (peak tilt <=6.4deg, flat across n=3..14); 15 regresses to the
-    old wall territory this file's history already documents, not chased
-    further. This RECOVERS the model-without-ankle_roll baseline (was 15
-    clean, 16 borderline, 17 fails) to within one step of range -- see
-    K_DCM's own comment for the real regression this session found and
-    fixed (a sagittal gain-margin shift from ankle_roll's added mass, NOT
-    the missing-lateral-feedback problem originally suspected). Returns a
+    Component of Motion, clamped by MAX_DCM_CORRECTION_M, PLUS F/T-sensor
+    admittance control driving ankle_roll (see the block comment above
+    ankle_roll_admittance -- the real per-foot local balancing layer,
+    superseding the contact-geometry-derived lateral_zmp_correction that
+    preceded it). VALIDATED (current model, ankle_roll actuated, K_ADM=
+    2500): 14 steps clean (peak tilt <=6.4deg, flat across n=3..14); 15
+    regresses to the old wall territory this file's history already
+    documents, not chased further. This RECOVERS the model-without-
+    ankle_roll baseline (was 15 clean, 16 borderline, 17 fails) to within
+    one step of range -- see K_DCM's own comment for the real regression
+    this session found and fixed (a sagittal gain-margin shift from
+    ankle_roll's added mass, NOT the missing-lateral-feedback problem
+    originally suspected).
+
+    HONEST RESULT ON THE ACTUAL GOAL (genuine disturbance robustness, not
+    just nominal-trajectory tuning): F/T-sensor admittance control does
+    NOT meaningfully improve push recovery at the 5-30N range characterized
+    this session. A direct re-test (sim_walk_recede.py, same magnitudes,
+    same mid-walk timing, with vs without this layer) still falls on
+    nearly every case; a further phase-timing sweep at a fixed 15N lateral
+    push showed it falls at nearly every push time too, with or without
+    admittance active -- this isn't a timing-alignment fluke, the
+    magnitude itself is beyond what ankle-roll-only correction (any
+    mechanism tried so far: passive spring, ZMP compensator, F/T
+    admittance) can absorb for a robot this size. The bottleneck is
+    architectural, not this joint's control law: real recovery from a
+    push this size likely needs bigger corrective action than an ankle
+    alone provides -- larger/faster footstep placement changes, or a hip
+    strategy -- not another local ankle_roll mechanism. See
+    tools/CLAUDE.md's dated entry for the full push-test data. Returns a
     summary dict; optionally renders an offscreen GIF."""
     data = mujoco.MjData(model)
 
@@ -1262,6 +1370,9 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
         data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = ankle
     mujoco.mj_forward(model, data)
     mujoco.mj_subtreeVel(model, data)   # populate subtree_linvel for the first DCM measurement
+    mujoco.mj_rnePostConstraint(model, data)   # seed cfrc_int so the first loop iteration's
+                                                # F/T sensor read isn't stale -- see
+                                                # ankle_roll_admittance's block comment
     xi_filtered = data.subtree_com[0][:2].copy() + Tc * data.subtree_linvel[0][:2].copy()
 
     pelvis_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
@@ -1286,12 +1397,16 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     max_dcm_err_m = 0.0
     diverged = False
 
-    # Local lateral ZMP feedback setup (see the block comment above
-    # lateral_zmp_correction) -- foot_body_ids mirrors sim_zmp_balance.py's
-    # own run(); zy_filtered starts at 0.0 (nominal double-support ZMP is
-    # centered laterally, matching the initial state set above).
-    foot_body_ids = sb._foot_body_ids(model)
-    zy_filtered = 0.0
+    # F/T-sensor admittance setup (see the block comment above
+    # ankle_roll_admittance) -- sensor_adr gives the offset into
+    # data.sensordata for each foot's torque sensor; index [0] of that
+    # 3-vector is the roll (x) axis, per design/kinematics.yaml's
+    # ankle_roll axis_direction.
+    ft_torque_adr = {
+        side: model.sensor_adr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR,
+                                                   f"{side}_ft_torque")]
+        for side in ("left", "right")
+    }
 
     for step in range(n_sim_steps):
         t = data.time
@@ -1321,22 +1436,16 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
                 t, phase["swing_from_xy"], phase["swing_to_xy"],
                 phase["step_height"], phase["t0"], phase["t1"])
 
-        # Local lateral ZMP feedback (ankle_roll) -- see the block comment
-        # above lateral_zmp_correction. Only a PLANTED foot's ankle_roll can
-        # affect ZMP, so a currently-swinging foot is held at nominal (0)
-        # instead, same as before this layer existed.
-        _, zy_raw, _ = sb.compute_zmp(model, data, foot_body_ids)
-        if zy_raw is not None:
-            zy_filtered = (1 - ZMP_Y_FILTER_ALPHA) * zy_filtered + ZMP_Y_FILTER_ALPHA * zy_raw
-        target_y = zmp_reference(t, phases)[1]
-        # ankle_roll's nominal_stand_deg is 0 (design/joints.yaml), so the
-        # correction IS the commanded angle -- would need "+ nominal" if
-        # that ever changed.
-        ankle_roll_corr = lateral_zmp_correction(zy_filtered, target_y, k_zmp_y=k_zmp_y)
-        planted_sides = set(phase["foot_xy"].keys())
+        # F/T-sensor admittance control (ankle_roll) -- see the block
+        # comment above ankle_roll_admittance. Applied PER FOOT from that
+        # foot's own sensor reading -- no planted/swing bookkeeping needed,
+        # a foot in the air reads ~0 torque so its own correction is
+        # already ~0. ankle_roll's nominal_stand_deg is 0 (design/
+        # joints.yaml), so the correction IS the commanded angle.
         for side in ("left", "right"):
-            data.ctrl[act_index[f"act_{side}_ankle_roll"]] = (
-                ankle_roll_corr if side in planted_sides else 0.0)
+            tau_x = data.sensordata[ft_torque_adr[side]]
+            data.ctrl[act_index[f"act_{side}_ankle_roll"]] = ankle_roll_admittance(
+                tau_x, k_adm=k_adm)
 
         for side in ("left", "right"):
             hip_origin = hip_origin_for_side(pelvis_xyz_cmd, side)
@@ -1360,6 +1469,8 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
 
         mujoco.mj_step(model, data)
         mujoco.mj_subtreeVel(model, data)
+        mujoco.mj_rnePostConstraint(model, data)   # populates cfrc_int for the
+                                                    # F/T sensors read next iteration
 
         if not np.all(np.isfinite(data.qpos)) or not np.all(np.isfinite(data.qvel)):
             diverged = True

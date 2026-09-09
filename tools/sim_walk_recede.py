@@ -88,18 +88,26 @@ monotonically past the stance foot's own y, every step, without bound.
 
 VALIDATED STATE (honest, not the full original goal; ankle_roll now
 actuated, see tools/CLAUDE.md's dated 2026-09-08 entries for the full
-regression/fix history): 12 steps clean (peak tilt <=12.4deg), 14 degrades
-(~40deg), 15+ falls -- an IMPROVEMENT over the pre-ankle_roll baseline (was
-8 clean/6.9deg, 9 borderline, 10+ falls), not just a recovery, once this
-file's OWN K_DCM_RECEDE gain was found by direct sweep (-0.70, NOT
-lw.K_DCM's -0.6 -- the two files' stability margins shifted differently
-under the same mass change and needed separately-tuned values, confirmed
-directly rather than assumed to transfer). Also carries lw's local lateral
-ZMP feedback (ankle_roll, see lw.K_ZMP_Y's block comment) -- a real
-addition, though the sagittal K_DCM_RECEDE retune was what actually fixed
-the fall this session found (see that constant's own comment for why: a
-mass-driven margin shift, not a missing-lateral-feedback problem). Per-axis
-footstep-adaptation clamps were
+regression/fix history): 25 steps clean (peak tilt <=9.99deg, flat from
+n=6 to n=25), 30+ falls -- a SUBSTANTIAL improvement over both the
+pre-ankle_roll baseline (was 8 clean/6.9deg, 9 borderline, 10+ falls) and
+this session's own earlier K_DCM_RECEDE-only retune (12 clean/12.4deg).
+Two layered fixes, found and validated separately, each real: (1) this
+file's OWN K_DCM_RECEDE gain (-0.70, NOT lw.K_DCM's -0.6 -- the two
+files' sagittal stability margins shifted differently under the same mass
+change and needed separately-tuned values, confirmed directly rather than
+assumed to transfer) fixed an actual fall; (2) lw's F/T-sensor admittance
+control (ankle_roll, see lw.ankle_roll_admittance's block comment,
+K_ADM=2500) pushed the clean range from 12 to 25 steps on top of that --
+a real, validated nominal-walking improvement, found by direct sweep, not
+assumed. HONEST RESULT ON THE ACTUAL GOAL, though: this does NOT
+translate into better push recovery at the 5-30N disturbance range this
+session characterized -- see lw.run_walk's own docstring and
+tools/CLAUDE.md's dated entry for the full push-test data (falls at
+nearly every tested magnitude and timing, with or without this layer).
+Nominal-trajectory smoothness and disturbance robustness are different
+properties; this session improved the former significantly, not the
+latter. Per-axis footstep-adaptation clamps were
 necessary and are asymmetric for a real geometric reason, not just a
 tuning choice: X has real room (step_length=80mm), but the total lateral
 stance half-width is only 50mm (HIP_Y), so a naive symmetric clamp on Y
@@ -787,7 +795,7 @@ def _nominal_next_touchdown(stance_xy, new_swing_side, step_length, step_width):
 
 def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                      render_every=10, verbose=True, k_dcm=K_DCM_RECEDE,
-                     k_zmp_y=lw.K_ZMP_Y,
+                     k_adm=lw.K_ADM,
                      replan_period=REPLAN_PERIOD_S, push_at=None, push_force=(0.0, 0.0),
                      push_duration=0.1):
     """Drive the robot with the receding-horizon controller: the first step
@@ -906,10 +914,17 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
     diverged = False
     steps_completed = 0
 
-    # Local lateral ZMP feedback (ankle_roll) -- see lw.lateral_zmp_correction
-    # and its block comment; mirrors run_walk's own wiring exactly.
-    foot_body_ids = sb._foot_body_ids(model)
-    zy_filtered = 0.0
+    # F/T-sensor admittance control (ankle_roll) -- see
+    # lw.ankle_roll_admittance's block comment; mirrors run_walk's own
+    # wiring exactly. mj_rnePostConstraint must run after every mj_step
+    # for these to populate (added below, alongside the existing
+    # mj_subtreeVel call).
+    ft_torque_adr = {
+        side: model.sensor_adr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR,
+                                                   f"{side}_ft_torque")]
+        for side in ("left", "right")
+    }
+    mujoco.mj_rnePostConstraint(model, data)   # seed for the first iteration's read
 
     step = 0
     while True:
@@ -1046,26 +1061,15 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                     t, phase["swing_from_xy"], phase["swing_to_xy"],
                     phase["step_height"], phase["t0"], phase["t1"])
 
-        # Local lateral ZMP feedback (ankle_roll) -- see lw.lateral_zmp_
-        # correction's block comment. target_y comes from whichever plan is
-        # actually driving this tick (short-horizon replan vs. bootstrap),
-        # matching xi_planned/x_com_planned's own source selection above.
-        # Only the STANCE foot is planted during receding-horizon mode (the
-        # swing foot has an in-air z-target); the bootstrap branch mirrors
-        # run_walk's phase["foot_xy"] planted-set logic exactly.
-        _, zy_raw, _ = sb.compute_zmp(model, data, foot_body_ids)
-        if zy_raw is not None:
-            zy_filtered = (1 - lw.ZMP_Y_FILTER_ALPHA) * zy_filtered + lw.ZMP_Y_FILTER_ALPHA * zy_raw
-        if receding_active:
-            target_y = lw.zmp_reference(t_window, phases_h)[1]
-            planted_sides = {stance_side}
-        else:
-            target_y = lw.zmp_reference(t, phases_boot)[1]
-            planted_sides = set(phase["foot_xy"].keys())
-        ankle_roll_corr = lw.lateral_zmp_correction(zy_filtered, target_y, k_zmp_y=k_zmp_y)
+        # F/T-sensor admittance control (ankle_roll) -- see
+        # lw.ankle_roll_admittance's block comment. Applied per foot from
+        # that foot's own sensor reading -- no planted/swing bookkeeping
+        # needed at all (unlike the superseded lateral ZMP compensator this
+        # replaced), since a foot in the air reads ~0 torque already.
         for side in ("left", "right"):
-            data.ctrl[act_index[f"act_{side}_ankle_roll"]] = (
-                ankle_roll_corr if side in planted_sides else 0.0)
+            tau_x = data.sensordata[ft_torque_adr[side]]
+            data.ctrl[act_index[f"act_{side}_ankle_roll"]] = lw.ankle_roll_admittance(
+                tau_x, k_adm=k_adm)
 
         for side in ("left", "right"):
             hip_origin = lw.hip_origin_for_side(pelvis_xyz_cmd, side)
@@ -1086,6 +1090,8 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
 
         mujoco.mj_step(model, data)
         mujoco.mj_subtreeVel(model, data)
+        mujoco.mj_rnePostConstraint(model, data)   # populates cfrc_int for the
+                                                    # F/T sensors read next iteration
 
         if not np.all(np.isfinite(data.qpos)) or not np.all(np.isfinite(data.qvel)):
             diverged = True
@@ -1136,10 +1142,10 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
 
 def _selftest_stage3(model):
     # 6 steps: comfortably inside the validated clean range (see run_walk_
-    # recede's docstring -- 12 is the actual clean boundary as of the
-    # 2026-09-08 K_DCM_RECEDE retune, 14 degrades, 15+ falls; 6 leaves
-    # margin the same way sim_walk_lipm.py's own gates test at n=12 with
-    # headroom below its own n=15 boundary).
+    # recede's docstring -- 25 is the actual clean boundary as of the
+    # 2026-09-08 K_DCM_RECEDE + F/T-admittance additions, 30+ falls; 6
+    # leaves margin the same way sim_walk_lipm.py's own gates test at n=12
+    # with headroom below its own n=15 boundary).
     result = run_walk_recede(model, n_steps=6, verbose=False)
     print(f"[stage 3] 6-step receding-horizon run: diverged={result['diverged']}  "
           f"max_tilt={result['max_tilt_deg']:.2f}deg  net_forward={result['net_forward_m']*1000:.1f}mm  "

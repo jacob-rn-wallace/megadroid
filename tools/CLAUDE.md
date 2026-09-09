@@ -488,18 +488,102 @@ before assuming which control axis is responsible and building a fix for
 it. An axis-blind combined-tilt number sent real effort down the wrong path
 for a full investigation cycle here.
 
+**2026-09-08 (continued) — F/T sensor modeled in simulation, admittance
+control implemented; real nominal-walking improvement, no push-robustness
+improvement.** After the lateral-ZMP-feedback work above, the user asked
+directly for genuine disturbance rejection, not just good nominal tuning,
+and tested this claim: pushing the (well-tuned) walk with real external
+forces (`sim_walk_recede.py --push-at/--push-force`, 5-30N, 0.1s, mid-walk)
+produced an erratic response (5N fell, 10N survived, 30N fell again) — the
+signature of a system tuned around a trajectory, not one with real margin.
+
+Pursuing HUBO-style local feedback further, and specifically checking
+whether HUBO's own high-reduction actuators (harmonic drives — same
+friction/backlash problem as this project's high-gear-ratio brushed DC
+motors) rule out true torque control for it too (the user's direct
+question), pointed at **admittance control**: the COMAN paper already
+indexed above ("Compliance Control for Stabilizing the Humanoid on the
+Changing Slope...", Li/Zhou/Tsagarakis/Caldwell 2016) achieves compliant
+balancing using ONLY position-controlled actuators + F/T feedback — the
+authentic mechanism `design/sensors.yaml`'s F/T sensor exists for, not an
+approximation of it via contact-geometry ZMP inference. Implemented:
+
+- `tools/generate_mjcf.py`: a zero-DOF, zero-mass `{s}_ft_sensor` body
+  inserted between `ankle_roll` and `foot` (matching `design/geometry.yaml`
+  foot_stack order, zero offset so no dimension changed — confirmed via
+  `verify_urdf_dimensions.py`), with a site on `foot` (the child) and
+  `<force>`/`<torque>` sensors reading it — MuJoCo's force/torque sensors
+  measure the reaction between a site's body and its PARENT, so this reads
+  the real ground-reaction load path. Verified physically sensible before
+  trusting it in any control loop: ~45.6N vertical per foot at nominal
+  double-support stance (expected ~47N for 9.6kg), symmetric L/R, and
+  near-zero (1e-15) roll torque at a symmetric stance — exactly the
+  fixture the new selftest stage checks.
+- `tools/sim_walk_lipm.py`: new `ankle_roll_admittance()` (COMAN's
+  Ks→∞ rigid-actuation simplification, since megadroid's joints are rigid
+  position servos, not series-elastic), applied PER FOOT from that foot's
+  own sensor — no phase/plan bookkeeping needed at all (a foot in the air
+  reads ~0 torque, so its own correction is already ~0), a genuine
+  simplification over the superseded ZMP compensator. `lateral_zmp_
+  correction`/`K_ZMP_Y` kept in the file, unused, as historical record
+  (not deleted — matches this file's own practice for prior iterations).
+  `mujoco.mj_rnePostConstraint(model, data)` added after every `mj_step`
+  (required to populate the force/torque sensors — `sim_zmp_balance.py`
+  already did this, `run_walk()` did not).
+- **A genuine sign trap, caught by testing, not derivation:** the "obvious"
+  physical intuition (push back against the measured moment, like a
+  restoring spring) tested WORSE on a real transient push (1.6°→2.4° peak
+  tilt) than its opposite (1.6°→1.8°, improving further with a stiffer
+  gain). Likely cause, not fully chased down: the sensor's reaction-force
+  convention (force the foot exerts ON its parent) is the Newton's-third-
+  law opposite of "the ground pushing the foot," flipping the naive sign
+  once. `_selftest_stage5c` now encodes the actual empirical outcome (a
+  real push-test comparison), not just an algebraic sign check, since a
+  sign check alone would have passed the wrong formula too.
+- **Gain tuning, one variable at a time, per this file's own discipline:**
+  `K_ADM` swept 0-15000 on both files together. Non-monotonic, matching
+  every other margin found this session: unsafe bands at 500-1500 (falls,
+  37-95°) and 5000-8000 (falls again, 79-90°) sandwich a clean zone at
+  2000-4000. `K_ADM=2500` (middle of that zone) works for BOTH files
+  without a separate `_RECEDE` variant this time. Result: `sim_walk_lipm.py`
+  unchanged at 14 clean steps (6.43°, was 6.36° with the superseded ZMP
+  layer — negligible difference); `sim_walk_recede.py` jumped from 12
+  clean steps (12.4°) to **25 clean steps (9.99°, flat n=6..25)**, 30+
+  falls — a substantial, real, validated nominal-walking improvement.
+- **HONEST RESULT ON THE ACTUAL GOAL:** re-running the exact same 5-30N
+  push tests (both axes, mid-walk) with `K_ADM=2500` active shows NO
+  meaningful improvement — still falls on nearly every tested case. A
+  further check (same 15N lateral push, six different push times across
+  a walk) fell at nearly every timing too, with AND without admittance —
+  ruling out "just bad luck on push timing" as the explanation. **This
+  magnitude of disturbance is beyond what ankle-roll-only correction can
+  absorb for a robot this size, regardless of which mechanism drives that
+  one joint** (passive spring, ZMP compensator, and now F/T admittance
+  have all been tried and all show the same ceiling). The bottleneck is
+  architectural, not this joint's control law: genuine push recovery at
+  this scale likely needs bigger/faster corrective action than an ankle
+  alone provides — real footstep placement/timing adaptation (the
+  Roux 2024 QP-based sequencer already indexed above does BOTH position
+  AND timing jointly; this codebase's existing capture-point footstep
+  adaptation only ever did position, timing deliberately left "out of
+  scope" per its own docstring) or a hip strategy — not another local
+  ankle_roll mechanism. Neither started.
+
 **Where work stopped:**
 Five P3 simulation milestones are done: fixed-base static load
 validation, the floating-base ZMP ankle-pitch standing controller, three
 validated steps of quasi-static (stumbling) walking, fourteen validated
-steps of smooth fixed-horizon LIPM/DCM-planned walking plus local lateral
-ZMP feedback (`sim_walk_lipm.py`, as of the 2026-09-08 K_DCM retune above),
-and twelve validated steps of the receding-horizon controller with
-capture-point footstep placement (`sim_walk_recede.py`, likewise retuned).
-Neither indefinite walking nor a demonstrated disturbance-rejection
-advantage is done yet — see that file's own bullet above and its module
-docstring for the full, honest account (numbers below predate the
-2026-09-08 retune but the underlying dynamics finding is unaffected): even
+steps of smooth fixed-horizon LIPM/DCM-planned walking plus F/T-sensor
+admittance feedback (`sim_walk_lipm.py`, as of the 2026-09-08 entries
+above), and twenty-five validated steps of the receding-horizon controller
+with capture-point footstep placement (`sim_walk_recede.py`, likewise
+retuned plus the same admittance layer). Neither indefinite walking nor a
+demonstrated disturbance-rejection advantage is done yet — confirmed
+directly this session (see the F/T-admittance entry above): real push
+tests at 5-30N still fall on nearly every case despite both the nominal-
+walking improvements above. See that file's own bullet above and its
+module docstring for the full, honest account (numbers below predate the
+2026-09-08 changes but the underlying dynamics finding is unaffected): even
 with footstep adaptation disabled, pure receding-horizon replanning alone
 still degrades in a similar step range to `sim_walk_lipm.py`'s own
 walls, via a *growing* (not constant) discontinuity between each short-
