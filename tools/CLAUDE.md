@@ -1239,3 +1239,63 @@ user's call; not attempted further without one, per this session's
 established practice of checking in before a new structurally different
 attempt rather than continuing to iterate solo.
 
+### 2026-09-09 — Coordinated whole-stack re-tune (Plan Mode, approved): fixes nominal-walk stability substantially, sagittal holds, but lateral push recovery STILL doesn't move at any of the 3 budgeted b_nom_y values
+
+User chose this over stopping, after five prior mechanisms failed.
+Scoped and approved via Plan Mode: instead of changing `b_nom_y` alone,
+jointly re-sweep it together with `K_DCM_RECEDE`
+(`sim_walk_recede.py:869`, the shared fast-loop DCM gain applied to
+BOTH axes) and `MAX_FOOTSTEP_ADAPT_Y_M`, on the theory that both were
+empirically tuned around the old `b_nom_y≈0` behavior and have no
+reason to still be correct once `b_nom_y` changes. Diagnostic-only
+(env-var runtime overrides), budget of 3 `b_nom_y` magnitudes per the
+approved plan, each with its own small `K_DCM_RECEDE × Y_clamp` grid.
+**All reverted, nothing committed as code.**
+
+**b_nom_y k=-0.2** (the least-degraded nonzero value from the earlier
+magnitude sweep) — Stage 2 grid found a genuinely strong nominal-walk
+cell: `K_DCM_RECEDE=-0.77`, `Y_clamp=0.03` gives **6.32° flat through
+n=30** (no growth at all), a dramatic improvement over the documented
+baseline (n=18 clean at 8.21°, n=25 FALLS at 79.72°). Loosening the Y
+clamp (0.06-0.15) was tested and uniformly catastrophic (86-100° at
+every K_DCM_RECEDE value) — confirms the clamp's real job is
+balance-relevant, not kinematic, consistent with the reachability-based
+clamping entry above. Push battery at this configuration: sagittal held
+(4/5 forces still survive, similar magnitudes to before, though 10N/20N
+show larger transients — 17.58°/11.02° vs. the old ~6-7° — without
+falling). **Lateral: unchanged.** 5N survives (6.49°, if anything
+slightly better than before), but 10N/15N/20N/30N all still fall at
+essentially the same magnitudes as the pre-re-tune baseline (80-92° vs.
+80-93° before).
+
+**b_nom_y k=-0.1** — best cell `K_DCM_RECEDE=-0.9`, `Y_clamp=0.03`:
+nominal walking excellent (6.17° flat n18=n25). Push battery: same
+pattern exactly — sagittal 4/5 survive, lateral only 5N survives
+(7.25°), 10-30N all fall (79-94°).
+
+**b_nom_y k=-0.3** — best cell `K_DCM_RECEDE=-0.8`, `Y_clamp=0.03`:
+nominal walking fine (6.28-6.90°), but this one is a genuine
+regression on push recovery: sagittal 5N now FALLS too (49.58°, was
+~6.5° before), and lateral 5N also falls (79.74°, was the one push that
+always survived before). Worse than either of the other two candidates
+on every axis.
+
+**Conclusion, budget exhausted per the approved plan:** across all 3
+budgeted `b_nom_y` values, each independently re-tuned to its own best
+`(K_DCM_RECEDE, Y_clamp)` combination, lateral push recovery NEVER
+improves beyond "5N survives, 10N+ falls" — the exact same ceiling
+found by every one of the five prior mechanisms this session. The
+`k=-0.2` configuration is a genuine, real, non-regressive improvement to
+NOMINAL walking specifically (clean through n=30 vs. falling at n=25 —
+a substantial margin gain in its own right, sagittal push recovery
+essentially preserved) — but it does not touch the lateral push-recovery
+gap this whole investigation was aimed at. Six structurally different,
+independently-tested mechanisms have now failed on that specific
+question: four `b_nom_y` fixes, reachability-based clamping, and this
+coordinated re-tune. `sim_walk_recede.py` is unmodified (all diagnostic
+overrides reverted) — the nominal-walk-stability improvement
+(`k=-0.2`/`K_DCM_RECEDE=-0.77`/`Y_clamp=0.03`) is NOT yet committed;
+flagged for the user's call on whether to keep it as a standalone
+nominal-walking-quality improvement despite not achieving its original
+lateral-push-recovery goal.
+
