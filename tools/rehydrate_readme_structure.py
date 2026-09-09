@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import re
+import subprocess
 import yaml
 from pathlib import Path
 
@@ -56,6 +57,20 @@ def load_file_meta(path: Path):
 
 # ---------- Tree assembly ----------
 
+def is_gitignored(path: Path) -> bool:
+    """True if git would ignore this path. Without this check, any
+    gitignored top-level entry that happens to exist on disk (e.g. a local
+    reference-material/ directory) leaks into the committed README on
+    whichever machine last ran this script, while a clean checkout — which
+    never has that entry — regenerates without it, failing CI's
+    rehydration-check the moment the two diverge."""
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", str(path)],
+        cwd=REPO_ROOT,
+    )
+    return result.returncode == 0
+
+
 def collect_entries():
     entries = []
 
@@ -72,6 +87,8 @@ def collect_entries():
         if item.name == "README.md":
             continue
         if item.name.endswith(".before"):
+            continue
+        if is_gitignored(item):
             continue
 
         if item.is_file():

@@ -60,7 +60,6 @@ megadroid/
 ├── design/              # Authoritative YAML design parameters (source of truth)
 ├── docs/                # Supporting documentation and background references
 ├── firmware/            # Embedded motor/joint control for RP2350-CAN boards
-├── reference-material/
 ├── simulation/          # Kinematic models and simulation artifacts for validation
 ├── software/            # High-level control, gait planning, dev tools
 ├── templates/           # Jinja templates for generating derived documentation
