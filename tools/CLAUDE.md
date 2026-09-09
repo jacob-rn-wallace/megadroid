@@ -1091,3 +1091,58 @@ own standing practice, that calls for scoping via Plan Mode before
 further live edits rather than continuing to iterate constants directly
 against the sim.
 
+### 2026-09-09 — Per-swing calibrated b_nom_y implemented (Plan Mode, approved) and tested: fails faster and worse than the fixed constant, for a clear, fundamental reason — it removes ALL restoring force toward the true nominal stance geometry
+
+Scoped and approved via Plan Mode
+(`.claude/plans/scope-the-rearchitecture-out-jiggly-robin.md`): rather
+than a fixed geometric constant for `b_nom_y` (previous entry, diverged
+by step 7-9), calibrate it fresh from each swing's own first retarget
+measurement, using the real DCM-dynamics invariant
+(`b_nom_y_calibrated = stance_xy[1] + (xi_filtered[1]-stance_xy[1])*
+growth - swing_to_xy_nominal[1]`, computed once at the first tick past
+`MIN_RETARGET_FRACTION` each swing, held fixed for the rest of that
+swing, reset to `None` at swing completion). Implemented in
+`sim_walk_recede.py`, compiled clean, tested — **reverted, not
+committed.**
+
+**Result: worse than the fixed-constant failure, and faster.** Nominal
+walking (zero push) was already fallen by n=10 (`max_tilt=89.71°`,
+`net_forward=-297.8mm` — walking backward, stuck), identical at n=18 and
+n=25 (confirms it fell early and stayed down, not a slow drift).
+
+**Root cause, confirmed by direct trace:** `raw_delta_y` stayed at
+~0.00mm on almost every single retarget tick, exactly as the formula
+guarantees by construction (at the calibration tick, `p_new` is
+tautologically forced to equal `swing_to_xy_nominal`). But `xi_y` (the
+actual measured DCM) diverged catastrophically in the same trace: -21mm
+→ -31mm → -65mm → **-304mm** → -342mm → -303mm → -277mm → -275mm, over
+just 8 swings of nominal walking. The mechanism wasn't failing to
+compute `raw_delta` correctly — it was computing it "correctly" by a
+definition that has no content: calibrating `b_nom_y` fresh every swing
+means each swing accepts wherever the robot currently is as the new
+definition of nominal, so there is **no restoring force** pulling the
+gait back toward the true geometric stance width (±HIP_Y) at all. It's
+an undamped integrator/random walk, not a controller — the previous
+entry's fixed-constant version was closer to correct specifically
+BECAUSE it didn't recalibrate away real error (it just didn't track
+legitimate model mismatch precisely enough, causing slower compounding
+drift instead of this immediate loss of all corrective authority).
+
+**Conclusion:** two structurally different, individually reasonable
+approaches to fixing `b_nom_y` have now both failed, for complementary
+reasons — a fixed constant undershoots real dynamics and compounds
+slowly (falls by step 7-9); a fully recalibrated-per-swing estimate has
+zero restoring force and fails almost immediately (falls by step ~8-10,
+faster in wall-clock terms since it's swing-count not step-count, but
+comparably early). This suggests the correct fix is something
+IN BETWEEN — e.g. a slowly-adapting (multi-swing EMA, not full reset)
+estimate that tracks genuine slow model mismatch while still being
+anchored to the true `±HIP_Y` geometric target as its primary term, or
+abandoning `b_nom_y` precision entirely in favor of the OTHER approach
+flagged two entries above (reachability-based clamping of `p_new`
+directly, decoupled from getting this reference term exactly right).
+Not attempted this pass — flagged for the user's call on direction
+before further live implementation, since the plan's specific approved
+mechanism did not pan out and a third variant deserves a check-in rather
+than more solo iteration.
+
