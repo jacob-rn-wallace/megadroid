@@ -1200,3 +1200,42 @@ or accepting this as the current architecture's real limit are both
 reasonable next calls; flagged for the user's direction before further
 implementation.
 
+### 2026-09-09 — Reachability-based clamping tried (Plan Mode, approved), confirms the risk flagged in that same plan: fails immediately, for the exact predicted reason
+
+User chose this direction over a coordinated re-tune or stopping.
+Scoped and approved via Plan Mode: remove `MAX_FOOTSTEP_ADAPT_Y_M`'s
+role as a delta-from-nominal clamp entirely, relying only on `leg_ik`'s
+existing `UnreachableTarget` exception (already caught with a
+hold-last-command fallback, `sim_walk_recede.py:1291-1303`) as the
+safety net — sidestepping the `b_nom_y` precision question rather than
+continuing to chase it. The plan's own Context section flagged the risk
+up front: `UnreachableTarget` only fires past `R_MAX=0.6m` of required
+leg extension, but the problematic `raw_delta_y` values measured all
+session are 40-125mm — nowhere near that limit — so removing the clamp
+was flagged as likely to let the same structurally-biased raw targets
+through unchecked. Implemented (one-line change, Y-axis clip removed,
+X unchanged), tested, **reverted, not committed.**
+
+**Result: exactly the flagged risk, immediately.** Nominal walking
+(zero push) fell by n=10 (`max_tilt=87.42°`, `net_forward=-570.3mm` —
+walking backward), identical at n=18/25 (fell early, stayed down).
+`UnreachableTarget` never engaged — the raw targets were well within
+600mm of leg reach the whole time, exactly as predicted; the clamp's
+real job was never about kinematic reachability, it was suppressing a
+balance-relevant bias that has nothing to do with what the leg can
+physically reach.
+
+**Conclusion:** five structurally different mechanisms have now been
+tried against the lateral push-recovery gap this session (four
+`b_nom_y` fixes plus this reachability-based clamping attempt), all
+tested to the same standard (nominal-walk stability checked first, real
+before/after numbers, honest reporting), all neutral-or-harmful. The
+remaining two options from the original three-way choice — a
+coordinated re-tune of the whole stack (`K_DCM`, all footstep clamps,
+`K_ADM` together, around a corrected `b_nom_y`) or accepting this as the
+architecture's current honest limit — are both real, substantially
+larger-scope decisions than anything tried so far. Flagged for the
+user's call; not attempted further without one, per this session's
+established practice of checking in before a new structurally different
+attempt rather than continuing to iterate solo.
+
