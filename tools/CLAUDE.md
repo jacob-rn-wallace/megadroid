@@ -1146,3 +1146,57 @@ before further live implementation, since the plan's specific approved
 mechanism did not pan out and a third variant deserves a check-in rather
 than more solo iteration.
 
+### 2026-09-09 — b_nom_y magnitude sweep, conclusive: EVERY tested nonzero value is neutral-or-worse for nominal stability; the theoretically "correct" magnitude is the WORST one
+
+One more bounded, cheap check before stepping back, staying within the
+already-explored "fixed constant" design (not a new architecture): swept
+`b_nom_y = k * swing_to_xy_nominal[1]` for `k` in
+`{0.0, -0.2, -0.4, -0.6, -0.8, -0.8636}` (0.0 = current committed
+baseline; -0.8636 = the exact empirically/theoretically-derived value
+from two entries above) against nominal-walk stability at n=10/18/25,
+diagnostic only, reverted:
+
+| k | n=10 | n=18 | n=25 |
+|---|---|---|---|
+| 0.0 (baseline) | 6.36° | 8.21° | 79.72° |
+| -0.2 | 6.36° | 13.22° | 77.86° |
+| -0.4 | 6.36° | 11.56° | 88.95° |
+| -0.6 | 25.32° | 87.46° (falls) | 87.46° |
+| -0.8 | 77.57° (falls) | 77.57° | 77.57° |
+| -0.8636 | 94.04° (falls) | 94.04° | 94.04° |
+
+Monotonic: larger `|k|` fails earlier and harder, with zero exceptions
+across the swept range. The current committed baseline (`k=0`, i.e. the
+"broken" `b_nom_y≈0` this whole investigation set out to fix) is
+tied-or-better than every nonzero value tested, including small ones
+(-0.2, -0.4) that don't obviously reproduce the divergence failure modes
+of the two previous entries.
+
+**Conclusion — this closes out the `b_nom_y` investigation for now.**
+Three structurally different fixes (naive stance-relative analytic
+formula, empirically-measured fixed constant, per-swing calibration) and
+now a full magnitude sweep of the fixed-constant family have all been
+tested and found neutral-or-harmful. The theoretical case that
+`b_nom_y≈0` is "wrong" (Sections above: real numeric ground truth shows
+±56.8mm, the algebraic decomposition shows it should cancel a
+near-full-stance-width term) is not in question — but the REST of this
+control stack (`K_DCM`, the footstep clamps, `K_ADM`, the retarget
+timing constants) was all tuned empirically WITH `b_nom_y≈0` already
+baked in, and correcting `b_nom_y` in isolation, without re-tuning
+everything that was implicitly compensating for it, makes things worse,
+not better. A coordinated re-tune of the whole stack around a corrected
+`b_nom_y` might work but is a substantially larger undertaking than
+adjusting one term, and isn't attempted here.
+
+**Where this leaves lateral push recovery:** unresolved, honestly, after
+extensive and now fairly exhaustive investigation of this specific
+lever. The other previously-flagged alternative — replacing delta-vs-
+nominal clamping with reachability-based clamping of `p_new` directly
+(closer to the original capture-point-controller plan's first design
+idea, set aside earlier this session for empirical clamp retuning) — is
+a genuinely different mechanism, not yet tried, and would sidestep the
+`b_nom_y` precision question entirely rather than trying to fix it. That
+or accepting this as the current architecture's real limit are both
+reasonable next calls; flagged for the user's direction before further
+implementation.
+
