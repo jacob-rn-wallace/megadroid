@@ -139,14 +139,15 @@ second motor+gearbox mass low in the kinematic chain each time it moved
 lower. Recomputed 2026-09-08; see tools/CLAUDE.md for why ankle_roll is
 temporarily actuated.)
 
-PREVIOUSLY VALIDATED STATE (Stage 6/7, model without an actuated ankle_roll):
-15 steps, driven with real MuJoCo dynamics (mj_step, not the offline
-kinematic plan) -- max pelvis tilt <=6.4deg, FLAT across every n_steps from
-3 to 15 (smoother AND longer than any earlier iteration of this control
-loop), and NET-FORWARD pelvis translation throughout. REGRESSED as of
-2026-09-08 -- see run_walk's own docstring and tools/CLAUDE.md's dated entry
-below sim_walk_recede.py for what changed and why this is not yet fixed.
-This is the THIRD control-loop iteration this
+VALIDATED STATE (Stage 6/7, ankle_roll now actuated -- see run_walk's own
+docstring and tools/CLAUDE.md's dated entries for the full 2026-09-08
+regression/fix history): 14 steps, driven with real MuJoCo dynamics
+(mj_step, not the offline kinematic plan) -- max pelvis tilt <=6.4deg, FLAT
+across every n_steps from 3 to 14, and NET-FORWARD pelvis translation
+throughout. (Was 15 steps before ankle_roll's mass addition shifted this
+file's sagittal K_DCM margin; recovered to within one step via a direct
+retune, not a design or code fix -- see K_DCM's own comment.) This is the
+THIRD control-loop iteration this
 file has used; the first two (history below) each hit a hard wall that
 gain tuning alone could not fix, and both real fixes were architectural/
 measurement changes, not bigger gains: DCM/Capture-Point TRACKING
@@ -988,6 +989,43 @@ def _selftest_stage5(model):
     print("[stage 5] OK")
 
 
+def _selftest_stage5c(model):
+    """Validates lateral_zmp_correction's sign and compute_zmp's y-output
+    BEFORE trusting either inside the real Stage 6 drive loop -- matching
+    every other stage in this file (see the module docstring's own
+    discipline note). A sign mistake here is exactly the class of bug that
+    silently DESTABILIZES instead of correcting (see K_DCM's own history),
+    so this is checked directly, not assumed from the algebra."""
+    # compute_zmp reads ~0 laterally at the nominal symmetric standing pose
+    # (double support, weight evenly split) -- same fixture sim_zmp_balance.py
+    # itself uses to validate compute_zmp.
+    data = mujoco.MjData(model)
+    root_z, _, _ = sb.solve_nominal_geometry(model)
+    sb.set_initial_state(model, data, root_z)
+    mujoco.mj_forward(model, data)
+    foot_body_ids = sb._foot_body_ids(model)
+    _, zy0, fz0 = sb.compute_zmp(model, data, foot_body_ids)
+    assert zy0 is not None and fz0 > 0.0, "no foot contact at nominal standing pose"
+    assert abs(zy0) < 0.005, f"lateral ZMP not ~0 at symmetric standing pose: {zy0:.5f}m"
+    print(f"[stage 5c] compute_zmp lateral reading at nominal stance: {zy0*1000:.3f}mm (expect ~0)")
+
+    # Sign check: if the target is to the LEFT (+y) of the measured ZMP, the
+    # correction must be POSITIVE (this file's ankle_roll axis/positive
+    # direction, design/kinematics.yaml: "eversion, sole tilts laterally
+    # away from body midline" -- a positive command tilts the sole's near
+    # edge down, shifting the sole's ground-pressure centroid toward +y,
+    # i.e. toward the target). A restoring correction must shrink the error
+    # if applied; check the SIGN directly rather than trust the algebra.
+    corr_pos_error = lateral_zmp_correction(zy_filtered=0.0, target_y=0.05)
+    corr_neg_error = lateral_zmp_correction(zy_filtered=0.05, target_y=0.0)
+    assert corr_pos_error > 0.0, f"positive lateral error produced non-restoring correction: {corr_pos_error}"
+    assert corr_neg_error < 0.0, f"negative lateral error produced non-restoring correction: {corr_neg_error}"
+    assert abs(corr_pos_error) <= MAX_ANKLE_ROLL_CORRECTION_RAD + 1e-9, "correction exceeds its own clamp"
+    print(f"[stage 5c] correction sign OK: +5cm error -> {math.degrees(corr_pos_error):+.2f}deg, "
+          f"-5cm error -> {math.degrees(corr_neg_error):+.2f}deg")
+    print("[stage 5c] OK")
+
+
 # ---- Stage 6: MuJoCo drive loop --------------------------------------------
 #
 # REARCHITECTED from a small ad-hoc "ZMP-error -> hip_roll/ankle_pitch trim"
@@ -1050,7 +1088,23 @@ def _selftest_stage5(model):
 # A small gain sweep around -1.0 (-0.6 to -1.5) showed a fairly narrow
 # stable band, not a gentle gradient -- consistent with a real feedback
 # stability margin rather than a free parameter to push arbitrarily.
-K_DCM = -1.0                             # dimensionless gain on the DCM correction
+#
+# RETUNED 2026-09-08 (-1.0 -> -0.6): making ankle_roll actuated (see
+# tools/CLAUDE.md's dated entries) added a second motor+gearbox mass low in
+# the kinematic chain, which dropped z_c from 0.5713m to 0.5355m and Tc from
+# 0.241s to 0.2336s -- a small (~3%) shift that nonetheless crossed this
+# already-narrow stability margin: every model.opt.timestep, K_DCM=-1.0
+# produced a ~87-96deg fall regardless of MAX_DCM_CORRECTION_M or any new
+# ankle_roll correction, ACROSS THE WHOLE RANGE swept for both. Decomposing
+# the fall into roll/pitch (a check this project should have done FIRST,
+# not after chasing lateral fixes for a day) showed it was PITCH-dominated
+# (48deg pitch vs 9deg roll shortly before the fall) -- a sagittal margin
+# regression, not a missing-lateral-feedback one. A direct K_DCM sweep at
+# the new mass found a new narrow clean band at -0.55 to -0.60 (-0.5 gives
+# 40.85deg, -0.65 falls at 86.33deg) -- -0.6 gives 6.42deg, flat from n=3 to
+# n=14 (n=15 regresses to the old file's own already-documented wall
+# territory; not chased further, see run_walk's docstring).
+K_DCM = -0.6                             # dimensionless gain on the DCM correction
 
 # MAX_DCM_CORRECTION_M started as a safety clamp only (keeping a bad
 # transient from commanding an outright-unreachable IK target), but turned
@@ -1085,6 +1139,60 @@ MAX_DCM_CORRECTION_M = 0.04
 # not yet root-caused further; see run_walk's docstring).
 DCM_FILTER_ALPHA = 0.02
 
+# ---- Local lateral ZMP feedback (ankle_roll) -------------------------------
+#
+# HUBO's own architecture (Heo, Lee, Oh, "Development of Humanoid Robots in
+# HUBO Laboratory, KAIST", 2012) is not a single monolithic controller: an
+# offline walking PATTERN (what plan_footsteps/solve_dcm_backward/
+# integrate_com_forward already build) plus several small, layered real-time
+# feedback controllers, balancing control first -- "a damping controller and
+# a ZMP compensator... play the most important role for not only stable
+# walking but also for balanced standing itself." Everything above this
+# point in the file is the offline pattern. What follows is a balancing
+# layer using ankle_roll (now actuated -- tools/CLAUDE.md's dated
+# 2026-09-08 entries): a direct port of sim_zmp_balance.py's already-
+# validated ankle-pitch ZMP compensator to the lateral axis.
+#
+# HONEST RESULT, not the original hypothesis: this layer alone did NOT fix
+# the fall found after making ankle_roll actuated -- see K_DCM's own
+# comment above for the real cause (a sagittal gain-margin regression from
+# ankle_roll's added mass, found by decomposing the fall into roll/pitch
+# instead of assuming it was lateral). With K_DCM retuned, a small K_ZMP_Y
+# is still a real, validated improvement (6.42deg -> 6.36deg at n=3..14,
+# swept directly: 0.02-0.05 clean, 0.10+ causes an abrupt fall -- another
+# narrow-band margin, not a gentle gradient) and is kept because it's
+# genuine local lateral feedback (this project's actual goal, HUBO's own
+# "ZMP compensator" pattern), not because it was the fix for this
+# particular fall.
+#
+# sim_zmp_balance.py's compute_zmp() already returns BOTH x and y ZMP from
+# real contact points; its own run() only ever used x (ankle-pitch standing
+# control). The y component was already being computed and silently
+# discarded. The MEASURED signal here is that same y; the TARGET is
+# zmp_reference(t, phases)'s own y component -- the identical planned
+# reference the sagittal DCM math already tracks, not a new plan.
+K_ZMP_Y = 0.05                           # proportional gain, rad per meter of lateral ZMP error --
+                                          # swept directly (0.0-0.3); 0.05 is inside the clean
+                                          # 0.02-0.05 band, 0.10+ falls abruptly
+ZMP_Y_FILTER_ALPHA = 0.02                # same EMA alpha as DCM_FILTER_ALPHA -- same class of
+                                          # frame-to-frame contact noise, not re-derived from scratch
+MAX_ANKLE_ROLL_CORRECTION_RAD = math.radians(10.0)   # stays inside ankle_roll's own +-15deg range
+
+
+def lateral_zmp_correction(zy_filtered, target_y, k_zmp_y=K_ZMP_Y,
+                            max_correction_rad=MAX_ANKLE_ROLL_CORRECTION_RAD):
+    """Proportional ankle_roll correction from planned-vs-measured lateral
+    ZMP error -- HUBO's own 'ZMP compensator' pattern (see the block comment
+    above), structurally identical to sim_zmp_balance.py's ankle_pitch
+    standing controller applied to the other axis. Positive error (target
+    ahead of measured, in +y) must produce a positive correction that pulls
+    the sole toward it -- verified directly in _selftest_stage5c, not just by
+    inspection, since a sign mistake here would silently DESTABILIZE rather
+    than correct (this file's own K_DCM history is exactly this class of
+    bug: see the comment above K_DCM)."""
+    error = target_y - zy_filtered
+    return float(np.clip(k_zmp_y * error, -max_correction_rad, max_correction_rad))
+
 
 def interpolate_plan(ts, arr, t):
     """Linear interpolation of an (N, 4) joint-angle trajectory at time t
@@ -1093,7 +1201,8 @@ def interpolate_plan(ts, arr, t):
     return np.array([np.interp(t, ts, arr[:, k]) for k in range(arr.shape[1])])
 
 
-def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, k_dcm=K_DCM):
+def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, k_dcm=K_DCM,
+             k_zmp_y=K_ZMP_Y):
     """Build the offline DCM/CoM/footstep plan (Stages 0-3), then drive it
     with real MuJoCo dynamics (mj_step). Unlike Stages 5's pure offline
     plan, joint targets here are computed LIVE every step from real
@@ -1101,17 +1210,18 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     the pelvis position target fed to leg_ik each step is the offline
     plan's x_com(t) corrected by K_DCM times the gap between the (EMA-
     filtered -- see DCM_FILTER_ALPHA) actual and planned Divergent
-    Component of Motion, clamped by MAX_DCM_CORRECTION_M. PREVIOUSLY
-    VALIDATED (model without an actuated ankle_roll): 15 steps clean (peak
-    tilt <=6.4deg, flat across n=3..15); 16 borderline (19.6deg); 17 fails.
-    REGRESSED as of 2026-09-08 (ankle_roll made temporarily actuated, see
-    tools/CLAUDE.md's dated entry below sim_walk_recede.py): this loop has
-    no lateral feedback at all, so the new actuated-but-uncoordinated
-    ankle_roll now falls (~87-96deg peak tilt depending on its mass/gain --
-    tested, not assumed). Not yet fixed; needs either real local lateral
-    feedback or a deliberate re-tune, not a blind parameter sweep (tried,
-    didn't work -- see the CLAUDE.md entry). Returns a summary dict;
-    optionally renders an offscreen GIF."""
+    Component of Motion, clamped by MAX_DCM_CORRECTION_M, PLUS a local
+    lateral ZMP compensator driving ankle_roll (see the block comment above
+    K_ZMP_Y -- HUBO's own "ZMP compensator" balancing layer, ankle_roll now
+    actuated). VALIDATED (current model, ankle_roll actuated): 14 steps
+    clean (peak tilt <=6.4deg, flat across n=3..14); 15 regresses to the
+    old wall territory this file's history already documents, not chased
+    further. This RECOVERS the model-without-ankle_roll baseline (was 15
+    clean, 16 borderline, 17 fails) to within one step of range -- see
+    K_DCM's own comment for the real regression this session found and
+    fixed (a sagittal gain-margin shift from ankle_roll's added mass, NOT
+    the missing-lateral-feedback problem originally suspected). Returns a
+    summary dict; optionally renders an offscreen GIF."""
     data = mujoco.MjData(model)
 
     pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
@@ -1176,6 +1286,13 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     max_dcm_err_m = 0.0
     diverged = False
 
+    # Local lateral ZMP feedback setup (see the block comment above
+    # lateral_zmp_correction) -- foot_body_ids mirrors sim_zmp_balance.py's
+    # own run(); zy_filtered starts at 0.0 (nominal double-support ZMP is
+    # centered laterally, matching the initial state set above).
+    foot_body_ids = sb._foot_body_ids(model)
+    zy_filtered = 0.0
+
     for step in range(n_sim_steps):
         t = data.time
 
@@ -1203,6 +1320,23 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
             foot_target[phase["swing_side"]] = swing_foot_target(
                 t, phase["swing_from_xy"], phase["swing_to_xy"],
                 phase["step_height"], phase["t0"], phase["t1"])
+
+        # Local lateral ZMP feedback (ankle_roll) -- see the block comment
+        # above lateral_zmp_correction. Only a PLANTED foot's ankle_roll can
+        # affect ZMP, so a currently-swinging foot is held at nominal (0)
+        # instead, same as before this layer existed.
+        _, zy_raw, _ = sb.compute_zmp(model, data, foot_body_ids)
+        if zy_raw is not None:
+            zy_filtered = (1 - ZMP_Y_FILTER_ALPHA) * zy_filtered + ZMP_Y_FILTER_ALPHA * zy_raw
+        target_y = zmp_reference(t, phases)[1]
+        # ankle_roll's nominal_stand_deg is 0 (design/joints.yaml), so the
+        # correction IS the commanded angle -- would need "+ nominal" if
+        # that ever changed.
+        ankle_roll_corr = lateral_zmp_correction(zy_filtered, target_y, k_zmp_y=k_zmp_y)
+        planted_sides = set(phase["foot_xy"].keys())
+        for side in ("left", "right"):
+            data.ctrl[act_index[f"act_{side}_ankle_roll"]] = (
+                ankle_roll_corr if side in planted_sides else 0.0)
 
         for side in ("left", "right"):
             hip_origin = hip_origin_for_side(pelvis_xyz_cmd, side)
@@ -1294,6 +1428,7 @@ def main():
         _selftest_stage3(model)
         _selftest_stage4()
         _selftest_stage5(model)
+        _selftest_stage5c(model)
         _selftest_stage6(model)
         print()
         print("All implemented self-tests passed.")

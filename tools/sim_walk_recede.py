@@ -86,17 +86,19 @@ compound forward through every subsequent "nominal" footstep instead of
 being a one-off correction, traced by watching the measured DCM's y grow
 monotonically past the stance foot's own y, every step, without bound.
 
-PREVIOUSLY VALIDATED STATE (honest, not the full original goal; model
-without an actuated ankle_roll): 8 steps clean (peak tilt <=6.9deg), 9
-borderline (~20deg), 10+ falls -- MORE MODEST than sim_walk_lipm.py's
-15-step range, a real tradeoff, not a strict improvement in raw step count.
-REGRESSED as of 2026-09-08 when ankle_roll was made temporarily actuated
-(see tools/CLAUDE.md's dated entry below this file's own CLAUDE.md bullet):
-this controller reuses sim_walk_lipm.py's same sagittal-only control loop
-with no lateral feedback, so it falls too (89deg peak tilt, net-backward,
-tested at 6 steps -- well inside what was previously the clean range). Not
-yet fixed; same open paths as sim_walk_lipm.py (real local lateral feedback,
-or a deliberate re-tune) -- see that file's docstring. Per-axis
+VALIDATED STATE (honest, not the full original goal; ankle_roll now
+actuated, see tools/CLAUDE.md's dated 2026-09-08 entries for the full
+regression/fix history): 12 steps clean (peak tilt <=12.4deg), 14 degrades
+(~40deg), 15+ falls -- an IMPROVEMENT over the pre-ankle_roll baseline (was
+8 clean/6.9deg, 9 borderline, 10+ falls), not just a recovery, once this
+file's OWN K_DCM_RECEDE gain was found by direct sweep (-0.70, NOT
+lw.K_DCM's -0.6 -- the two files' stability margins shifted differently
+under the same mass change and needed separately-tuned values, confirmed
+directly rather than assumed to transfer). Also carries lw's local lateral
+ZMP feedback (ankle_roll, see lw.K_ZMP_Y's block comment) -- a real
+addition, though the sagittal K_DCM_RECEDE retune was what actually fixed
+the fall this session found (see that constant's own comment for why: a
+mass-driven margin shift, not a missing-lateral-feedback problem). Per-axis
 footstep-adaptation clamps were
 necessary and are asymmetric for a real geometric reason, not just a
 tuning choice: X has real room (step_length=80mm), but the total lateral
@@ -693,6 +695,21 @@ def _selftest_stage2(model):
 
 # ---- Stage 3: two-timescale MuJoCo drive loop ------------------------------
 
+# K_DCM_RECEDE: this file's own sagittal DCM gain -- deliberately NOT
+# lw.K_DCM, even though both files share the same tracking-control law.
+# Found 2026-09-08 while fixing the ankle_roll-actuation fall (see
+# tools/CLAUDE.md's dated entry and lw.K_DCM's own comment for the shared
+# root cause: ankle_roll's added mass shifted z_c/Tc enough to cross both
+# files' already-narrow K_DCM stability margins): this file's receding-
+# horizon replanning has a DIFFERENT stable band than lw.run_walk's
+# fixed-horizon plan (-0.65 to -0.70 clean here vs. -0.55 to -0.60 there;
+# -0.6, lw's own value, gives 33.5deg at n=6 in THIS file -- swept
+# directly, not assumed to transfer). -0.70 was the cleanest point found:
+# n=4-12 all <=12.4deg (n=10 was previously this file's own falling
+# boundary -- now clean, a genuine improvement, not just a recovery); n=14
+# degrades (39.98deg), n=15+ falls -- not chased further.
+K_DCM_RECEDE = -0.70
+
 # Slow outer loop cadence -- footstep retarget + short-horizon replan. Not
 # every physics tick (dt=0.002s, 500Hz): the DCM/CoM trajectory only needs
 # to be as fresh as the measurement driving it, and re-solving every tick
@@ -769,7 +786,8 @@ def _nominal_next_touchdown(stance_xy, new_swing_side, step_length, step_width):
 
 
 def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
-                     render_every=10, verbose=True, k_dcm=lw.K_DCM,
+                     render_every=10, verbose=True, k_dcm=K_DCM_RECEDE,
+                     k_zmp_y=lw.K_ZMP_Y,
                      replan_period=REPLAN_PERIOD_S, push_at=None, push_force=(0.0, 0.0),
                      push_duration=0.1):
     """Drive the robot with the receding-horizon controller: the first step
@@ -887,6 +905,11 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
     max_dcm_err_m = 0.0
     diverged = False
     steps_completed = 0
+
+    # Local lateral ZMP feedback (ankle_roll) -- see lw.lateral_zmp_correction
+    # and its block comment; mirrors run_walk's own wiring exactly.
+    foot_body_ids = sb._foot_body_ids(model)
+    zy_filtered = 0.0
 
     step = 0
     while True:
@@ -1023,6 +1046,27 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                     t, phase["swing_from_xy"], phase["swing_to_xy"],
                     phase["step_height"], phase["t0"], phase["t1"])
 
+        # Local lateral ZMP feedback (ankle_roll) -- see lw.lateral_zmp_
+        # correction's block comment. target_y comes from whichever plan is
+        # actually driving this tick (short-horizon replan vs. bootstrap),
+        # matching xi_planned/x_com_planned's own source selection above.
+        # Only the STANCE foot is planted during receding-horizon mode (the
+        # swing foot has an in-air z-target); the bootstrap branch mirrors
+        # run_walk's phase["foot_xy"] planted-set logic exactly.
+        _, zy_raw, _ = sb.compute_zmp(model, data, foot_body_ids)
+        if zy_raw is not None:
+            zy_filtered = (1 - lw.ZMP_Y_FILTER_ALPHA) * zy_filtered + lw.ZMP_Y_FILTER_ALPHA * zy_raw
+        if receding_active:
+            target_y = lw.zmp_reference(t_window, phases_h)[1]
+            planted_sides = {stance_side}
+        else:
+            target_y = lw.zmp_reference(t, phases_boot)[1]
+            planted_sides = set(phase["foot_xy"].keys())
+        ankle_roll_corr = lw.lateral_zmp_correction(zy_filtered, target_y, k_zmp_y=k_zmp_y)
+        for side in ("left", "right"):
+            data.ctrl[act_index[f"act_{side}_ankle_roll"]] = (
+                ankle_roll_corr if side in planted_sides else 0.0)
+
         for side in ("left", "right"):
             hip_origin = lw.hip_origin_for_side(pelvis_xyz_cmd, side)
             try:
@@ -1092,9 +1136,10 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
 
 def _selftest_stage3(model):
     # 6 steps: comfortably inside the validated clean range (see run_walk_
-    # recede's docstring -- 8 is the actual clean boundary, 9 borderline,
-    # 10+ fails; 6 leaves margin the same way sim_walk_lipm.py's own gates
-    # test at n=12 with headroom below its own n=16 boundary).
+    # recede's docstring -- 12 is the actual clean boundary as of the
+    # 2026-09-08 K_DCM_RECEDE retune, 14 degrades, 15+ falls; 6 leaves
+    # margin the same way sim_walk_lipm.py's own gates test at n=12 with
+    # headroom below its own n=15 boundary).
     result = run_walk_recede(model, n_steps=6, verbose=False)
     print(f"[stage 3] 6-step receding-horizon run: diverged={result['diverged']}  "
           f"max_tilt={result['max_tilt_deg']:.2f}deg  net_forward={result['net_forward_m']*1000:.1f}mm  "

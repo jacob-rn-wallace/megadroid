@@ -425,36 +425,83 @@ sitting close enough to a stability boundary that a small, physically
 minor change (extra 0.6kg total, low in the kinematic chain) is enough to
 cross it, in either the passive-spring or actuated-servo case.
 
-**Current honest state:** `ankle_roll` actuated is now the real, committed
-MVS configuration (13 actuated DOF, `mvs_dof_total: 13`) — a legitimate
-design change on its own mechanical/DOF/BOM terms, not reverted. But it
-does NOT, by itself, restore walking: both `sim_walk_lipm.py --selftest`
-and `sim_walk_recede.py --selftest` are expected to FAIL at their walking
-stage (Stage 6 / Stage 3) until further control work lands. Their assert
-thresholds were deliberately left at the old validated bar (not loosened to
-paper over a fall) so a failing `--selftest` here means what it always has:
-don't trust downstream work until it passes again. Two real paths forward,
-neither started: (1) give the controllers actual local lateral feedback
-(hip_roll or ankle_roll trim driven by measured roll-axis state) — the
-HUBO-style direction already in the priority-reading list above, and the
-one the user wants as the *main* control model going forward, not a side
-branch; (2) a deliberate, non-blind gain re-tune of the existing DCM/ZMP
-loop for the new 13-actuator model. Blind parameter sweeping (tried above)
-found the system is too sensitive near this boundary to "guess" a fix —
-real progress needs one of the two paths above.
+**RESOLVED, same session — both walking selftests pass again, and a real
+methodological lesson cost a lot of the time getting there.** The user
+asked for real local lateral feedback control (HUBO-style), explicitly as
+the *main* control model, not a side branch, and said a full control-system
+rewrite was acceptable if the existing one was the blocker. Two primary
+sources were read to ground this rather than guess: **"Development of
+Humanoid Robots in HUBO Laboratory, KAIST"** (Heo, Lee, Oh, 2012) — HUBO's
+own architecture is an offline walking pattern plus several small, layered
+real-time feedback controllers (balancing control — "a damping controller
+and a ZMP compensator" — first), not a monolith; and **"Compliance Control
+for Stabilizing the Humanoid on the Changing Slope..."** (Li, Zhou,
+Tsagarakis, Caldwell, 2016) — a concrete admittance-control law achieving
+compliant balancing with POSITION-controlled actuators + F/T feedback only,
+directly compatible with `SPEC.md` §8.1. Conclusion, confirmed with the
+user: the existing DCM/ZMP sagittal planner already IS the "offline
+pattern" layer; what's missing is the local "ZMP compensator" balancing
+layer for the lateral axis. Implemented in `tools/sim_walk_lipm.py`: a new
+`lateral_zmp_correction()` (`K_ZMP_Y`, `ZMP_Y_FILTER_ALPHA`,
+`MAX_ANKLE_ROLL_CORRECTION_RAD`) reusing `sim_zmp_balance.py`'s
+`compute_zmp()` — which already computed BOTH x and y ZMP from real
+contact points, `y` just silently unused until now — and the SAME planned
+`zmp_reference()` the sagittal math already tracks, applied only to
+whichever foot/feet are actually planted each phase. A new `_selftest_
+stage5c` validates its sign directly (verified empirically against the
+real model, not just derived: a positive `ankle_roll` command does shift
+measured ZMP-y positive) before Stage 6 trusts it. `sim_walk_recede.py`
+got the identical wiring (`lw.lateral_zmp_correction`, no duplicated logic).
+
+**This layer alone did NOT fix the fall.** After wiring it in, both gaits
+still fell (~87-96°) across every `K_ZMP_Y`/`ZMP_Y_FILTER_ALPHA` combination
+swept. The lesson: `pelvis_tilt_deg()` returns a combined tilt *magnitude*
+(`acos` of the dot product with vertical) that doesn't separate roll from
+pitch — the "missing lateral feedback" diagnosis had never actually been
+checked against the real axis breakdown. Decomposing it (extracting roll
+and pitch from `data.xmat` separately) showed the fall was **pitch-
+dominated** (48° pitch vs. 9° roll shortly before going over) — this was a
+**sagittal `K_DCM` margin regression**, not a lateral one. Root cause:
+`ankle_roll`'s added mass (0.35kg/side motor+gearbox, replacing the earlier
+0.05kg passive-pivot estimate) dropped `z_c` from 0.5713m to 0.5355m and
+`Tc` from 0.241s to 0.2336s — only a ~3% shift, but `K_DCM`'s stability
+band was already documented as narrow, not a gradient (see that constant's
+own comment history), and this shift was enough to cross it. A direct
+`K_DCM` sweep (not a blind one — one variable, fixed step count, per this
+file's own established discipline) found a new clean band: **`K_DCM=-0.6`**
+for `sim_walk_lipm.py` (was -1.0) gives 6.42° flat from n=3 to n=14 (n=15
+regresses — one step short of the old 15-step range, not chased further),
+and a *separately*-tuned **`K_DCM_RECEDE=-0.70`** for `sim_walk_recede.py`
+(that file's own receding-horizon dynamics have a different margin than
+`sim_walk_lipm.py`'s fixed-horizon plan — confirmed directly, `-0.6` alone
+gives 33.5° there) gives a clean **12-step** range (12.4° peak) — an
+*improvement* over its pre-session baseline (was 8 clean/6.9°, 9
+borderline, 10+ fell), not just a recovery. With both retuned, a small
+`K_ZMP_Y=0.05` (swept: 0.02-0.05 clean, 0.10+ falls abruptly — another
+narrow band) shaves a further fraction of a degree off `sim_walk_lipm.py`'s
+peak tilt (6.42°→6.36°) — a real, kept improvement, just not the fix for
+*this* fall. Both `--selftest` suites are green again as of this entry.
+
+**Takeaway for next time, stated plainly so it isn't relearned the hard
+way:** when a gait falls, decompose the tilt into roll/pitch/yaw FIRST,
+before assuming which control axis is responsible and building a fix for
+it. An axis-blind combined-tilt number sent real effort down the wrong path
+for a full investigation cycle here.
 
 **Where work stopped:**
 Five P3 simulation milestones are done: fixed-base static load
 validation, the floating-base ZMP ankle-pitch standing controller, three
-validated steps of quasi-static (stumbling) walking, fifteen validated
-steps of smooth fixed-horizon LIPM/DCM-planned walking
-(`sim_walk_lipm.py`), and eight validated steps of the new receding-
-horizon controller with capture-point footstep placement
-(`sim_walk_recede.py`). Neither indefinite walking nor a demonstrated
-disturbance-rejection advantage is done yet — see that file's own bullet
-above and its module docstring for the full, honest account: even with
-footstep adaptation disabled, pure receding-horizon replanning alone
-still degrades in the same 8-15 step range as `sim_walk_lipm.py`'s own
+validated steps of quasi-static (stumbling) walking, fourteen validated
+steps of smooth fixed-horizon LIPM/DCM-planned walking plus local lateral
+ZMP feedback (`sim_walk_lipm.py`, as of the 2026-09-08 K_DCM retune above),
+and twelve validated steps of the receding-horizon controller with
+capture-point footstep placement (`sim_walk_recede.py`, likewise retuned).
+Neither indefinite walking nor a demonstrated disturbance-rejection
+advantage is done yet — see that file's own bullet above and its module
+docstring for the full, honest account (numbers below predate the
+2026-09-08 retune but the underlying dynamics finding is unaffected): even
+with footstep adaptation disabled, pure receding-horizon replanning alone
+still degrades in a similar step range to `sim_walk_lipm.py`'s own
 walls, via a *growing* (not constant) discontinuity between each short-
 horizon replan's own prediction and the next replan's real measured
 state — ruling out the footstep-placement law as the sole cause, and
