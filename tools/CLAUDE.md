@@ -51,6 +51,15 @@ reference-material/
                                Humanoid_Robot_on_Uneven_and_Inclined_
                                Floor.pdf (Kim, Park, Oh 2007) -- NOT yet
                                read, terrain rather than push recovery
+                             - Kim, Oh, "Posture Control of a Humanoid
+                               Robot with a Compliant Ankle Joint" (IJHR
+                               2010, HUBO Lab/KAIST) -- the 6th originally-
+                               requested paper, procured via ILL and added
+                               2026-09-09, read in full. NOT about push
+                               recovery (see the dated entry below) --
+                               about preventing stance-foot liftoff caused
+                               by the WALKING PATTERN'S OWN fast control
+                               inputs, via mechanical sole compliance
     KAIST/                 HUBO lineage (KHR-2, KHR-3/HUBO, DRC-HUBO) —
                            this project's own stated existence proof
     Waseda/                 WABIAN lineage — human-like biped walking
@@ -1318,4 +1327,55 @@ walking-quality gain only, not a push-robustness fix. Full selftest
 suite passes (stage 3: `max_tilt=6.32deg`, `net_forward=318.6mm`).
 `preflight.py` clean (SPEC.md/MECH.md timestamp-only diffs discarded,
 no design content change).
+
+### 2026-09-09 — Read the 6th originally-requested paper (Kim & Oh, "Posture Control of a Humanoid Robot with a Compliant Ankle Joint," IJHR 2010): a different problem than push recovery, but a concrete hardware idea worth flagging
+
+Procured via interlibrary loan and added to `reference-material/
+humanoid-robotics/`, read in full (25 pages). This closes out the set of
+6 papers originally requested when the push-recovery literature review
+began.
+
+**What it's actually about — NOT push recovery.** No external
+disturbance/impulse testing anywhere in this paper. The problem it
+solves: during ordinary walking, the stabilization controller's own
+fast/aggressive control inputs (not any external push) can cause the
+stance foot's sole to momentarily lose ground contact and tip — this
+breaks the ZMP/inverted-pendulum assumption every existing controller in
+their survey relies on, independent of any external disturbance. Their
+fix: **add mechanical compliance between the sole and the ankle F/T
+sensor** (a thin urethane layer, reducing torsional stiffness from 1616
+to 1160 Nm/rad, a 72% reduction) specifically to reduce the sole's
+tendency to lift off — with a derived bound on how compliant it can be
+before the robot just falls over under its own weight
+(`1.57mgl < K2 < K2*`, Eq. 5). This is a narrower, more mechanical
+notion of "compliant ankle" than Honda's Model ZMP Control (torso
+momentum) or this session's own `ankle_roll_admittance` (a software
+admittance law on a still-mechanically-rigid joint) — it's literally
+inserting a soft physical layer into the foot stack.
+
+**Control architecture**: two decoupled SISO loops, justified by
+`K_hip >> K_ankle` (hip stiffness ~14.5x the ankle's): a "body balancing
+controller" (PD + low-pass, ankle reference → body inclination, applied
+to the STANCE leg) and a "vibration-reduction controller" (lead
+compensator, hip reference → swing-leg angular velocity, applied to the
+SWING leg). Settling time dropped from 7-8s to 1-1.5s; swing-leg
+oscillation power reduced 70-84%. Validated on walking-in-place, forward
+walking (1.35 km/h), and an 8mm bump — body inclination stayed within
+about ±0.5-1° in all three, ZMP stayed inside the support polygon
+throughout.
+
+**Relevance to megadroid — flagged, not acted on:** `design/joints.yaml`
+already documents `ankle_roll` as temporarily fully actuated (INTERIM),
+with the eventual plan to return it to passive spring-centered once a
+validated spring or real local lateral feedback exists. This paper's
+SOLE-compliance idea (a soft interposer between foot and F/T sensor) is
+a DIFFERENT, smaller-footprint mechanical option than a spring-centered
+ankle_roll joint — it targets foot-liftoff prevention specifically, not
+elastic energy storage or lateral compliance. Genuinely relevant to a
+future P3/hardware design conversation about the F/T sensor mounting
+(`design/sensors.yaml`), but out of scope for the current push-recovery
+software investigation and not implemented here. No connection found to
+this session's lateral push-recovery gap (six mechanisms tried, all
+documented above) — this paper doesn't test or claim anything about
+recovering from external pushes at all.
 
