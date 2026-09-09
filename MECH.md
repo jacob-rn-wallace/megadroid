@@ -8,7 +8,7 @@ authority: derived
 
 **Status:** Authoritative (MVS)  
 **Scope:** Mechanical implementation details for the Minimum Viable System  
-**Last rehydrated:** 2026-09-08
+**Last rehydrated:** 2026-09-09
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -39,7 +39,7 @@ The robot is organized around three primary structural modules:
 - **Right leg module**
 
 Arms are excluded from the MVS. Ankle pitch and ankle roll are both actuated — ankle
-roll's actuation is an interim configuration, not the intended end state (see Section 5.4).
+roll is kept actuated deliberately for the time being (see Section 5.4).
 
 ---
 
@@ -159,7 +159,7 @@ Hip joint output shafts use standardized shafting as defined in `design/geometry
 
 ### 5.4 Lower-Leg Module and Foot Interface (MVS)
 
-The MVS lower-leg module includes actuated ankle pitch and ankle roll (ankle roll's actuation is an interim configuration, not the intended end state), while preserving the mechanical interface for a future reversion to a passive design.
+The MVS lower-leg module includes actuated ankle pitch and ankle roll, kept actuated deliberately for the time being, while preserving the mechanical interface for a possible future reversion to a passive design.
 
 **Module definition:**
 The lower-leg module includes the shank twin rails, ankle pitch joint assembly, ankle roll joint assembly, all bulkheads, and the distal termination bulkhead that serves as the mounting face for the F/T sensor.

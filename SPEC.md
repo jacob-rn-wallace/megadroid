@@ -8,7 +8,7 @@ authority: authoritative
 
 **Status:** Authoritative  
 **Scope:** Minimum Viable System (MVS)  
-**Last rehydrated:** 2026-09-08
+**Last rehydrated:** 2026-09-09
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -62,7 +62,7 @@ authoritative joint model defined in `design/joints.yaml`.
 
 ### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
 
-The robot supports modular lower-leg assemblies. The MVS lower-leg module currently includes both ankle pitch and ankle roll as actuated joints — see Section 5 for why ankle roll's actuation is an interim configuration, not the intended end state. A future module is planned to return ankle roll to a passive, spring-centered joint without requiring redesign of the pelvis, thigh, knee, or control stack.
+The robot supports modular lower-leg assemblies. The MVS lower-leg module includes both ankle pitch and ankle roll as actuated joints — see Section 5 for the reasoning. A passive, spring-centered ankle roll remains a possible future simplification, not a committed plan; the module boundary is kept compatible with it without requiring redesign of the pelvis, thigh, knee, or control stack.
 
 ### 3.3 Out-of-Scope (MVS)
 - Arms: not installed in the MVS.
@@ -84,12 +84,14 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - Foot type (MVS module): Flat sole plate, resting on its bottom face, with a compliant
   sole pad for vertical shock absorption
 - Ankle roll: sits between ankle pitch and the F/T sensor — see `design/joints.yaml`.
-  It is **temporarily actuated** (INTERIM, not the intended end state): simulation
-  found the walking controllers have no lateral (roll-axis) feedback, so a passive
-  spring-centered ankle roll left the foot free to wobble uncontrolled and the gait
-  fell over. It is driven by the same generic position servo as every other joint,
-  pending either a properly validated passive spring or real local lateral feedback
-  in the walking controllers (see `tools/CLAUDE.md`).
+  It is **actuated**, kept that way deliberately for the time being: it was first
+  actuated because a passive spring-centered ankle roll left the foot free to
+  wobble uncontrolled and the gait fell over, and push-recovery investigation
+  since then confirms actuated ankle/hip/torso roll axes are the physically
+  correct authority for lateral disturbance recovery, matching capturability
+  theory and real hardware. It is driven by the same generic position servo as
+  every other joint. A passive, spring-centered ankle roll remains a possible
+  future simplification, not a committed direction (see `tools/CLAUDE.md`).
 - Function:
   - Vertical shock absorption (compliant sole pad)
   - Tolerance of foot placement errors
