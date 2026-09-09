@@ -927,3 +927,93 @@ may be geometrically starved regardless of how far it's allowed to
 travel. Not diagnosed this pass; flagged for the user's call on whether
 to pursue it.
 
+### 2026-09-09 — Stance-geometry asymmetry hypothesis investigated: confirmed as a real bug, but not the lateral bottleneck — the actual cause is growth-factor amplification saturating the footstep clamp on BOTH axes even with zero disturbance
+
+Direct follow-through on the previous entry's flagged candidate: is
+`capture_point_footstep_with_timing`'s lateral solution geometrically
+starved because `HIP_Y=0.05m` lateral half-spacing is tiny relative to
+sagittal step length?
+
+**Confirmed, real bug — `b_nom_y` is structurally zero in two places:**
+- `replan_horizon` (`sim_walk_recede.py:577`) hardcodes
+  `b_nom = np.array([nominal_dcm_offset(step_length, t_ss, omega), 0.0])`
+  — not a formula, a literal constant for the y-component.
+- The footstep-placement law's own `b_nom_y` (lines 1194-95) computes
+  `step_len_y = swing_to_xy_nominal[1] - swing_from_xy[1]`, which is ~0
+  by construction on this straight-line gait (a given foot always
+  returns to the same lateral track, so its own displacement is zero).
+
+Direct numerical ground truth (measuring `xi_y` vs. the stance foot's y
+at the end of each single-support phase, from `solve_dcm_backward`'s own
+output, not the analytic approximation) shows the REAL nominal lateral
+DCM offset from the stance foot at touchdown is **±56.8mm** — larger in
+magnitude than the sagittal offset (52.8mm). Both `b_nom_y` call sites
+are silently discarding this and using 0 instead.
+
+**Tested two fix variants, neither meaningfully changed push-recovery
+outcomes** (diagnostic edits, reverted — not committed):
+- `replan_horizon`'s `b_nom_y`, patched to `±1.1364 * stance_y`
+  (empirically-scaled, sign tried both ways): change within noise
+  (7.83°→7.39-8.46° at 5N, 79.96°→78-80° at 10N+). Root cause found:
+  `replan_horizon`'s terminal-condition correction is
+  `xi_rest + b_nom*exp((t-t_end)/Tc)` — this decays to ~0 by the time
+  you're back at "now" (t_end is several steps ahead, and
+  `exp(-(several step durations)/Tc)` with `Tc≈0.23s` is astronomically
+  small), so this call site's `b_nom_y` essentially never influences the
+  near-term tracked trajectory regardless of its value. A real bug, but
+  provably inert for disturbance recovery.
+- The footstep-placement law's `step_len_y`, patched to
+  `swing_to_xy_nominal[1] - stance_xy[1]` (stance-relative, matching the
+  periodicity condition's actual intent): also no meaningful lateral
+  improvement (10N+ still falls at 76-92°), and a mild sagittal cost at
+  15-20N (26.08°/15.06° transient tilt vs. 6.95°/6.83° before — did not
+  cause a fall, but worth noting).
+
+**What actually explains the whole picture — found by instrumenting the
+RAW (pre-clamp) footstep correction during NOMINAL, undisturbed
+walking:** the clamp is saturating almost every single retarget tick,
+on BOTH axes, with zero push applied. Direct trace (`n_steps=10`, no
+push): Y clamp saturated 12/12 ticks, X clamp saturated 8/12 ticks, with
+raw (unclamped) demands of 40-125mm against the 30-50mm clamps — 2-4x
+over, during ordinary walking with no disturbance at all.
+
+This matches a limitation already flagged in-code, written earlier this
+session, in `MIN_RETARGET_FRACTION`'s own comment: `capture_point_
+footstep`'s `growth = exp(omega*(T_touchdown-t_now))` term is largest
+early in a swing and amplifies any DCM measurement noise/lag into an
+oversized correction (that comment documented >3x amplification within
+the first third of a step, specifically flagged for the y-axis at the
+time). What's new this pass: direct instrumentation shows this isn't a
+rare/edge-case effect confined to y — it's the PERMANENT, ALWAYS-ON
+operating mode of the footstep-adaptation mechanism on both axes. The
+clamps aren't a safety net for genuine disturbances; they're the actual
+controller (the raw target saturates the clamp virtually every tick, so
+the applied correction is "nominal ± clamp value, in whichever direction
+the noise-amplified raw target points" almost all the time).
+
+**Conclusion:** this reframes every finding from the previous
+implementation entry. Y-clamp sweeps, the K_ADM sweep, the timing-clamp
+sweep, and this pass's two `b_nom_y` fix attempts all failed to move
+lateral push recovery for the SAME underlying reason — they're all
+downstream of (or masked by) a mechanism that's already saturating from
+growth-factor noise amplification, unrelated to any actual measured
+disturbance. A real push's marginal contribution to `xi_y` doesn't
+meaningfully change which direction an already-saturated clamp points,
+because the baseline signal is already dominated by this amplification
+effect. The stance-geometry asymmetry hypothesis and the `b_nom_y=0`
+bugs are real and worth fixing on their own merits (they're a
+structural inaccuracy in the reference trajectory), but they are NOT
+the lateral push-recovery bottleneck.
+
+**Not yet done — the real next step, in progress:** address the
+growth-factor amplification itself, e.g. tightening
+`MIN_RETARGET_FRACTION` further, damping/capping the `growth` term
+directly inside `capture_point_footstep`/`capture_point_footstep_with_
+timing` rather than only clamping its output, or reconsidering
+`REPLAN_PERIOD_S`'s interaction with retarget timing. Whatever fix is
+tried must be validated against BOTH the nominal-walk saturation-rate
+diagnostic introduced this pass (raw-vs-clamped tick counts, not just
+final tilt) and the full push battery, since "stops saturating during
+nominal walking" and "recovers from a real push" are different claims
+that need separate verification.
+
