@@ -893,15 +893,28 @@ X0_FILTER_ALPHA = 0.02
 # line, undisturbed) touchdown -- bounds the real risk (flagged by the
 # design-review pass) of a genuine disturbance adapting the target outside
 # leg_ik's reachable workspace. Separate per-axis values, NOT a single
-# combined magnitude -- found necessary by direct sweep, not anticipated in
-# the plan: X has real room (step_length=80mm), but the total lateral
-# stance half-width is only 50mm (HIP_Y), so a symmetric +-50mm clamp on Y
-# alone can place a foot AT the centerline or past the opposite foot's own
-# track, geometrically collapsing the base of support -- confirmed directly
-# (Y-only adaptation fell over at every clamp value >=20mm, and cleanly
-# passed at 10-15mm; X-only was fine at 50mm throughout).
+# combined magnitude.
+#
+# RE-SWEPT 2026-09-09 against the push battery, not just nominal-walk
+# quality (see tools/CLAUDE.md's push-recovery/capturability entry for
+# why this session's earlier local mechanisms weren't the right fix, and
+# that footstep reach was underexploited relative to real leg capability
+# -- L1=L2=0.3m, WALK_AX_MARGIN_M=0.15 in sim_walk_lipm.py). The margins
+# found here do NOT match that kinematic budget, and do NOT match the
+# earlier (pre-K_DCM-retune, pre-admittance) characterization on this line
+# before this edit -- another confirmation that these margins are properties
+# of the WHOLE current control stack, not the leg alone, and don't transfer
+# across configuration changes. A joint 2D grid (not independent per-axis
+# sweeps -- X and Y were found to interact, sometimes destructively: X=0.07
+# alone and Y=0.03 alone were each individually clean, but combined they
+# fell at n=12) found X=0.05 (unchanged) with Y=0.03 (loosened 3x from
+# 0.01) clean through n=18 (n=25 regresses -- a real, accepted tradeoff,
+# not free), and a genuine push-recovery improvement: 4 of 5 sagittal
+# pushes (5/10/15/20N) now survive cleanly, where the original 0.01 Y
+# clamp survived none reliably. Lateral pushes remain mostly unrecovered
+# -- see tools/CLAUDE.md's dated entry for the honest full result.
 MAX_FOOTSTEP_ADAPT_X_M = 0.05
-MAX_FOOTSTEP_ADAPT_Y_M = 0.01
+MAX_FOOTSTEP_ADAPT_Y_M = 0.03   # was 0.01 -- see MAX_FOOTSTEP_ADAPT_X_M's comment above
 
 # How far capture_point_footstep_with_timing's adapted touchdown TIME may
 # drift from the nominal T (mirrors the X/Y position clamps above, same

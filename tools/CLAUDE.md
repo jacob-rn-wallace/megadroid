@@ -835,3 +835,95 @@ remaining sections (walking-task footstep calculator details, Section
 this — flagged for the user's call, matching this session's standing
 practice throughout.
 
+### 2026-09-09 — Capture-point-lite implementation: sagittal push recovery substantially fixed by loosening the footstep clamp; lateral remains unresolved, and it isn't the footstep clamp, K_ADM, or the timing clamp
+
+Direct follow-through on the synthesis entry immediately above, scoped via
+Plan Mode as "fix the two real gaps, not add a sixth mechanism": (1) the
+footstep-adaptation clamps in `sim_walk_recede.py` were tuned this
+session for nominal-walk smoothness, never re-checked against the push
+battery, and were far tighter than the leg's real reach
+(`sim_walk_lipm.py`'s own `WALK_AX_MARGIN_M=0.15`); (2) `ankle_roll_
+admittance`'s gain (`K_ADM`) was tuned the same way, never swept against
+a real disturbance. Explicit non-goals carried over unchanged: no torso/
+hip strategy, no full polygon capture-region (Part 2 Algorithm 1) —
+`capture_point_footstep_with_timing`'s existing closed-form target is the
+right-sized fit for megadroid's flat-ground, straight-line gait.
+
+**What was actually tried:**
+- Footstep clamp: NOT loosened via a precomputed analytic reach budget
+  (the plan's initial idea) — direct testing showed `WALK_AX_MARGIN_M`
+  does not transfer as a clamp value here, and independent per-axis
+  sweeps missed a real destructive X/Y interaction (X=0.07 alone and
+  Y=0.03 alone were each individually clean; combined, they fell at
+  n=12). A joint 2D grid search (not independent per-axis sweeps) found
+  `MAX_FOOTSTEP_ADAPT_X_M=0.05` (unchanged) / `MAX_FOOTSTEP_ADAPT_Y_M=
+  0.03` (loosened 3x from 0.01) as the best validated combination for
+  the *current* control stack — see that constant's own code comment in
+  `sim_walk_recede.py` for the full margin-non-transferability writeup.
+- `K_ADM` (in `sim_walk_lipm.py`, shared by both walk files): swept
+  500-4000 against both nominal walking and the full lateral push
+  battery with the new clamps active. Confirmed to have essentially zero
+  effect on lateral push-recovery outcomes (5N always ~7-8°, 10N+ always
+  falls ~78-95° regardless of value) — ruled out as the lateral
+  bottleneck. Left at its existing default (2500), which sits
+  comfortably inside the ~1500-3000 nominal-walking safe range this
+  sweep confirmed.
+- `MAX_FOOTSTEP_ADAPT_T_S` (timing clamp, per the plan's item 1): swept
+  0.10-0.30s (well above the ~0.36s single-support duration's own scale)
+  against the lateral push battery. **Never once bound** — identical
+  results (both nominal-walk tilt and all five push outcomes, to the
+  first decimal) at every value tested. Left unchanged at 0.1s: there is
+  no evidence it needs to move, and no cost to leaving it as-is.
+- A further Y-clamp sweep past 0.03 (0.025, 0.035, 0.045, 0.05) was also
+  run specifically against the lateral push battery, not just nominal
+  walking: 0.03 remains the clear best on both axes; 0.025 is worse on
+  both; ≥0.035 breaks nominal walking outright (91-98° at n=18) for no
+  lateral improvement. Confirms 0.03 is a genuine local optimum, not an
+  undershoot.
+
+**Result — full 5/10/15/20/30N battery, mid-walk (`push_at=2.0s`),
+final validated config (X=0.05, Y=0.03, T_S=0.1, K_ADM=2500 — all
+defaults except Y):**
+
+| axis | 5N | 10N | 15N | 20N | 30N |
+|---|---|---|---|---|---|
+| sagittal (X push) | 6.47° | 6.36° | 6.95° | 6.83° | **88.36° (falls)** |
+| lateral (Y push) | 7.83° | **79.96° (falls)** | **93.18° (falls)** | **80.35° (falls)** | **79.41° (falls)** |
+
+Sagittal: 4 of 5 forces now recover cleanly (was ~0-1 of 5 before this
+session's footstep-clamp work), only 30N still falls. Lateral: only 5N
+recovers; everything from 10N up still falls, unchanged from before this
+implementation pass — the Y-clamp loosening and K_ADM re-sweep produced
+real sagittal gains but no lateral gain at all.
+
+A 15N six-timing-point sweep (0.8s-3.8s) confirms this isn't a phase-
+alignment artifact in either direction: lateral falls at 5 of 6 timing
+points (only 3.2s survives, 8.61°) — genuinely unrecovered, not a lucky/
+unlucky sample. Sagittal also falls at the two earliest timing points
+(0.8s, 1.4s: 77-81°) and only recovers from 2.0s onward — the "4 of 5"
+sagittal result above is specific to mid-walk timing, not uniform across
+the whole gait cycle; early-cycle sagittal robustness is a real,
+separate gap not investigated this pass.
+
+Full selftest suite (`sim_walk_recede.py --selftest`) passes clean
+against this final config, stage 3 showing `max_tilt=6.36deg` at the
+6-step receding-horizon check. `preflight.py` clean (only derived-doc
+rehydration timestamps changed, no design/content diff).
+
+**Conclusion, matching the plan's own explicit instruction not to add a
+sixth ad-hoc mechanism if this doesn't clear the tested range:** this is
+the honest result, not a stopping point chosen for convenience. Three
+independent levers (footstep Y-clamp, K_ADM, timing clamp) were each
+directly swept against the lateral push battery specifically and none of
+them move lateral push recovery at all, which rules out "just loosen the
+existing clamps further" as the fix. The likely remaining candidate,
+not yet tested: megadroid's stance geometry is strongly asymmetric
+between axes (`HIP_Y=0.05m` lateral half-spacing vs. ~80mm sagittal step
+length — flagged earlier this session as the reason X/Y ever needed
+separate clamps at all), so the capture-point TARGET calculation itself
+may be structurally different in authority between axes, independent of
+any clamp — e.g. `capture_point_footstep_with_timing`'s lateral solution
+may be geometrically starved regardless of how far it's allowed to
+travel. Not diagnosed this pass; flagged for the user's call on whether
+to pursue it.
+
