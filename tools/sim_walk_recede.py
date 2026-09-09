@@ -107,7 +107,38 @@ tools/CLAUDE.md's dated entry for the full push-test data (falls at
 nearly every tested magnitude and timing, with or without this layer).
 Nominal-trajectory smoothness and disturbance robustness are different
 properties; this session improved the former significantly, not the
-latter. Per-axis footstep-adaptation clamps were
+latter.
+
+A FOURTH mechanism was then tried for the same disturbance-rejection goal:
+capture_point_footstep_with_timing, a closed-form joint position+timing
+footstep adaptation (Khadiv et al.'s QP, via Roux 2024, already cited
+above -- the one piece of the formal method this file's own position-only
+capture_point_footstep deliberately left out, per that function's
+docstring). Genuinely tuned, not guessed (ALPHA2_TIMING/ALPHA3_DCM_OFFSET
+swept directly): it REGRESSES nominal walking (18-step clean range vs. 25)
+for ZERO push-recovery improvement -- re-ran the full 5-30N battery, still
+falls on nearly every case, even with the adaptation clamps loosened
+3-4x (ruling out "the clamps are too tight" too). See ALPHA2_TIMING's own
+comment for the root-cause trace and tools/CLAUDE.md's dated entry for
+the complete data. Defaulted to INERT (alpha2/alpha3 high enough to
+exactly reduce to the old position-only behavior -- verified, not
+assumed) rather than shipped active, since there's no validated benefit
+to offset the regression. The machinery itself (the closed-form QP
+solve) is real and tested (_selftest_stage0's part (d)), available for
+future work with different alpha values, just not proven useful yet.
+
+FOUR different local mechanisms have now been tried this session for
+genuine disturbance rejection at this force range -- a passive spring, a
+contact-geometry ZMP compensator, F/T-sensor admittance control, and
+footstep position+timing adaptation -- and all four hit the same wall.
+This is no longer a "maybe the mechanism was wrong" situation; something
+more fundamental is happening at these force magnitudes for this robot's
+mass/scale. Real candidates, none started: a genuine MULTI-step recovery
+sequence (every mechanism tried adapts only the SINGLE upcoming
+footstep); or the LIPM point-mass model mismatch this file's own
+"Known limitation" section below already flagged as the leading
+unconfirmed suspect for the pre-existing growing-discontinuity wall,
+which may be the same underlying cause. Per-axis footstep-adaptation clamps were
 necessary and are asymmetric for a real geometric reason, not just a
 tuning choice: X has real room (step_length=80mm), but the total lateral
 stance half-width is only 50mm (HIP_Y), so a naive symmetric clamp on Y
@@ -244,6 +275,85 @@ def capture_point_footstep(p0_xy, xi_measured_xy, b_nom_xy, omega, t_now, T_touc
     b_nom = np.asarray(b_nom_xy, dtype=float)
     growth = math.exp(omega * (T_touchdown - t_now))
     return p0 + (xi - p0) * growth - b_nom
+
+
+def capture_point_footstep_with_timing(p0_xy, xi_measured_xy, b_nom_xy, omega, t_now,
+                                        T_nominal, l_nom, w_nom,
+                                        alpha1=1e3, alpha2=1.0, alpha3=1e6):
+    """Joint footstep POSITION + TIMING adaptation -- the actual formal
+    method capture_point_footstep above deliberately left incomplete (see
+    that function's own docstring: "that would silently let step TIMING
+    adapt too, which is out of scope"). Closed-form solution to Khadiv et
+    al.'s constrained multi-objective QP (Roux 2024 thesis, Eq. 2-16,
+    printed pages 9-10, already cited in this codebase) for the case where
+    no inequality constraint is active -- the paper's own Fig. 6
+    sensitivity analysis shows this is the normal regime, not an
+    assumption made here.
+
+    Reparametrized from the paper's absolute-time Gamma(T) = e^(w0*T) to a
+    REMAINING-time growth factor g = e^(w0*(T - t_now)) -- an invertible
+    rescaling by the known constant e^(-w0*t_now) that changes nothing
+    structurally but ties directly to capture_point_footstep's own
+    already-validated `growth` variable above, making the reduction check
+    in _selftest_stage0_timing exact rather than approximate.
+
+    Minimizes (their Eq. 3a, in this reparametrization):
+        alpha1*||p_T - p0 - (l_nom, w_nom)||^2
+      + alpha2*(g - g_nom)^2
+      + alpha3*||b_T - b_nom||^2
+    subject to (their Eq. 5a/5b): p_T + b_T - p0 - (xi_measured - p0)*g = 0
+    (one such constraint per axis). Lagrange stationarity conditions
+    eliminate p_T and b_T analytically in terms of two multipliers
+    (lambda_x, lambda_y), reducing to a 2x2 linear system solved via
+    np.linalg.solve -- no QP/scipy dependency, matching this codebase's
+    existing preference for hand-derived closed forms (solve_dcm_backward's
+    RK4, sim_walk_lipm.py's K_DCM history) over external solvers.
+
+    Returns (p_new_xy, T_new, b_new_xy) -- b_new_xy (the OPTIMIZED DCM
+    offset, not the nominal target b_nom_xy fed in) is returned mainly so
+    the equality constraint can be checked directly against what the
+    solver actually computed, not the target it was pulled toward; callers
+    that only need the footstep target use p_new_xy/T_new. Reduces EXACTLY
+    to capture_point_footstep's formula (p0 + (xi-p0)*g_nom - b_nom, at
+    g=g_nom) in the joint limit alpha2->inf AND alpha3->inf (both b_T and
+    timing forced to nominal, not alpha2 alone -- verified directly in
+    _selftest_stage0's part (d), not just derived, per this project's own
+    standing discipline)."""
+    p0 = np.asarray(p0_xy, dtype=float)
+    xi = np.asarray(xi_measured_xy, dtype=float)
+    b_nom = np.asarray(b_nom_xy, dtype=float)
+    a = xi - p0                      # (Ax, Ay) in the derivation
+    g_nom = math.exp(omega * (T_nominal - t_now))
+    nom_disp = np.array([l_nom, w_nom])
+
+    inv2a1 = 1.0 / (2.0 * alpha1)
+    inv2a3 = 1.0 / (2.0 * alpha3)
+    inv2a2 = 1.0 / (2.0 * alpha2)
+
+    diag_base = inv2a1 + inv2a3
+    M = np.array([
+        [diag_base + a[0] * a[0] * inv2a2, a[0] * a[1] * inv2a2],
+        [a[0] * a[1] * inv2a2, diag_base + a[1] * a[1] * inv2a2],
+    ])
+    rhs = a * g_nom - nom_disp - b_nom
+    lam = np.linalg.solve(M, rhs)
+
+    p_new = p0 + nom_disp + lam * inv2a1
+    b_new = b_nom + lam * inv2a3
+    g = g_nom - float(np.dot(a, lam)) * inv2a2
+
+    # g = e^(w0*(T-t_now)) must be positive (T_new is only defined for a
+    # FUTURE touchdown); a large/noisy DCM error can otherwise drive it
+    # non-positive transiently (unconstrained QP, no lower bound on g
+    # solved for). The caller clips T_new's DELTA from nominal anyway
+    # (MAX_FOOTSTEP_ADAPT_T_S), so falling back to nominal timing here is
+    # safe, not a silent wrong answer -- it just declines to adapt timing
+    # for this one tick rather than raising on a transient measurement.
+    if g <= 0.0:
+        T_new = T_nominal
+    else:
+        T_new = t_now + math.log(g) / omega
+    return p_new, T_new, b_new
 
 
 # ---- Stage 1: swing retarget with velocity-continuous re-blending ---------
@@ -559,6 +669,46 @@ def _selftest_stage0(model):
     assert err_c < 1e-9, f"full footstep-placement round-trip failed: {err_c}"
     print("[stage 0c] OK")
 
+    # (d) capture_point_footstep_with_timing: two checks on the NEW joint
+    # solver before it drives anything real.
+    p0_d = np.array([0.24, -0.05])
+    xi_d = np.array([0.29, -0.07])
+    t_now_d = 2.0
+    T_nom_d = 2.6
+    l_nom_d, w_nom_d = 0.08, 0.0
+    b_nom_d = np.array([0.01, -0.002])
+
+    # (d1) Constraint satisfaction: whatever (p_new, T_new) the closed form
+    # returns must satisfy the ORIGINAL equality constraint exactly (this
+    # is what the Lagrange elimination is supposed to guarantee algebraically
+    # -- checking it numerically catches a transcription error in the KKT
+    # solve, not just in the derivation on paper).
+    p_new_d, T_new_d, b_new_d = capture_point_footstep_with_timing(
+        p0_d, xi_d, b_nom_d, omega, t_now_d, T_nom_d, l_nom_d, w_nom_d)
+    g_d = math.exp(omega * (T_new_d - t_now_d))
+    constraint_resid = p_new_d + b_new_d - p0_d - (xi_d - p0_d) * g_d
+    resid_norm = float(np.linalg.norm(constraint_resid))
+    print(f"[stage 0d] constraint satisfaction: resid={resid_norm:.3e} (expect <1e-9)")
+    assert resid_norm < 1e-9, f"joint solve violates its own equality constraint: {resid_norm}"
+
+    # (d2) Reduction check: in the joint limit alpha2->inf AND alpha3->inf
+    # (BOTH, not alpha2 alone -- alpha3->inf is what forces b_T to b_nom,
+    # which is what capture_point_footstep silently assumes by never
+    # treating b_T as free), this must recover capture_point_footstep's
+    # own already-validated output exactly. Large-but-finite stand-ins for
+    # infinity; tolerance reflects that, not machine precision.
+    p_old = capture_point_footstep(p0_d, xi_d, b_nom_d, omega, t_now_d, T_nom_d)
+    p_new_lim, T_new_lim, _ = capture_point_footstep_with_timing(
+        p0_d, xi_d, b_nom_d, omega, t_now_d, T_nom_d, l_nom_d, w_nom_d,
+        alpha1=1e3, alpha2=1e12, alpha3=1e12)
+    pos_err = float(np.linalg.norm(p_new_lim - p_old))
+    t_err = abs(T_new_lim - T_nom_d)
+    print(f"[stage 0d] reduction to capture_point_footstep: pos_err={pos_err*1e6:.3f}um, "
+          f"T_err={t_err*1e6:.3f}us (expect both ~0)")
+    assert pos_err < 1e-6, f"joint solver does not reduce to old formula in position: {pos_err}"
+    assert t_err < 1e-6, f"joint solver does not reduce to nominal timing: {t_err}"
+    print("[stage 0d] OK")
+
 
 def _selftest_stage1():
     # Construct an original (un-retargeted) swing segment, sample its real
@@ -753,6 +903,42 @@ X0_FILTER_ALPHA = 0.02
 MAX_FOOTSTEP_ADAPT_X_M = 0.05
 MAX_FOOTSTEP_ADAPT_Y_M = 0.01
 
+# How far capture_point_footstep_with_timing's adapted touchdown TIME may
+# drift from the nominal T (mirrors the X/Y position clamps above, same
+# rationale: bound a genuine disturbance's adaptation to something
+# leg_ik/the swing trajectory can still reach). Placeholder pending the
+# same direct-sweep discipline as every other margin this session -- see
+# run_walk_recede's own tuning pass, not guessed from t_ss alone.
+MAX_FOOTSTEP_ADAPT_T_S = 0.1
+
+# capture_point_footstep_with_timing's three cost weights (position vs.
+# timing vs. DCM-offset/balance tracking -- see that function's docstring
+# for the QP itself). Khadiv et al.'s own Table 1 nominal values (Roux
+# 2024 thesis, printed page 11 -- 1e3, 1, 1e6) do NOT transfer to
+# megadroid's scale: swept directly and found to regress nominal walking
+# (18-step clean range vs. the previous 25, falling by n=20) while giving
+# ZERO push-recovery benefit (re-ran this session's full 5-30N push
+# battery -- still falls on nearly every case, same as every other
+# mechanism tried). Root cause traced to ALPHA3 specifically (not
+# ALPHA2): the DCM-offset term needs to stay negligible even when the
+# tracking error `a` grows large during any real disturbance, which
+# needed alpha3 >= ~1e8 just for BASIC long-horizon stability -- and even
+# at alpha2/alpha3 pushed far past that threshold (1e4-1e8), genuine
+# timing/DCM-offset freedom bought no disturbance-rejection improvement,
+# with or without also loosening MAX_FOOTSTEP_ADAPT_X_M/Y_M/T_S 3-4x
+# (ruling out "the safety clamps are too tight" as the explanation too).
+#
+# DEFAULTED TO INERT, not deleted: alpha2/alpha3 set high enough that
+# capture_point_footstep_with_timing reduces to capture_point_footstep's
+# exact prior behavior (verified: 25-step/9.99deg baseline restored
+# exactly) -- the machinery is real, tested, and available (pass smaller
+# values to experiment), but there's no validated reason to ship it
+# active given a real regression and no compensating benefit. See
+# tools/CLAUDE.md's dated entry for the full investigation.
+ALPHA1_FOOTSTEP = 1e3
+ALPHA2_TIMING = 1e20
+ALPHA3_DCM_OFFSET = 1e20
+
 # Freeze retargeting once a swing crosses this fraction of its nominal
 # duration -- avoids a still-moving touchdown target fighting the foot's
 # final approach into ground contact right when an UnreachableTarget would
@@ -900,7 +1086,7 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
     # Current-swing bookkeeping (populated at switchover and every commit).
     stance_side = stance_xy = swing_side = swing_from_xy = None
     swing_to_xy_nominal = swing_to_xy_current = None
-    t_swing_start = T_touchdown = None
+    t_swing_start = T_touchdown = T_touchdown_nominal = None
     retarget_active = False
     retarget_pos0 = retarget_vel0 = None
     retarget_t0 = retarget_tau = None
@@ -952,6 +1138,12 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
             swing_to_xy_current = swing_to_xy_nominal
             t_swing_start = switchover_phase["t0"]
             T_touchdown = switchover_phase["t1"]
+            T_touchdown_nominal = T_touchdown   # fixed reference for this swing's
+                                                 # timing adaptation -- see the QP
+                                                 # wiring below, mirrors how position
+                                                 # adaptation always deltas from
+                                                 # swing_to_xy_nominal, never from a
+                                                 # possibly-already-adapted value
             foot_positions = {stance_side: stance_xy, swing_side: swing_from_xy}
             retarget_active = False
             t_next_replan = t
@@ -988,14 +1180,22 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                 step_len_y = swing_to_xy_nominal[1] - swing_from_xy[1]
                 b_nom = (nominal_dcm_offset(step_len_x, t_ss, omega),
                          nominal_dcm_offset(step_len_y, t_ss, omega))
-                p_new = capture_point_footstep(stance_xy, xi_filtered, b_nom,
-                                                omega, t, T_touchdown)
+                p_new, T_new, _ = capture_point_footstep_with_timing(
+                    stance_xy, xi_filtered, b_nom, omega, t, T_touchdown_nominal,
+                    step_len_x, step_len_y, alpha1=ALPHA1_FOOTSTEP,
+                    alpha2=ALPHA2_TIMING, alpha3=ALPHA3_DCM_OFFSET)
                 raw_delta = np.asarray(p_new) - np.asarray(swing_to_xy_nominal)
                 delta = np.array([
                     np.clip(raw_delta[0], -MAX_FOOTSTEP_ADAPT_X_M, MAX_FOOTSTEP_ADAPT_X_M),
                     np.clip(raw_delta[1], -MAX_FOOTSTEP_ADAPT_Y_M, MAX_FOOTSTEP_ADAPT_Y_M),
                 ])
                 swing_to_xy_new = tuple(np.asarray(swing_to_xy_nominal) + delta)
+                # Timing delta clamped the same way, relative to the swing's fixed
+                # nominal touchdown (T_touchdown_nominal), never compounded across
+                # successive retarget ticks -- mirrors the position clamp above.
+                T_delta = np.clip(T_new - T_touchdown_nominal,
+                                   -MAX_FOOTSTEP_ADAPT_T_S, MAX_FOOTSTEP_ADAPT_T_S)
+                T_touchdown_new = T_touchdown_nominal + T_delta
 
                 if retarget_active:
                     tau_now = t - retarget_t0
@@ -1017,7 +1217,11 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                 retarget_active = True
                 retarget_pos0, retarget_vel0 = pos_now, vel_now
                 retarget_t0 = t
-                retarget_tau = T_touchdown - t
+                # New segment targets the NEW touchdown time -- T_touchdown itself
+                # is updated below (after this block), once, for downstream code
+                # (replan_horizon's `remaining`, the swing-completion check) to see.
+                retarget_tau = T_touchdown_new - t
+                T_touchdown = T_touchdown_new
 
             remaining = T_touchdown - t
             phases_h, ts_h, xi_h, x_com_h, t_end_h = replan_horizon(
@@ -1124,6 +1328,7 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
             swing_to_xy_nominal = swing_to_xy_current = new_swing_to_nominal
             t_swing_start = T_touchdown
             T_touchdown = t_swing_start + t_ss
+            T_touchdown_nominal = T_touchdown   # fresh fixed reference for the new swing
             retarget_active = False
             t_next_replan = data.time
 

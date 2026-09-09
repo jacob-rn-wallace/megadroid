@@ -569,6 +569,84 @@ approximation of it via contact-geometry ZMP inference. Implemented:
   scope" per its own docstring) or a hip strategy — not another local
   ankle_roll mechanism. Neither started.
 
+**2026-09-08 (continued again) — footstep position+timing adaptation
+tried; fourth mechanism, same wall, decisive negative result.** User
+directed pursuing footstep timing adaptation next, since `sim_walk_recede.
+py`'s existing `capture_point_footstep` explicitly left it "out of scope"
+per its own docstring, and it's the one piece of the formal method
+(Khadiv et al., via Roux 2024's thesis, already cited in this file) not
+yet tried.
+
+Implemented `capture_point_footstep_with_timing` in `sim_walk_recede.py`:
+a closed-form (no scipy/QP dependency, matching this codebase's existing
+hand-derived-math style) solution to the paper's constrained multi-
+objective QP (position `p_T`, timing via `Γ(T)=e^(ω0T)`, DCM offset `b_T`)
+for the unconstrained case, reparametrized from the paper's absolute-time
+`Γ(T)` to a remaining-time `g=e^(ω0(T-t_now))` that ties directly to
+`capture_point_footstep`'s own already-validated `growth` variable.
+Reduces to two Lagrange multipliers via a 2×2 `np.linalg.solve` — trivial,
+verified to machine precision against the constraint equations directly
+(`_selftest_stage0`'s new part (d)), and verified to reduce EXACTLY to
+`capture_point_footstep`'s own output in the joint limit
+`alpha2,alpha3->inf` (not `alpha2` alone — a real derivation subtlety:
+`alpha3->inf` is what forces the optimized DCM offset to nominal, which
+`capture_point_footstep` does implicitly by never treating it as free).
+
+**A real debugging trail, not a clean first try:** wiring it in at the
+paper's own Table 1 weights (`1e3, 1, 1e6`) immediately regressed nominal
+walking (falls at n=8+, was clean to 25). Sweeping `alpha2` alone up to
+`1e20` didn't fix it. Instrumenting the actual run (not just the isolated
+selftest) found the real cause: even at `alpha2=1e20`, the raw timing
+delta was exactly 0.0 every call (ruling out timing drift entirely) —
+but `p_new` itself differed from `capture_point_footstep`'s output by up
+to 1.8mm during the run, growing as the walk degraded. The reduction
+proof requires BOTH `alpha2->inf` AND `alpha3->inf`; `alpha3=1e6` (the
+paper's own value) wasn't "infinite enough" once the DCM tracking error
+`a` grew during any real stumble, since the `a²/(2·alpha3)` term in the
+solve stops being negligible. Root cause: `alpha3` needed to reach
+`~1e8` just for basic long-horizon stability — three orders of magnitude
+past the paper's own nominal value, this robot's scale/dynamics simply
+don't share Bolt's. This is exactly the "test the real model, don't trust
+a limit that looks right on paper" lesson from `ankle_roll_admittance`'s
+own sign trap earlier this session, recurring in a new form.
+
+With `alpha3` corrected to a genuinely safe value (`1e10`), **even the
+most permissive `alpha2` that preserved SHORT-horizon (n=12) nominal
+walking still regressed the LONG-horizon record** (18 clean steps vs. the
+previous 25) — there is no middle ground here where timing adaptation is
+both meaningfully active and long-horizon-safe. And at that setting, the
+actual point of the exercise — re-running this session's full 5-30N push
+battery (both axes, mid-walk) — showed **zero improvement**: falls on
+nearly every case, statistically indistinguishable from every other
+mechanism tried. Loosening the footstep/timing adaptation clamps 3-4x
+(ruling out "the safety margins are too conservative to matter") changed
+nothing either.
+
+**Decision: shipped INERT, not deleted.** `ALPHA2_TIMING`/
+`ALPHA3_DCM_OFFSET` defaulted to `1e20` — verified to exactly reduce to
+the prior (25-step/9.99°) behavior, so nothing regresses from this
+change landing. The solver itself is real, correct, and tested; it's
+simply not been shown to earn its keep active. See `ALPHA2_TIMING`'s own
+comment and `sim_walk_recede.py`'s module docstring for the full trace.
+
+**Four mechanisms, four dead ends, one real conclusion:** a passive
+spring, a contact-geometry ZMP compensator, F/T-sensor admittance
+control, and now footstep position+timing adaptation have ALL been tried
+this session for genuine disturbance rejection at the 5-30N pelvis-push
+range, and all four hit the identical wall. This stops being "wrong
+mechanism" and starts being informative: something more fundamental than
+any single local correction is happening at these force magnitudes for
+this robot's mass/scale (9.6kg, ~80mm nominal step, ~100mm stance width).
+Two real remaining candidates, neither started: (1) a genuine MULTI-STEP
+recovery sequence — every mechanism tried this session only ever adapts
+the SINGLE upcoming footstep, never plans a sequence of steps to actually
+arrest a large disturbance the way a real human recovery stumble does;
+(2) the pre-existing (before this session) LIPM point-mass model-mismatch
+hypothesis in this file's own "Known limitation" section below — never
+confirmed, flagged again here since a systematic model/reality gap could
+plausibly explain why every LOCAL correction mechanism looks equally
+insufficient regardless of which joint or footstep parameter it adjusts.
+
 **Where work stopped:**
 Five P3 simulation milestones are done: fixed-base static load
 validation, the floating-base ZMP ankle-pitch standing controller, three
