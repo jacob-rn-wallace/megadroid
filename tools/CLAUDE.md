@@ -1427,3 +1427,43 @@ the user wants to resume it.
 
 `preflight.py` clean: rehydration + all validators pass.
 
+### 2026-09-09 — Tested whether the small step_length (80mm, a visible "shuffle" in the demo GIF) contributes to the ~30-step falling boundary: the opposite is true — larger steps fail almost immediately, not later
+
+User's question, prompted by watching the rendered GIF: is the small,
+shuffling step size part of why nominal walking can't continue
+indefinitely (falls at n=31-32)? Tested directly rather than reasoned
+about — `step_length` is hardcoded (`0.08`) inside `run_walk_recede`,
+not exposed as a parameter; added a temporary env-var override,
+diagnostic only, reverted after.
+
+**Result: larger steps make it dramatically WORSE, immediately, not
+better.** Baseline (0.08m) reproduces exactly: clean through n=30
+(6.32°), degrading at n=31 (18.53°), fallen by n=32. `step_length=0.10`
+(just 20mm more) already falls within the first 10 steps
+(`max_tilt=56.75°`, `net_forward=-216mm` — walking backward). 0.12m and
+0.15m are worse still (92.03°, 85.78°, both walking backward
+immediately). Monotonic in the wrong direction — no step_length larger
+than the current 80mm was found to survive even 10 steps.
+
+**Conclusion:** this rules out the natural hypothesis that more,
+smaller steps accumulate error faster than fewer, larger ones would.
+The opposite holds here: the whole control stack (`K_DCM_RECEDE=-0.77`,
+the `b_nom_x`/`b_nom_y` magnitude scaling, `MAX_FOOTSTEP_ADAPT_X_M`/
+`_Y_M`, `WALK_AX_MARGIN_M`'s reach-margin/crouch-depth pairing) was
+tuned — every single session's worth of narrow, non-monotonic,
+non-transferable safe zones already documented above — SPECIFICALLY
+around `step_length=0.08m`. It isn't an arbitrary conservative choice
+being left on the table; it's a load-bearing tuning assumption baked
+into multiple interacting constants. The small "shuffle" appearance and
+the eventual ~30-step fall are most likely both SYMPTOMS of the same
+underlying narrowly-tuned, fragile control architecture (matching this
+session's now well-established pattern), not a direct cause-and-effect
+relationship where bigger steps would extend stability. A genuinely
+larger, more natural step length remains possible in principle, but
+would need its own from-scratch coordinated re-tune of the same
+constants re-tuned earlier today for `b_nom_y`/`K_DCM_RECEDE` — not a
+quick change, and not attempted here.
+
+`tools/sim_walk_recede.py` is unmodified (diagnostic override reverted,
+confirmed via `git diff`).
+
