@@ -33,8 +33,8 @@
               <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00008750 0.00008750 0.00008750"/>
               <geom name="left_ankle_geom" type="sphere" size="0.025" rgba="0.8 0.4 0.1 1"/>
               <body name="left_ankle_roll" pos="0 0 0">
-                <joint name="left_ankle_roll" type="hinge" axis="1 0 0" range="-0.261799 0.261799" stiffness="15.0000" springref="0.000000"/>
-                <inertial mass="0.05" pos="0.000000 0.000000 0.000000" diaginertia="0.00000800 0.00000800 0.00000800"/>
+                <joint name="left_ankle_roll" type="hinge" axis="1 0 0" range="-0.261799 0.261799"/>
+                <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00005600 0.00005600 0.00005600"/>
                 <geom name="left_ankle_roll_geom" type="sphere" size="0.020" rgba="0.8 0.4 0.1 1"/>
                 <body name="left_foot" pos="0.05 0 -0.0800">
                   <inertial mass="0.15" pos="0.000000 0.000000 0.000000" diaginertia="0.00010000 0.00030125 0.00036125"/>
@@ -62,8 +62,8 @@
               <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00008750 0.00008750 0.00008750"/>
               <geom name="right_ankle_geom" type="sphere" size="0.025" rgba="0.8 0.4 0.1 1"/>
               <body name="right_ankle_roll" pos="0 0 0">
-                <joint name="right_ankle_roll" type="hinge" axis="1 0 0" range="-0.261799 0.261799" stiffness="15.0000" springref="0.000000"/>
-                <inertial mass="0.05" pos="0.000000 0.000000 0.000000" diaginertia="0.00000800 0.00000800 0.00000800"/>
+                <joint name="right_ankle_roll" type="hinge" axis="1 0 0" range="-0.261799 0.261799"/>
+                <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00005600 0.00005600 0.00005600"/>
                 <geom name="right_ankle_roll_geom" type="sphere" size="0.020" rgba="0.8 0.4 0.1 1"/>
                 <body name="right_foot" pos="0.05 0 -0.0800">
                   <inertial mass="0.15" pos="0.000000 0.000000 0.000000" diaginertia="0.00010000 0.00030125 0.00036125"/>
@@ -107,6 +107,8 @@
     <position name="act_right_knee_pitch" joint="right_knee_pitch" kp="150" ctrlrange="0.000000 2.443461"/>
     <position name="act_left_ankle_pitch" joint="left_ankle_pitch" kp="150" ctrlrange="-0.523599 0.523599"/>
     <position name="act_right_ankle_pitch" joint="right_ankle_pitch" kp="150" ctrlrange="-0.523599 0.523599"/>
+    <position name="act_left_ankle_roll" joint="left_ankle_roll" kp="150" ctrlrange="-0.261799 0.261799"/>
+    <position name="act_right_ankle_roll" joint="right_ankle_roll" kp="150" ctrlrange="-0.261799 0.261799"/>
     <position name="act_torso_pitch" joint="torso_pitch" kp="150" ctrlrange="-0.523599 0.523599"/>
     <position name="act_torso_roll" joint="torso_roll" kp="150" ctrlrange="-0.349066 0.349066"/>
     <position name="act_torso_yaw" joint="torso_yaw" kp="150" ctrlrange="-0.785398 0.785398"/>

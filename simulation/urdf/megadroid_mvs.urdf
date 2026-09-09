@@ -189,8 +189,8 @@
     </visual>
     <inertial>
       <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
-      <mass value="0.05"/>
-      <inertia ixx="0.00000800" iyy="0.00000800" izz="0.00000800" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+      <mass value="0.35"/>
+      <inertia ixx="0.00005600" iyy="0.00005600" izz="0.00005600" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
     </inertial>
   </link>
   <joint name="left_ankle_roll_joint" type="revolute">
@@ -325,8 +325,8 @@
     </visual>
     <inertial>
       <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
-      <mass value="0.05"/>
-      <inertia ixx="0.00000800" iyy="0.00000800" izz="0.00000800" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+      <mass value="0.35"/>
+      <inertia ixx="0.00005600" iyy="0.00005600" izz="0.00005600" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
     </inertial>
   </link>
   <joint name="right_ankle_roll_joint" type="revolute">
