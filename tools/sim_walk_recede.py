@@ -862,11 +862,21 @@ def _selftest_stage2(model):
 # horizon replanning has a DIFFERENT stable band than lw.run_walk's
 # fixed-horizon plan (-0.65 to -0.70 clean here vs. -0.55 to -0.60 there;
 # -0.6, lw's own value, gives 33.5deg at n=6 in THIS file -- swept
-# directly, not assumed to transfer). -0.70 was the cleanest point found:
-# n=4-12 all <=12.4deg (n=10 was previously this file's own falling
-# boundary -- now clean, a genuine improvement, not just a recovery); n=14
-# degrades (39.98deg), n=15+ falls -- not chased further.
-K_DCM_RECEDE = -0.70
+# directly, not assumed to transfer). -0.70 was the cleanest point found
+# THEN: n=4-12 all <=12.4deg (n=10 was previously this file's own falling
+# boundary -- now clean); n=14 degrades (39.98deg), n=15+ falls.
+#
+# RE-SWEPT 2026-09-09 jointly with the b_nom_y fix above and
+# MAX_FOOTSTEP_ADAPT_Y_M (a coordinated grid, not a single-variable sweep
+# -- see tools/CLAUDE.md's dated entry): -0.70 is no longer the best
+# point once b_nom_y is nonzero. -0.77 is a sharp, narrow optimum (-0.76
+# gives 9.33/10.67deg, -0.78 gives 6.31/8.78/9.32deg growing slightly,
+# -0.79 already falls at n=25) -- genuinely flat 6.32deg through n=30
+# with zero growth, a real improvement over the old -0.70 baseline's
+# n=25 fall. Verified this does NOT regress sagittal push recovery
+# (4/5 forces still survive). Does NOT fix lateral push recovery --
+# kept for the nominal-walking-quality gain alone.
+K_DCM_RECEDE = -0.77
 
 # Slow outer loop cadence -- footstep retarget + short-horizon replan. Not
 # every physics tick (dt=0.002s, 500Hz): the DCM/CoM trajectory only needs
@@ -1191,8 +1201,22 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
             if MIN_RETARGET_FRACTION <= swing_progress < COMMIT_FRACTION:
                 step_len_x = swing_to_xy_nominal[0] - swing_from_xy[0]
                 step_len_y = swing_to_xy_nominal[1] - swing_from_xy[1]
+                # b_nom_y: NOT nominal_dcm_offset(step_len_y, ...) -- that's
+                # ~0 by construction on this straight-line gait (see tools/
+                # CLAUDE.md's 2026-09-09 b_nom_y entries for the full
+                # derivation of why, and why 4 different attempts to
+                # "correctly" fix its magnitude/reference point all failed
+                # or regressed). This fixed -0.2x scale, found via a
+                # coordinated grid search jointly with K_DCM_RECEDE and
+                # MAX_FOOTSTEP_ADAPT_Y_M (not swept alone), gives a real,
+                # non-regressive nominal-walking improvement (flat 6.32deg
+                # through n=30, vs. falling at n=25 before) with sagittal
+                # push recovery preserved. It does NOT fix lateral push
+                # recovery (still only 5N survives, same ceiling as before)
+                # -- kept for the walking-quality gain alone, not claimed to
+                # solve push-robustness.
                 b_nom = (nominal_dcm_offset(step_len_x, t_ss, omega),
-                         nominal_dcm_offset(step_len_y, t_ss, omega))
+                         -0.2 * swing_to_xy_nominal[1])
                 p_new, T_new, _ = capture_point_footstep_with_timing(
                     stance_xy, xi_filtered, b_nom, omega, t, T_touchdown_nominal,
                     step_len_x, step_len_y, alpha1=ALPHA1_FOOTSTEP,

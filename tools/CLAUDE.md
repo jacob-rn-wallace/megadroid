@@ -1299,3 +1299,23 @@ flagged for the user's call on whether to keep it as a standalone
 nominal-walking-quality improvement despite not achieving its original
 lateral-push-recovery goal.
 
+### 2026-09-09 — Nominal-walking-quality improvement from the coordinated re-tune KEPT and committed (user's call)
+
+User's call: keep the `k=-0.2`/`K_DCM_RECEDE=-0.77`/`Y_clamp=0.03`
+configuration from the entry above, since it's a real, non-regressive
+improvement even though it doesn't fix lateral push recovery. Committed
+in `sim_walk_recede.py`: `b_nom = (nominal_dcm_offset(step_len_x, ...),
+-0.2 * swing_to_xy_nominal[1])` (was `nominal_dcm_offset(step_len_y,
+...)`, ~0 by construction) and `K_DCM_RECEDE = -0.77` (was `-0.70`);
+`MAX_FOOTSTEP_ADAPT_Y_M` unchanged at `0.03`. Re-verified against the
+committed file (not just runtime overrides) before committing: nominal
+walking flat at `6.32°` through n=30 (was falling at n=25); sagittal
+push battery unchanged from the diagnostic numbers (4/5 forces survive,
+10N/20N show larger transients — 17.58°/11.02° — than the pre-re-tune
+baseline's ~6-7° but don't fall); lateral push battery unchanged (only
+5N survives, 10N+ still fall at 80-92°) — confirms this is a
+walking-quality gain only, not a push-robustness fix. Full selftest
+suite passes (stage 3: `max_tilt=6.32deg`, `net_forward=318.6mm`).
+`preflight.py` clean (SPEC.md/MECH.md timestamp-only diffs discarded,
+no design content change).
+
