@@ -38,8 +38,8 @@ The robot is organized around three primary structural modules:
 - **Left leg module**
 - **Right leg module**
 
-Arms are excluded from the MVS. Ankle pitch is actuated; ankle roll is installed as a
-passive, spring-centered joint (see Section 5.4).
+Arms are excluded from the MVS. Ankle pitch and ankle roll are both actuated — ankle
+roll's actuation is an interim configuration, not the intended end state (see Section 5.4).
 
 ---
 
@@ -47,19 +47,18 @@ passive, spring-centered joint (see Section 5.4).
 
 ### 3.1 Degrees of Freedom per Leg
 
-Each leg implements **four actuated DOF**:
+Each leg implements **five actuated DOF**:
 - Hip pitch
 - Hip roll
 - Knee pitch
 - Ankle pitch
+- Ankle roll — **interim actuation** (see Section 5.4): temporarily motorized rather
+  than passive/spring-centered, pending walking-controller work. See
+  `design/joints.yaml` (`ankle_roll`).
 
-Each leg additionally implements **one passive DOF**:
-- Ankle roll — spring-centered, not motorized; provides lateral ground-conformance
-  compliance. See `design/joints.yaml` (`ankle_roll`).
-
-The lower-leg module's knee-to-module mechanical interface is preserved, so future
-variants may still upgrade ankle roll to an actuated joint without redesigning the
-pelvis, thigh, knee, or ankle pitch assembly.
+The lower-leg module's knee-to-module mechanical interface is preserved, so a future
+variant can return ankle roll to a passive, spring-centered joint without redesigning
+the pelvis, thigh, knee, or ankle pitch assembly.
 
 ---
 
@@ -102,16 +101,17 @@ The lower-leg module consists of the complete shank structural assembly from the
 1. Knee output interface
 2. Shank twin rails (length defined in `design/geometry.yaml`)
 3. Ankle pitch joint assembly
-4. Ankle roll joint assembly (passive, spring-centered)
+4. Ankle roll joint assembly (actuated — interim, see Section 5.4)
 5. Distal termination bulkhead
 6. F/T sensor (mounted to distal bulkhead face)
 7. Foot sole plate (MVS)
 
 **Key characteristics:**
 - Modular: swappable at knee interface without redesigning pelvis, thigh, or knee
-- MVS configuration: includes actuated ankle pitch and a passive, spring-centered ankle roll
-- Future configurations: may upgrade ankle roll to an actuated joint while preserving
-  the knee-to-module interface
+- MVS configuration: includes actuated ankle pitch and ankle roll (ankle roll's
+  actuation is interim — see Section 5.4)
+- Future configurations: planned to return ankle roll to a passive, spring-centered
+  joint while preserving the knee-to-module interface
 - Contains knee pitch output shaft
 - Distal bulkhead provides mounting face for end-of-limb F/T sensor
 
@@ -129,10 +129,10 @@ All joints must:
 
 Motor-mounted encoders are explicitly disallowed.
 
-This applies to passive joints as well as actuated ones — even though nothing drives
-ankle roll, its true output angle is still needed for accurate foot-orientation and
-ZMP calculations, so it carries the same joint-mounted absolute encoder as every
-actuated joint.
+This applies uniformly regardless of whether a given joint is actuated in the current
+configuration — true output angle is needed for accurate foot-orientation and ZMP
+calculations either way, so every joint carries the same joint-mounted absolute
+encoder.
 
 ### 5.2 Hip Joint Assembly
 
@@ -159,7 +159,7 @@ Hip joint output shafts use standardized shafting as defined in `design/geometry
 
 ### 5.4 Lower-Leg Module and Foot Interface (MVS)
 
-The MVS lower-leg module includes actuated ankle pitch and a passive ankle roll, while preserving the mechanical interface for future upgrades.
+The MVS lower-leg module includes actuated ankle pitch and ankle roll (ankle roll's actuation is an interim configuration, not the intended end state), while preserving the mechanical interface for a future reversion to a passive design.
 
 **Module definition:**
 The lower-leg module includes the shank twin rails, ankle pitch joint assembly, ankle roll joint assembly, all bulkheads, and the distal termination bulkhead that serves as the mounting face for the F/T sensor.
@@ -170,11 +170,15 @@ The lower-leg module includes the shank twin rails, ankle pitch joint assembly, 
 
 **MVS configuration:**
 - Ankle pitch actuated
-- Ankle roll installed, passive (spring-centered) — see `design/joints.yaml`
+- Ankle roll actuated — **interim** (see `design/joints.yaml`): simulation found the
+  walking controllers have no lateral feedback, so a passive spring-centered ankle
+  roll left the gait unstable; temporarily motorized pending either a validated
+  spring or real local lateral feedback (`tools/CLAUDE.md`)
 - Flat sole foot plate mounted distal to F/T sensor
 
 **Future compatibility:**
-A future lower-leg module may upgrade ankle roll to an actuated joint while preserving:
+A future lower-leg module is planned to return ankle roll to a passive,
+spring-centered joint while preserving:
 - Same knee-to-module mechanical interface
 - Same joint encoder strategy
 - Compatibility with pelvis, thigh, and knee assemblies

@@ -50,21 +50,21 @@ authoritative joint model defined in `design/joints.yaml`.
 - Hip Roll (roll)
 - Knee Pitch (pitch)
 - Ankle Pitch (pitch)
+- Ankle Roll (roll)
 
 **Torso:**
 - Torso Pitch (pitch)
 - Torso Roll (roll)
 - Torso Yaw (yaw)
 
-**Total actuated DOF:** **11**
+**Total actuated DOF:** **13**
 <!-- END AUTO-GENERATED: DOF -->
 
 ### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
 
-The robot supports modular lower-leg assemblies. The MVS lower-leg module includes actuated ankle pitch and a passive ankle roll. A future module may upgrade ankle roll to an actuated joint and add alternate feet without requiring redesign of the pelvis, thigh, knee, or control stack.
+The robot supports modular lower-leg assemblies. The MVS lower-leg module currently includes both ankle pitch and ankle roll as actuated joints — see Section 5 for why ankle roll's actuation is an interim configuration, not the intended end state. A future module is planned to return ankle roll to a passive, spring-centered joint without requiring redesign of the pelvis, thigh, knee, or control stack.
 
-### 3.3 Non-Actuated / Out-of-Scope (MVS)
-- Ankle roll: installed in the MVS as a passive, spring-centered joint (not actuated — no motor drives it). See Section 5.
+### 3.3 Out-of-Scope (MVS)
 - Arms: not installed in the MVS.
 
 ---
@@ -82,15 +82,16 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 ## 5. Feet and Ground Contact
 
 - Foot type (MVS module): Flat sole plate, resting on its bottom face, with a compliant
-  sole pad for vertical shock absorption (the plate itself is rigid — compliance comes
-  from the pad and from ankle roll below, not from the plate's own shape)
-- Ankle roll: a passive, spring-centered joint (not motorized) sits between ankle pitch
-  and the F/T sensor — see `design/joints.yaml` and Section 3.3. It provides lateral
-  ground-conformance compliance, allowing the sole to tilt to match small terrain
-  irregularities without requiring active control.
+  sole pad for vertical shock absorption
+- Ankle roll: sits between ankle pitch and the F/T sensor — see `design/joints.yaml`.
+  It is **temporarily actuated** (INTERIM, not the intended end state): simulation
+  found the walking controllers have no lateral (roll-axis) feedback, so a passive
+  spring-centered ankle roll left the foot free to wobble uncontrolled and the gait
+  fell over. It is driven by the same generic position servo as every other joint,
+  pending either a properly validated passive spring or real local lateral feedback
+  in the walking controllers (see `tools/CLAUDE.md`).
 - Function:
   - Vertical shock absorption (compliant sole pad)
-  - Lateral ground-conformance compliance (ankle roll)
   - Tolerance of foot placement errors
 - End-of-limb sensing (6-DOF force/torque sensor per foot): see Section 7.3
 
@@ -102,7 +103,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - All actuators use **775 brushed DC motors**
 - Nominal motor voltage: **24 V**
 - Motors mounted as proximally as possible to minimize distal inertia
-- Total motor count (MVS): **11**
+- Total motor count (MVS): **13**
 
 ### 6.2 Gear Reduction
 - Standardized gearbox classes reused across joints
@@ -210,7 +211,6 @@ Stability and hardware protection are enforced through:
 ## 12. Explicit Exclusions (MVS)
 
 The following are intentionally excluded from the MVS:
-- Ankle roll (MVS includes ankle pitch; ankle roll is post-MVS)
 - Arms or manipulators
 - Torque or impedance control
 - Motor current telemetry
