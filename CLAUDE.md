@@ -92,12 +92,16 @@ rendered docs didn't even source it from YAML; both were fixed together.)
 
 ### Key Design Constants (do not change without an explicit design revision)
 
-- **MVS DOF:** 13 actuated joints. `ankle_roll` is **temporarily actuated**
-  (INTERIM, not the intended end state — see `tools/CLAUDE.md`): simulation
-  found the walking controllers have no lateral feedback, so a passive
-  spring-centered ankle_roll left the gait unstable. Plan is to return it to
-  passive spring-centered once either a validated spring or real local
-  lateral feedback exists.
+- **MVS DOF:** 13 actuated joints, all 13 deliberately kept actuated for the
+  time being (2026-09-09 decision — see `tools/CLAUDE.md`). `ankle_roll` in
+  particular was first actuated because simulation found the walking
+  controllers have no lateral feedback and a passive spring-centered
+  ankle_roll left the gait unstable; a session of lateral push-recovery
+  investigation since then confirms actuated ankle/hip/torso roll axes are
+  the physically correct authority for this (capturability theory, real
+  hardware), even though the control software doesn't yet exploit it well.
+  A passive spring-centered ankle_roll remains a possible future
+  simplification, not a committed plan.
   - Per leg (×2): `hip_pitch`, `hip_roll`, `knee_pitch`, `ankle_pitch`, `ankle_roll`
   - Torso: `torso_pitch`, `torso_roll`, `torso_yaw`
 - **Actuator:** 775 brushed DC motors, 24V

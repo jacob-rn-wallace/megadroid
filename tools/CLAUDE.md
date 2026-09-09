@@ -1379,3 +1379,51 @@ this session's lateral push-recovery gap (six mechanisms tried, all
 documented above) — this paper doesn't test or claim anything about
 recovering from external pushes at all.
 
+### 2026-09-09 — Design decision: keep all 13 joints actuated for the time being, defer the ankle_roll-to-passive reversion plan
+
+User's explicit design decision, prompted by a question about whether
+lateral push recovery is realistically achievable given `ankle_roll`'s
+actuation was documented as "INTERIM, not the intended end state." The
+answer worked through: `hip_roll`, `ankle_roll`, and `torso_roll` are
+all currently actuated, so the six failed lateral push-recovery
+mechanisms this session were never blocked by missing hardware
+authority — the footstep-placement law's `b_nom_y` reference-point bug
+is. But the DESIGN's stated long-term intent (return `ankle_roll` to
+passive spring-centered) would, if acted on, remove the dominant
+push-recovery lever (CoP modulation within the foot, +166% capture-
+region area per Koolen/Pratt Part 1 vs. only +34% more from a reaction
+mass/torso strategy) — real hardware (M2V2, Sarcos Primus) both keep an
+actuated ankle for exactly this reason. Given that, the user chose to
+defer the passive-ankle_roll plan rather than commit to it, keeping all
+joints actuated for now.
+
+**What changed (design-intent documentation only — no DOF, actuation
+value, or numeric design constant actually changed; every joint was
+already `actuated: true`):**
+- `design/joints.yaml`'s `ankle_roll` comment: removed "INTERIM, not the
+  intended end state" framing; documents the decision and its
+  capturability-theory/real-hardware rationale.
+- `design/geometry.yaml`: `lower_leg_module.compatibility.future` →
+  renamed `possible_future_direction` (was never read by any generator
+  or validator — confirmed by grep before renaming), reframed from "planned
+  reversion" to "deferred, not scheduled."
+- `design/mass.yaml`: comment wording only (mass ESTIMATES were already
+  correct — they already used the actuated-hardware figure, not the
+  smaller passive-hardware one).
+- `templates/SPEC.md.j2`, `templates/MECH.md.j2`: prose updated to match
+  (rehydrated into `SPEC.md`/`MECH.md` — diffs are prose-only, no
+  numeric/DOF content changed, confirmed before committing).
+- Root `CLAUDE.md`'s "Key Design Constants" section: same reframing.
+
+**Explicitly NOT changed:** DOF count (still 13), any joint's `actuated`
+value (all were already `true`), any limit/mass/geometry number. This is
+a design-INTENT change (what the plan is for `ankle_roll`'s future),
+not a design-VALUE change. The underlying software problem (lateral
+push recovery still doesn't work, `b_nom_y` bug documented in the
+entries above) is unaffected by this decision — actuation was never the
+blocker, and keeping it actuated for the time being doesn't fix the
+control-software gap by itself. That remains open, flagged for whenever
+the user wants to resume it.
+
+`preflight.py` clean: rehydration + all validators pass.
+
