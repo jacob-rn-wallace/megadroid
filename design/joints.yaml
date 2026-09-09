@@ -12,7 +12,7 @@
 #   and for joints that aren't installed at all.
 
 meta:
-  mvs_dof_total: 11    # declared expected total; validator checks counted value against this
+  mvs_dof_total: 13    # declared expected total; validator checks counted value against this
 
 joints:
   hip_pitch:
@@ -74,26 +74,29 @@ joints:
     type: revolute
     axis: roll
     location: ankle
-    actuated: false
-    passive_type: spring_centered   # not motorized; a torsion spring returns the
-                                     # joint toward nominal_stand_deg when unloaded,
-                                     # giving lateral ground-conformance compliance
-                                     # without active control. First (and currently
-                                     # only) passive joint in this file.
-    spring_stiffness_nm_per_rad: 15.0   # PLACEHOLDER — nominal, no spring has been
-                                         # physically selected/engineered yet.
-                                         # Pending verification during P6 physical
-                                         # build (same convention as mass.yaml's
-                                         # "nominal — pending verification" status).
+    actuated: true    # INTERIM — temporarily motorized, not the intended end state.
+                       # Simulation found the walking controllers have no lateral
+                       # (roll-axis) feedback at all; leaving ankle_roll passive with
+                       # any physically plausible spring stiffness let it wobble
+                       # uncontrolled and both gaits fell (~90+deg tilt). Actuating
+                       # it did NOT fix this on its own -- a generic position servo
+                       # holding a constant target turns out to be just as unstable
+                       # as an equivalent passive spring (both gaits still fall,
+                       # ~87-96deg), and the result is sensitively dependent on
+                       # ankle_roll's own mass, not just its stiffness/gain. This is
+                       # now the real, committed MVS configuration on mechanical/DOF/
+                       # BOM terms, but walking is NOT yet restored by it. Real fix
+                       # needs local lateral feedback (closer to HUBO's architecture)
+                       # or a deliberate control re-tune -- see tools/CLAUDE.md's
+                       # dated entry for the full experiment and data.
     variants:
-      MVS: true      # installed (but not motorized) in the MVS
+      MVS: true
       FULL: true
     angle_reference: foot_flat
     limits_deg:
-      min: -15   # PLACEHOLDER — nominal passive range only; no physical spring or
-      max: 15    # hard-stop design exists yet. Revise once the physical mechanism
-                 # is dimensioned (P6).
-    nominal_stand_deg: 0   # spring rest/center angle
+      min: -15   # PLACEHOLDER — nominal range estimate, not yet engineered.
+      max: 15    # Revise once the physical mechanism is dimensioned (P6).
+    nominal_stand_deg: 0
 
   torso_pitch:
     type: revolute

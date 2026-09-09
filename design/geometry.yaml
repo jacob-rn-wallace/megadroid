@@ -35,10 +35,10 @@ anthropometrics:
   shin_length_mm: 300           # STRUCTURAL — knee↔ankle kinematic reach
   ankle_to_sole_offset_mm: 80   # NOMINAL_MVS — flat sole plate MVS module (not a "ball
                                  # foot"; see SPEC.md Sec 5 and MECH.md Sec 4.3/5.4). This
-                                 # value predates the passive ankle_roll gimbal now inserted
-                                 # into foot_stack between the ankle pitch assembly and the
-                                 # F/T sensor; it may need a small increase to accommodate
-                                 # that gimbal's stack height once physically dimensioned.
+                                 # value predates the ankle_roll gimbal now inserted into
+                                 # foot_stack between the ankle pitch assembly and the F/T
+                                 # sensor; it may need a small increase to accommodate that
+                                 # gimbal's stack height once physically dimensioned.
                                  # Placeholder, not yet revised, pending P6 physical build.
   notes: >
     Segment lengths are center-to-center joint distances and exclude joint
@@ -82,9 +82,15 @@ lower_leg_module:
     compatibility:
       mvs:
         ankle_pitch_actuated: true      # MVS ankle pitch is actuated
-        ankle_roll_actuated: false      # installed (passive, spring-centered), not motorized
+        ankle_roll_actuated: true       # INTERIM — temporarily motorized; see
+                                         # design/joints.yaml's ankle_roll entry and
+                                         # tools/CLAUDE.md for why and the exit plan
       future:
-        ankle_roll_actuated: true       # FULL variant may upgrade ankle_roll to a motorized joint
+        ankle_roll_actuated: false      # planned reversion to a passive spring-
+                                         # centered joint, pending either a spring
+                                         # stiffness shown not to defeat its own
+                                         # compliance purpose or real local lateral
+                                         # feedback in the walking controllers
 
   definition: >
     The lower-leg module is the complete shank structural assembly from the knee
@@ -99,10 +105,11 @@ lower_leg_module:
 
   notes: >
     Lower-leg modules are swappable without redesigning pelvis, thigh, or knee
-    assemblies. The MVS module includes an actuated ankle pitch and a passive,
-    spring-centered ankle roll; future variants may upgrade ankle roll to an
-    actuated joint while preserving the knee-to-module mechanical standard and
-    encoder strategy.
+    assemblies. The MVS module currently includes two actuated ankle joints
+    (pitch and, temporarily, roll — see compatibility.mvs above); a future
+    variant is planned to return ankle roll to a passive, spring-centered
+    joint while preserving the knee-to-module mechanical standard and encoder
+    strategy.
 
 foot_stack:
   order:
@@ -117,9 +124,9 @@ foot_stack:
   notes: >
     Stack order and constraints ensure force/torque sensors are not subjected
     to parasitic bending moments. Both ankle axes (pitch, bundled inside
-    lower_leg_module, and the passive roll axis listed explicitly here) sit
-    proximal to the F/T sensor, so the sensor measures net force/moment after
-    both. The F/T sensor's own form factor and mounting spec are defined in
+    lower_leg_module, and the roll axis listed explicitly here) sit proximal
+    to the F/T sensor, so the sensor measures net force/moment after both.
+    The F/T sensor's own form factor and mounting spec are defined in
     design/sensors.yaml, not here.
 
 torso:

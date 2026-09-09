@@ -4,12 +4,14 @@
 # Do not duplicate these values in markdown documents.
 
 meta:
-  total_estimate_kg: 9.0
+  total_estimate_kg: 9.6
   basis: >
     775 DC motor assembly ~200g each (motor + gearbox + mounting hardware).
     Structural framing: 300mm twin-rail segments with bulkheads, ~150-250g each.
-    Torso: 3 motor assemblies + upper frame + battery + electronics. Passive
-    ankle_roll pivot hardware (no motor): ~50g each side.
+    Torso: 3 motor assemblies + upper frame + battery + electronics. ankle_roll
+    is temporarily actuated (design/joints.yaml) and uses the same motor
+    assembly estimate as ankle_pitch, not the smaller passive-hardware figure
+    this file used before that change.
   status: "nominal — pending verification during P6 physical build"
 
 bodies:
@@ -18,9 +20,9 @@ bodies:
   thigh: 0.9              # per side; hip pitch motor + gearbox + 300mm twin-rail frame
   shin: 0.7               # per side; knee pitch motor + gearbox + 300mm twin-rail frame
   ankle: 0.35             # per side; ankle pitch motor + gearbox
-  ankle_roll: 0.05        # per side; passive spring-centered roll pivot hardware
-                           # (bracket + torsion spring + bearings, no motor/gearbox) —
-                           # nominal, pending verification during P6 physical build
+  ankle_roll: 0.35         # per side; temporarily actuated (design/joints.yaml) —
+                           # motor + gearbox, same estimate as ankle pitch. Was
+                           # 0.05 (passive pivot hardware only) before that change.
   foot: 0.15              # per side; foot plate only
   torso_pitch_link: 0.3   # torso pitch intermediate link
   torso_roll_link: 0.3    # torso roll intermediate link

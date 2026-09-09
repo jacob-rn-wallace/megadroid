@@ -41,15 +41,15 @@ end_of_limb_sensing:
     load_path_requirement: >
       Ground reaction forces must pass axially through the sensor before
       entering the lower-leg module structure. This applies regardless of how
-      many joints sit proximal to the sensor in the foot_stack — now including
-      the passive ankle_roll pivot (design/joints.yaml) as well as ankle
-      pitch — the constraint is on the sensor's own mounting, not on which
-      mechanism delivers force to it.
+      many joints sit proximal to the sensor in the foot_stack — including
+      ankle_roll (design/joints.yaml) as well as ankle pitch — the constraint
+      is on the sensor's own mounting, not on which mechanism delivers force
+      to it.
     notes: >
       The F/T sensor is mounted directly to the distal termination bulkhead
       of the lower-leg module, immediately proximal to the foot/end-effector
-      and distal to both ankle axes (actuated pitch and passive, spring-
-      centered roll — see design/joints.yaml's ankle_roll entry). Its
+      and distal to both ankle axes (pitch and roll — see design/joints.yaml's
+      ankle_roll entry, including its current interim actuation status). Its
       geometry is treated as a fixed structural envelope and must be fully
       accommodated by the shank design. Physical stack order and the
       no-bending-moment load-path constraint are defined in
