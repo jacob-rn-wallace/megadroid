@@ -1467,3 +1467,94 @@ quick change, and not attempted here.
 `tools/sim_walk_recede.py` is unmodified (diagnostic override reverted,
 confirmed via `git diff`).
 
+### 2026-09-09 — Real CoP-repulsion law implemented, tested, and reverted: the literature's actual ankle mechanism has genuinely zero measurable effect on the 10N lateral push, once implemented correctly
+
+User raised a fair, important concern mid-session: most of the b_nom_y
+work above was narrow iteration on one lever, not genuinely different
+ideas, and "proven techniques" (M2V2, Sarcos Primus) hadn't obviously
+reproduced here. Investigating that concern directly turned up a real
+gap: `ankle_roll_admittance` is a torque-feedback admittance law
+(`correction = (tau_measured - tau_target)/k_adm`, `tau_target`
+hardcoded to `0.0` everywhere) — NOT the CoP-repulsion law those real
+robots actually used (Koolen/Pratt Part 2, Eq. 2:
+`r~_CoP,des = r_ic + k_ic*(r_ic - r_ic,des)`, a target computed directly
+from capture-point error). Despite being cited as the target mechanism
+multiple times this session, it had never actually been wired in.
+
+**Implemented it for real, Plan Mode approved.** The capture-point error
+was already computed every tick (`dcm_err = xi_filtered - xi_planned`,
+`sim_walk_recede.py:1281`, previously only used for the pelvis
+correction) and `ankle_roll_admittance` already accepted a `tau_x_target`
+parameter, unused. Added: an `ft_force_adr` lookup (the F/T sensor's
+vertical-force channel, `{side}_ft_force`, already modeled in the MJCF
+but not previously read in this file), a `K_IC` gain, and
+`tau_x_target = K_IC * dcm_err[1] * F_z_measured` fed into the existing
+admittance call. Verified as a true no-op at `K_IC=0` (exact match to
+committed baseline on nominal walk and both push batteries) before
+testing anything nonzero.
+
+**First pass (unclamped) looked promising, then turned out to be an
+artifact.** A broad sign+magnitude sweep against the 10N lateral push
+(the system's actual failure boundary) found real hits: `K_IC=5`,
+`-30`, `-50` all recovered 10N cleanly (~8° vs. falling at ~80°
+baseline) — the first mechanism all session to move the needle past 5N
+at all. But a finer sweep around that region (`K_IC` in [-25,-45], step
+~3) showed the response was CHAOTIC: adjacent values flipped between
+near-perfect recovery and total failure with no smooth trend (`-35`:
+6.96° nominal / recovers both pushes; `-38`: 100.76° nominal / fails
+everything; `-42`: recovers nominal, fails both pushes). Traced the
+cause: at these gains, `tau_x_target` swings into the hundreds-to-
+thousands of Nm during a real push — far past what's needed to saturate
+`ankle_roll_admittance`'s own `+-10deg` correction clamp — so the
+mechanism was operating in bang-bang chatter, not smooth proportional
+control. The apparent "wins" were which specific point in an
+oscillating, saturating signal a given `K_IC` happened to land on, not
+genuine CoP authority.
+
+**Fixed properly: clamp the desired CoP shift itself to a physical
+bound, not just the resulting correction.** `generate_mjcf.py`'s foot
+geometry (`size="0.075 0.040 0.020"`, MuJoCo box half-extents) gives a
+real physical limit: the CoP cannot shift more than 40mm laterally
+within the foot before it's off the edge entirely. Added
+`FOOT_HALF_WIDTH_M = 0.040`, clamped `desired_cop_shift_y` to
+`+-FOOT_HALF_WIDTH_M` BEFORE multiplying by `F_z` to get the torque
+target (rather than letting an unbounded gain blow up and get chopped
+downstream by the correction's own clamp).
+
+**Result with the physically-correct clamp in place: no measurable
+improvement, at any gain or sign.** Swept `K_IC` from -1000 to +1000
+(both signs, four orders of magnitude) against the 10N lateral push:
+every single value sits at 77-95° (falls), statistically indistinguishable
+from the `K_IC=0` baseline (80.04°) — no trend, no sign preference, no
+magnitude threshold that helps. The earlier "wins" were confirmed to be
+entirely saturation-chatter artifacts; the real, properly-bounded
+mechanism has genuinely no measurable authority over this specific
+push. All changes reverted; `sim_walk_recede.py` is unmodified.
+
+**Why this makes sense, and isn't actually a dead end:** this is
+consistent with Koolen/Pratt Part 1's own numbers, read early this
+session — finite-foot CoP modulation grows the capture region by +166%
+over point-foot alone, but that's a BOUNDED, finite gain, not unlimited
+authority. 40mm of real foot half-width is a small, hard physical limit.
+If a disturbance is large enough, ankle/CoP authority ALONE — even
+correctly implemented and maximally exercised — may genuinely not be
+sufficient; the theory's own framework requires COMBINING it with
+correct capture-region footstep placement for larger disturbances. And
+footstep placement is the OTHER piece that's still broken (the `b_nom_y`
+bug, documented in the many entries above) — so this result doesn't
+contradict the literature, it's consistent with needing BOTH mechanisms
+working correctly together, and only one of the two has ever been
+correctly implemented (and even that one, in isolation, isn't enough).
+
+**Where this leaves things, honestly:** the real CoP-repulsion mechanism
+has now been correctly implemented and ruled out as a standalone fix.
+Combined with the `b_nom_y` investigation (5 variants, all failed) and
+reachability-based clamping (failed), the lateral push-recovery gap
+remains open after what is now a genuinely thorough, structurally
+diverse investigation — not further narrow iteration on one lever. The
+two real remaining paths are: fix `b_nom_y` AND wire this CoP mechanism
+together (since capturability theory says both may be required
+simultaneously, and neither was tested working together with a
+correctly-functioning partner), or accept this as the architecture's
+current honest limit.
+
