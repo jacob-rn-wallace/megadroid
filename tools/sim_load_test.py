@@ -36,7 +36,10 @@ def main():
 
     print("Model statistics:")
     print(f"  Bodies:     {model.nbody}  (includes world)")
-    print(f"  DOF (nv):   {model.nv}  (11 joints + 6 freejoint)")
+    n_hinge = int(np.sum(model.jnt_type == mujoco.mjtJoint.mjJNT_HINGE))
+    n_free = int(np.sum(model.jnt_type == mujoco.mjtJoint.mjJNT_FREE))
+    print(f"  DOF (nv):   {model.nv}  ({n_hinge} hinge joints + {n_free} freejoint "
+          f"[6 DOF each])")
     print(f"  Actuators:  {model.nu}")
     print(f"  Geoms:      {model.ngeom}")
     total_mass = sum(model.body_mass)

@@ -86,10 +86,18 @@ compound forward through every subsequent "nominal" footstep instead of
 being a one-off correction, traced by watching the measured DCM's y grow
 monotonically past the stance foot's own y, every step, without bound.
 
-VALIDATED STATE (honest, not the full original goal): 8 steps clean (peak
-tilt <=6.9deg), 9 borderline (~20deg), 10+ falls -- MORE MODEST than
-sim_walk_lipm.py's 15-step range, a real tradeoff, not a strict
-improvement in raw step count. Per-axis footstep-adaptation clamps were
+PREVIOUSLY VALIDATED STATE (honest, not the full original goal; model
+without an actuated ankle_roll): 8 steps clean (peak tilt <=6.9deg), 9
+borderline (~20deg), 10+ falls -- MORE MODEST than sim_walk_lipm.py's
+15-step range, a real tradeoff, not a strict improvement in raw step count.
+REGRESSED as of 2026-09-08 when ankle_roll was made temporarily actuated
+(see tools/CLAUDE.md's dated entry below this file's own CLAUDE.md bullet):
+this controller reuses sim_walk_lipm.py's same sagittal-only control loop
+with no lateral feedback, so it falls too (89deg peak tilt, net-backward,
+tested at 6 steps -- well inside what was previously the clean range). Not
+yet fixed; same open paths as sim_walk_lipm.py (real local lateral feedback,
+or a deliberate re-tune) -- see that file's docstring. Per-axis
+footstep-adaptation clamps were
 necessary and are asymmetric for a real geometric reason, not just a
 tuning choice: X has real room (step_length=80mm), but the total lateral
 stance half-width is only 50mm (HIP_Y), so a naive symmetric clamp on Y

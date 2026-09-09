@@ -93,13 +93,14 @@ before concluding nothing exists on a topic.
 **Simulation framework:** MuJoCo (installed: `pip install mujoco`).
 
 **What exists and works:**
-- `design/mass.yaml` — authoritative link mass estimates (8.90 kg total)
+- `design/mass.yaml` — authoritative link mass estimates (9.60 kg total)
 - `tools/generate_mjcf.py` — generates `simulation/mujoco/megadroid_mvs.xml`;
   also excludes self-collision pairs (pelvis↔thigh, and the non-adjacent
   pairs among the stacked torso_pitch/torso_roll/torso links) where
   collision-proxy geometry inevitably overlaps by construction
-- `tools/sim_load_test.py` — model loads cleanly (17 bodies, 11 actuators — the
-  passive ankle_roll joint added 2 bodies without adding actuators) ✓
+- `tools/sim_load_test.py` — model loads cleanly (17 bodies, 13 actuators — the
+  usual 11 plus ankle_roll, now temporarily actuated on both legs; see the
+  dated entry below `sim_walk_recede.py`) ✓
 - `tools/sim_static_pose.py` — **P3 fixed-base milestone, passing.** Welds
   the pelvis to the world (like a test-stand bolt), holds the nominal
   standing pose (knees bent 12°), and validates the weld's vertical
@@ -378,6 +379,69 @@ before concluding nothing exists on a topic.
   alone — the mechanism is verified mathematically correct and does shift
   the footstep target in response to a real disturbance, but that doesn't
   yet translate into measurably better recovery at the magnitudes tested.
+
+**2026-09-08 — ankle_roll made temporarily actuated; both walking gaits
+currently REGRESSED, not fixed by this change alone.** Session context: the
+foot/ankle redesign earlier this session added a passive, spring-centered
+`ankle_roll` joint. Running the walking selftests against it (a check that
+had never actually been run until this point) found both gaits now fall:
+`sim_walk_lipm.py --selftest` Stage 6 hit 93.4° peak tilt (was ≤6.4°) and
+`sim_walk_recede.py --selftest` Stage 3 hit 89.0° with net-backward drift.
+Root cause: neither controller has ANY lateral (roll-axis) feedback — they
+were validated assuming a laterally-rigid foot — so an uncontrolled passive
+DOF near the ankle lets the robot wobble sideways with nothing to check it.
+A stiffness sweep on the passive spring confirmed this: 15-400 Nm/rad (the
+physically-plausible placeholder range) all fell the same way; only ~10⁴
+Nm/rad (de facto rigid) recovered the old baseline, and 10⁶ was numerically
+unstable.
+
+The user proposed a concrete methodology: make ankle_roll actuated first
+(get walking working fully powered), then swap specific joints to passive
+springs one at a time. A quick validation of this — patching `actuated:
+True` into `joints.yaml` in memory, at the model's *then-current* ankle_roll
+mass (0.05kg, the small passive-pivot-hardware estimate) — showed 8.6° peak
+tilt, appearing to confirm the idea outright with zero control-code changes.
+**That result was wrong, and the error is worth recording so it isn't
+repeated:** the quick patch only set `actuated`, but left the pre-existing
+`passive_type: spring_centered` / `spring_stiffness_nm_per_rad: 15.0` fields
+in the in-memory dict, so `generate_mjcf.py`'s `get_spring()` (keyed only on
+`passive_type`, blind to `actuated`) still emitted a `<joint stiffness=...>`
+alongside the new position actuator — an accidental actuator+spring
+combination, not "just powered." The design change actually committed here
+removes `passive_type`/`spring_stiffness_nm_per_rad` entirely (as it should
+— a joint can't be both), and mass.yaml's `ankle_roll` was bumped from
+0.05kg to 0.35kg to match `ankle`'s motor+gearbox convention, since it's now
+a real actuated joint, not passive pivot hardware. Re-tested cleanly (real
+committed YAML, actuator only, no leftover spring): **both gaits still
+fall** — `sim_walk_lipm.py` 86.6° at the current 0.35kg mass, 91-96° across a
+0.05-0.35kg mass sweep at the default kp=150 actuator gain; raising
+ankle_roll's own actuator kp up to 10⁴ (mirroring the passive-spring
+threshold that worked) did NOT recover stability either (86-92° across
+150-10⁴, 157° and numerically unstable at 3×10⁴). A direct isolation test
+(passive spring, stiffness=10⁴, everything else held fixed) confirmed the
+new 0.35kg ankle_roll mass alone flips a previously-working configuration
+from 5.9° (at the old 0.05kg mass) to 91.6° (at 0.35kg) — the system is
+sitting close enough to a stability boundary that a small, physically
+minor change (extra 0.6kg total, low in the kinematic chain) is enough to
+cross it, in either the passive-spring or actuated-servo case.
+
+**Current honest state:** `ankle_roll` actuated is now the real, committed
+MVS configuration (13 actuated DOF, `mvs_dof_total: 13`) — a legitimate
+design change on its own mechanical/DOF/BOM terms, not reverted. But it
+does NOT, by itself, restore walking: both `sim_walk_lipm.py --selftest`
+and `sim_walk_recede.py --selftest` are expected to FAIL at their walking
+stage (Stage 6 / Stage 3) until further control work lands. Their assert
+thresholds were deliberately left at the old validated bar (not loosened to
+paper over a fall) so a failing `--selftest` here means what it always has:
+don't trust downstream work until it passes again. Two real paths forward,
+neither started: (1) give the controllers actual local lateral feedback
+(hip_roll or ankle_roll trim driven by measured roll-axis state) — the
+HUBO-style direction already in the priority-reading list above, and the
+one the user wants as the *main* control model going forward, not a side
+branch; (2) a deliberate, non-blind gain re-tune of the existing DCM/ZMP
+loop for the new 13-actuator model. Blind parameter sweeping (tried above)
+found the system is too sensitive near this boundary to "guess" a fix —
+real progress needs one of the two paths above.
 
 **Where work stopped:**
 Five P3 simulation milestones are done: fixed-base static load

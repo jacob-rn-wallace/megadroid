@@ -126,18 +126,27 @@ walking generators of the ASIMO/HRP/Valkyrie generation:
 CoM height is NOT approximated as pelvis height, and the difference is not
 cosmetic: at this robot's nominal crouch, the whole-body CoM
 (data.subtree_com[0], cross-checked against a manual mass-weighted average of
-data.xipos to 6 significant figures) sits at z=0.5713m, while the pelvis
-itself is at z=0.6746m -- 15% higher. Torso+pelvis are 39% of the total mass
+data.xipos to 6 significant figures) sits at z=0.5355m, while the pelvis
+itself is at z=0.6746m -- 26% higher. Torso+pelvis are 36% of the total mass
 (design/mass.yaml) and the torso's own CoM sits well above the pelvis, so
 CoM=/=pelvis is a real effect here, not a hypothetical one. Using pelvis
-height for Tc=sqrt(z_c/g) would be off by ~8% in the time constant that
+height for Tc=sqrt(z_c/g) would be off by ~12% in the time constant that
 governs the whole trajectory's dynamics. See solve_whole_body_com_height.
+(z_c has moved twice this project: 0.5713m originally, then 0.5658m once a
+low-mass passive ankle_roll pivot was added, then to today's 0.5355m when
+ankle_roll became a fully motorized joint -- design/mass.yaml -- adding a
+second motor+gearbox mass low in the kinematic chain each time it moved
+lower. Recomputed 2026-09-08; see tools/CLAUDE.md for why ankle_roll is
+temporarily actuated.)
 
-VALIDATED STATE (Stage 6/7, current): 15 steps, driven with real MuJoCo
-dynamics (mj_step, not the offline kinematic plan) -- max pelvis tilt
-<=6.4deg, FLAT across every n_steps from 3 to 15 (smoother AND longer
-than any earlier iteration of this control loop), and NET-FORWARD pelvis
-translation throughout. This is the THIRD control-loop iteration this
+PREVIOUSLY VALIDATED STATE (Stage 6/7, model without an actuated ankle_roll):
+15 steps, driven with real MuJoCo dynamics (mj_step, not the offline
+kinematic plan) -- max pelvis tilt <=6.4deg, FLAT across every n_steps from
+3 to 15 (smoother AND longer than any earlier iteration of this control
+loop), and NET-FORWARD pelvis translation throughout. REGRESSED as of
+2026-09-08 -- see run_walk's own docstring and tools/CLAUDE.md's dated entry
+below sim_walk_recede.py for what changed and why this is not yet fixed.
+This is the THIRD control-loop iteration this
 file has used; the first two (history below) each hit a hard wall that
 gain tuning alone could not fix, and both real fixes were architectural/
 measurement changes, not bigger gains: DCM/Capture-Point TRACKING
@@ -653,10 +662,16 @@ def swing_foot_target(t, liftoff_xy, touchdown_xy, step_height, t_start, t_end):
 def _selftest_stage0(model):
     z_c, offset = solve_whole_body_com_height(model)
     Tc = math.sqrt(z_c / G)
-    print(f"[stage 0] z_c={z_c:.5f} m (expect ~0.5713)  Tc={Tc:.4f} s (expect ~0.241)"
+    print(f"[stage 0] z_c={z_c:.5f} m (expect ~0.5355)  Tc={Tc:.4f} s (expect ~0.2336)"
           f"  pelvis_com_offset_xy={offset}")
-    assert abs(z_c - 0.5713) < 0.001, "z_c does not match verified whole-body CoM height"
-    assert abs(Tc - 0.241) < 0.002, "Tc does not match verified value"
+    # Verified constants recomputed 2026-09-08 after ankle_roll became a
+    # fully motorized joint (design/joints.yaml, temporary -- see
+    # tools/CLAUDE.md) and picked up a second motor+gearbox mass
+    # (design/mass.yaml). Was z_c=0.5658/Tc=0.2402 with ankle_roll as a
+    # light passive pivot, and z_c=0.5713/Tc=0.241 before ankle_roll existed
+    # at all -- see module docstring.
+    assert abs(z_c - 0.5355) < 0.001, "z_c does not match verified whole-body CoM height"
+    assert abs(Tc - 0.2336) < 0.002, "Tc does not match verified value"
     print("[stage 0] OK")
 
 
@@ -1086,13 +1101,16 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     the pelvis position target fed to leg_ik each step is the offline
     plan's x_com(t) corrected by K_DCM times the gap between the (EMA-
     filtered -- see DCM_FILTER_ALPHA) actual and planned Divergent
-    Component of Motion, clamped by MAX_DCM_CORRECTION_M. VALIDATED: 15
-    steps clean (peak tilt <=6.4deg, flat across n=3..15 -- see
-    MAX_DCM_CORRECTION_M's comment for how this range was recovered after
-    plan_footsteps' ds_fraction=0.4 default initially cost 2 steps of
-    range for a smoothness win). 16 steps is borderline (19.6deg peak,
-    still under the old gait's ~20deg baseline but visibly worse than the
-    flat 3..15 range); 17 steps fails outright. Returns a summary dict;
+    Component of Motion, clamped by MAX_DCM_CORRECTION_M. PREVIOUSLY
+    VALIDATED (model without an actuated ankle_roll): 15 steps clean (peak
+    tilt <=6.4deg, flat across n=3..15); 16 borderline (19.6deg); 17 fails.
+    REGRESSED as of 2026-09-08 (ankle_roll made temporarily actuated, see
+    tools/CLAUDE.md's dated entry below sim_walk_recede.py): this loop has
+    no lateral feedback at all, so the new actuated-but-uncoordinated
+    ankle_roll now falls (~87-96deg peak tilt depending on its mass/gain --
+    tested, not assumed). Not yet fixed; needs either real local lateral
+    feedback or a deliberate re-tune, not a blind parameter sweep (tried,
+    didn't work -- see the CLAUDE.md entry). Returns a summary dict;
     optionally renders an offscreen GIF."""
     data = mujoco.MjData(model)
 
