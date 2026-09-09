@@ -82,15 +82,23 @@ lower_leg_module:
     compatibility:
       mvs:
         ankle_pitch_actuated: true      # MVS ankle pitch is actuated
-        ankle_roll_actuated: true       # INTERIM — temporarily motorized; see
+        ankle_roll_actuated: true       # Deliberately kept actuated for the time
+                                         # being (2026-09-09 decision) -- lateral
+                                         # push-recovery investigation found the
+                                         # actuated roll axes (ankle_roll, hip_roll,
+                                         # torso_roll) are the right authority for
+                                         # this, even though the current control
+                                         # software doesn't yet exploit it well; see
                                          # design/joints.yaml's ankle_roll entry and
-                                         # tools/CLAUDE.md for why and the exit plan
-      future:
-        ankle_roll_actuated: false      # planned reversion to a passive spring-
-                                         # centered joint, pending either a spring
-                                         # stiffness shown not to defeat its own
-                                         # compliance purpose or real local lateral
-                                         # feedback in the walking controllers
+                                         # tools/CLAUDE.md for the full history
+      possible_future_direction:
+        ankle_roll_actuated: false      # NOT a committed plan -- a passive spring-
+                                         # centered joint remains a possible future
+                                         # simplification, revisit only if a spring
+                                         # stiffness is shown not to defeat its own
+                                         # compliance purpose. Deferred, not
+                                         # scheduled, as of the 2026-09-09 decision
+                                         # to keep all joints actuated for now.
 
   definition: >
     The lower-leg module is the complete shank structural assembly from the knee

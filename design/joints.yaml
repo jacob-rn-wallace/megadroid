@@ -74,21 +74,32 @@ joints:
     type: revolute
     axis: roll
     location: ankle
-    actuated: true    # INTERIM — temporarily motorized, not the intended end state.
-                       # Simulation found the walking controllers have no lateral
-                       # (roll-axis) feedback at all; leaving ankle_roll passive with
-                       # any physically plausible spring stiffness let it wobble
-                       # uncontrolled and both gaits fell (~90+deg tilt). Actuating
-                       # it did NOT fix this on its own -- a generic position servo
-                       # holding a constant target turns out to be just as unstable
-                       # as an equivalent passive spring (both gaits still fall,
-                       # ~87-96deg), and the result is sensitively dependent on
-                       # ankle_roll's own mass, not just its stiffness/gain. This is
-                       # now the real, committed MVS configuration on mechanical/DOF/
-                       # BOM terms, but walking is NOT yet restored by it. Real fix
-                       # needs local lateral feedback (closer to HUBO's architecture)
-                       # or a deliberate control re-tune -- see tools/CLAUDE.md's
-                       # dated entry for the full experiment and data.
+    actuated: true    # Deliberately kept actuated for the time being (2026-09-09
+                       # decision) -- previously framed as an interim workaround
+                       # with a committed plan to revert to passive spring-centered.
+                       # That plan is now deferred, not scheduled: a full session of
+                       # lateral push-recovery investigation found the actuated roll
+                       # axes (ankle_roll here, plus hip_roll and torso_roll) are
+                       # the physically correct authority for this -- capturability
+                       # theory and real hardware (M2V2, Sarcos Primus) both use
+                       # actuated ankle/CoP control as the dominant push-recovery
+                       # lever -- even though the walking control SOFTWARE doesn't
+                       # yet exploit that authority well (six mechanisms tried and
+                       # failed this session, root cause traced to a footstep-
+                       # placement reference-point bug, not missing actuation --
+                       # see tools/CLAUDE.md). Originally added because simulation
+                       # found the walking controllers have no lateral (roll-axis)
+                       # feedback at all; leaving ankle_roll passive with any
+                       # physically plausible spring stiffness let it wobble
+                       # uncontrolled and both gaits fell (~90+deg tilt). A generic
+                       # position servo holding a constant target turns out to be
+                       # just as unstable as an equivalent passive spring on its
+                       # own (both gaits still fall, ~87-96deg) -- actuation alone
+                       # isn't sufficient, it needs the right control law on top,
+                       # which is the open work. A passive spring-centered ankle_
+                       # roll remains a possible future simplification, not a
+                       # committed direction -- see tools/CLAUDE.md's dated entries
+                       # for the full experiment history.
     variants:
       MVS: true
       FULL: true
