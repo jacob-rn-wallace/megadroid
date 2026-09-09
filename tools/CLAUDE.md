@@ -1017,3 +1017,77 @@ final tilt) and the full push battery, since "stops saturating during
 nominal walking" and "recovers from a real push" are different claims
 that need separate verification.
 
+### 2026-09-09 — Growth-factor amplification traced to its root: raw_delta is dominated by a ~40-100mm b_nom_y magnitude error, not measurement noise — but the obvious fix (a bigger constant) causes a NEW regression (nominal walking now falls)
+
+Direct follow-through, same day: decomposed `raw_delta_y` algebraically.
+With `ALPHA2_TIMING`/`ALPHA3_DCM_OFFSET` both `1e20`,
+`capture_point_footstep_with_timing` provably reduces to the simple
+closed form `p_new = p0 + a*growth - b_nom` (a = xi_filtered - p0), so
+`raw_delta = p_new - swing_to_xy_nominal = (p0 - swing_to_xy_nominal) +
+a*growth - b_nom`. Traced this against real nominal-walk instrumentation
+(`n_steps=10`, zero push): `(p0 - swing_to_xy_nominal)` is close to a
+FULL STANCE WIDTH (~-78 to -100mm, since p0 and the nominal target are
+opposite feet by construction) and `a*growth` is a further -25 to -54mm
+— together explaining essentially all of the previously-reported 40-125mm
+raw deltas. This was previously mis-attributed to "growth-factor noise
+amplification" in the entry above; the growth term IS a real
+multiplicative factor, but the dominant contributor is that `b_nom_y` is
+supposed to cancel most of this and is currently ~0 (see the prior
+"stance-geometry asymmetry" entry), not that the underlying signal is
+noisy.
+
+**Re-derived what `b_nom_y` should actually be, correctly this time.**
+Earlier attempts used the wrong reference point: `b_nom` in this
+codebase's own docstring is defined relative to the NEW stance foot
+(`p_new`/`swing_to_xy_nominal`), but the direct numeric ground-truth
+check two entries above measured `xi(touchdown) - p0` (the OLD/current
+stance foot) — a different quantity. Correcting for this: `b_nom_y =
+(measured xi(touchdown)-p0 offset) - (stance width) ≈ ∓43.2mm`
+(±56.8mm measured offset minus the ~100mm stance-width term, sign
+depending on which foot is swinging). This also has a clean theoretical
+grounding: DCM dynamics under a fixed single-support ZMP give `xi(t) =
+p0 + a(t)*growth(t)` with `a(t)*growth(t)` PROVABLY TIME-INVARIANT for a
+genuinely nominal (undisturbed) trajectory (growth decays exactly as
+fast as `a` grows) — so a well-posed `b_nom` should be a fixed constant
+per swing, not dependent on which tick within the swing it's evaluated
+at.
+
+**Tested `b_nom_y = -0.8636 * swing_to_xy_nominal[1]` (the ±43.2mm
+value) in the footstep-placement law, diagnostic only, reverted:**
+- First ~5 retarget ticks: dramatic improvement, `raw_dy` dropped from
+  the previous 40-125mm range to single digits (10.0, 2.1, 3.3, 3.0mm) —
+  strong direct confirmation the magnitude/reference-point diagnosis is
+  correct.
+- Then diverges: by the 7th-9th tick, `raw_dy` grows explosively (77 →
+  222 → 548 → 851 → 1363 → 1758mm) and nominal walking (zero push)
+  itself FALLS (`max_tilt=94.04°`) — a regression worse than the
+  baseline this was meant to fix.
+
+**Why:** a single fixed constant is only exactly correct at the specific
+swing-progress fraction it was empirically measured at (touchdown,
+progress=1.0); real ticks fire across the whole `MIN_RETARGET_FRACTION`
+–`COMMIT_FRACTION` window (progress 0.30-0.85), and real dynamics
+(double-support ZMP motion, actual robot vs. idealized LIPM, DCM filter
+lag) aren't a perfectly time-invariant `a(t)*growth(t)` in practice —
+small per-tick residuals from using one fixed constant compound step
+over step with no damping, and the gait's own feedback (each step's
+footstep error feeds into the next step's stance position) amplifies
+rather than corrects that drift over ~7-9 steps.
+
+**Conclusion:** the root-cause diagnosis (b_nom_y magnitude/reference
+error dominates raw_delta, not noise) is now well-evidenced — both by
+the algebraic decomposition and by the dramatic short-term improvement
+before the fixed-constant approach diverged. But a correct fix needs
+`b_nom_y` to be RESPONSIVE to actual swing timing (not a single
+precomputed constant) while still cleanly separating "genuine nominal
+sway" from "genuine disturbance" — which is a real control-design
+question (e.g. calibrating b_nom from the swing's own earliest
+post-`MIN_RETARGET_FRACTION` measurement, or replacing the delta-vs-
+nominal clamp with a reachability-based clamp on `p_new` directly, closer
+to the original plan's first design idea before it was set aside for
+empirical clamp retuning) — not a one-line constant swap. This is now a
+genuine architecture question, not a diagnostic one; per this project's
+own standing practice, that calls for scoping via Plan Mode before
+further live edits rather than continuing to iterate constants directly
+against the sim.
+
