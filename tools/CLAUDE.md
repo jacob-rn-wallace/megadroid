@@ -22,9 +22,35 @@ checked against one.
 
 ```
 reference-material/
-  humanoid-robotics/      ~70 papers on bipedal/humanoid robots, incl.
+  humanoid-robotics/      ~76 papers on bipedal/humanoid robots, incl.
                            HRP-2/3/4, LOLA, TORO, iCub, WABIAN-2, ASIMO,
-                           WALK-MAN, and other major reference platforms
+                           WALK-MAN, and other major reference platforms.
+                           Push-recovery/capturability set added
+                           2026-09-09 (see the dated entry below for full
+                           findings, already incorporated into this
+                           file's own conclusions):
+                             - Koolen, de Boer, Rebula, Goswami, Pratt,
+                               "Capturability-based analysis and control
+                               of legged locomotion, Part 1: Theory..."
+                               (IJRR 2012) -- formal N-step capturability
+                               theory, THE reference for "is this
+                               disturbance recoverable at all"
+                             - Pratt, Koolen, de Boer, Rebula, Cotton,
+                               Carff, Johnson, Neuhaus, "...Part 2:
+                               Application to M2V2..." (IJRR 2012) --
+                               real controller + hardware validation
+                             - Stephens, Atkeson, "Push Recovery by
+                               Stepping for Humanoid Robots with Force
+                               Controlled Joints" (Humanoids 2010)
+                             - Stephens, "Integral Control of Humanoid
+                               Balance" (IROS 2007)
+                             - Runge, Shupert, Horak, Zajac, "Ankle and
+                               hip postural strategies defined by joint
+                               torques" (Gait & Posture 1999)
+                             - Walking_Control_Algorithm_of_Biped_
+                               Humanoid_Robot_on_Uneven_and_Inclined_
+                               Floor.pdf (Kim, Park, Oh 2007) -- NOT yet
+                               read, terrain rather than push recovery
     KAIST/                 HUBO lineage (KHR-2, KHR-3/HUBO, DRC-HUBO) —
                            this project's own stated existence proof
     Waseda/                 WABIAN lineage — human-like biped walking
@@ -52,13 +78,25 @@ per-file rationale not kept — re-triage if this list goes stale):
   estimator fed by F/T + gyro + joint angles); `Discussion on the
   Stiffness of the Drive Chain in the Legs of Biped Robots` (plausible
   cause of sim_walk_lipm.py's own ~70%-of-commanded weight-shift finding).
-- *HUBO-style local-feedback architecture* — `KAIST/Development of
-  Humanoid Robots in HUBO Laboratory, KAIST` (primary source for the
-  local-sensor control scheme behind the KHR-3/HUBO paper); `Compliance
-  Control for Stabilizing the Humanoid on the Changing Slope` (admittance
-  control for position-controlled actuators + foot F/T sensors — this
-  project's own actuation architecture); `KAIST/System Design and Dynamic
-  Walking of Humanoid Robot KHR-2` (direct KHR-3/HUBO precursor).
+- *HUBO-style local-feedback architecture* — READ (2026-09-08/09, see the
+  dated entries below for what was built and found): `KAIST/Development
+  of Humanoid Robots in HUBO Laboratory, KAIST`; `Compliance Control for
+  Stabilizing the Humanoid on the Changing Slope` (admittance control for
+  position-controlled actuators + foot F/T sensors — this project's own
+  actuation architecture, now implemented in sim_walk_lipm.py); `Current
+  and Future Perspective of Honda Humanoid Robot` (Hirai, IROS'97 — the
+  P2/P3 lineage's Model ZMP Control, a torso-momentum recovery strategy;
+  read, NOT yet implemented, now understood to be a secondary refinement
+  rather than the primary fix — see the push-recovery/capturability
+  entry below). `KAIST/System Design and Dynamic Walking of Humanoid
+  Robot KHR-2` still unread (direct KHR-3/HUBO precursor).
+- *Push recovery / capturability* — READ 2026-09-09, see the dated entry
+  below for the full synthesis: the Koolen/Pratt capturability pair,
+  Stephens & Atkeson's push-recovery-by-stepping, Stephens' integral
+  control paper, and the Runge et al. ankle/hip biomechanics paper (all
+  listed in the folder tree above). Directly resolved this project's own
+  open push-robustness investigation — read this before proposing any
+  further disturbance-rejection mechanism.
 - *F/T sensor physical design* (spec'd in design/sensors.yaml, unbuilt) —
   `force-torque-sensors/A compact six-axis force:torque sensor using
   photocouplers for impact robustness` (KAIST, journal not arXiv version
@@ -689,13 +727,111 @@ has no independent reference to detect that kind of systematic bias
 current footstep-adaptation clamps/gains don't yet show a measurable
 recovery advantage over the plain tracking correction at the pelvis-force
 magnitudes tested (5-30N).
-Other next directions (none started, no decision made yet):
-  - Extend either ZMP controller (or the receding-horizon one) to reject
-    external disturbances more robustly, which will likely need a
-    hip/torso strategy layered on top of the ankle strategy (see
-    sim_zmp_balance.py's known limitation).
+Other next directions (see the 2026-09-09 push-recovery/capturability
+entry below for the current, evidence-based read on this — the line that
+used to be here about needing a hip/torso strategy first is now known to
+have the emphasis backwards):
   - Move toward P4 physical prototyping — premature before sustained,
     disturbance-tolerant walking is validated, since walking is likely to
     stress-test mechanical dimensions and motor torque budgets that
     standing alone doesn't touch.
+
+---
+
+**2026-09-09 — Push-recovery literature synthesis: five mechanisms failed
+this session, and reading the actual push-recovery/capturability
+literature explains why, with the emphasis reversed from what seemed
+intuitive.** Session context: after `ankle_roll` became actuated
+(2026-09-08 entries above), five different local disturbance-rejection
+mechanisms were tried against a 5-30N pelvis-push battery (mid-walk,
+`sim_walk_recede.py --push-at/--push-force`) — a passive spring, a
+contact-geometry ZMP compensator, F/T-sensor admittance control, footstep
+position+timing adaptation, and lateral integral action on the DCM
+tracking loop — and every one hit an identical wall (falls on nearly
+every tested magnitude, non-monotonic in force, not a timing artifact).
+Reading Honda/Hirai's foundational balance paper (IROS'97, already in the
+library) suggested the missing piece was torso/hip angular momentum
+(their "Model ZMP Control"), since the LIPM/DCM model this whole codebase
+uses structurally cannot represent it. The user then had five more
+papers procured (now in this folder, see the tree above) to check that
+hypothesis against the actual push-recovery literature before building a
+sixth mechanism.
+
+**The literature does NOT support torso/hip momentum as the primary
+fix.** Four independent, convergent findings:
+
+1. **Formal capturability theory, checked against megadroid's own real
+   numbers.** Koolen et al.'s N-step capturability framework (Part 1)
+   gives a closed-form margin for ankle/CoP-only recovery (no stepping,
+   no torso): `d_inf = l_max * e^(-omega0*dt_s)/(1-e^(-omega0*dt_s)) +
+   r_max`. Plugging in megadroid's OWN validated values (omega0=4.28
+   rad/s from z_c=0.5355m, r_max=0.075m foot half-length, and even the
+   SMALLEST footstep-adaptation clamp tried this session, l_max=0.05m)
+   gives `d_inf ~= 89mm`. Converting the tested push forces to an
+   instantaneous capture-point shift (`Δv/omega0` where `Δv = F*dt/mass`)
+   gives 12mm (5N) up to 73mm (30N) — EVERY tested push falls comfortably
+   inside megadroid's own theoretical ankle/CoP-only recovery margin. The
+   theory says these should all be recoverable without a step, let alone
+   a torso strategy. See `Capturability based analysis and control of
+   legged locomotion Part 1...pdf`, Sections 5-6 and Eq. 26b.
+2. **Real hardware validation, no torso momentum used.** Koolen/Pratt
+   Part 2's controller for M2V2 (a real 3D force-controlled biped)
+   explicitly states it "did NOT exploit angular momentum of the upper
+   body as a means of control" (Section 6.1) — and still recovered 21 Ns
+   pushes on real hardware, 15 Ns while walking in simulation. Both
+   exceed this session's own tested impulses (5-30N over 0.1s = 0.5-3.0
+   Ns). Its two real mechanisms: a CoP control law that pushes the
+   desired CoP AWAY from the current capture point (Eq. 2, leveraging
+   that the capture point naturally diverges away from the CoP, not
+   fighting that dynamic the way a "chase the error" proportional
+   controller does) and capture-region-based footstep placement
+   (Algorithm 1) for when the capture point exits the support polygon.
+   Neither mechanism resembles any of the five tried this session.
+3. **A second independent robot, same result.** Stephens & Atkeson's
+   PR-MPC on the Sarcos Primus (hydraulic, force-controlled) recovered
+   18-23 Ns pushes using NO STEP AT ALL — pure COM/CoP model-predictive
+   control (`Push Recovery by Stepping...pdf`, Fig. 14's comparison
+   table). Their own future-work section again flags the LIPM's missing
+   angular momentum and the standard "flywheel" extension to add it —
+   unused, because it wasn't needed for their validated results either.
+4. **A direct, quantified ankle-vs-hip comparison.** Stephens' "Integral
+   Control of Humanoid Balance" (`Integral Control of Humanoid
+   Balance.pdf`, Fig. 6) compares four controllers' maximum recoverable
+   push: naive LQR (~8 Ns) -> LQR with ankle-torque saturation (~16 Ns)
+   -> constraint-aware receding-horizon LQR (~21 Ns) -> CoP regulator
+   WITH hip/CM regulation added (~23 Ns). The dominant jump (8->21 Ns,
+   2.6x) comes from properly constraint-aware ankle/CoP design; adding
+   hip strategy on top buys only ~10% more (21->23 Ns) — closely matching
+   Part 1's own finding that adding a reaction mass increases the
+   capture-region AREA by 34% (a smaller, secondary effect layered on
+   top of the 166% gain from ankle/CoP alone). Runge et al.'s human
+   biomechanics data (`Ankle_and_hip_postural_strategies...pdf`)
+   independently confirms the same pattern in humans: hip strategy is
+   always observed ADDED to ankle strategy as disturbance grows, never
+   alone.
+
+**Conclusion:** the five mechanisms tried this session didn't fail
+because they lacked torso/hip authority — they failed because none of
+them implemented anything resembling the actual capture-point-based
+strategy (CoP-repulsion + capture-region footstep placement) that the
+literature and megadroid's own numbers say should already work at these
+disturbance magnitudes. This reverses the emphasis of the Honda-inspired
+"Model ZMP Control" plan this file's own history entry above proposed:
+torso lean is a real, worth-having secondary refinement (confirmed
+~10-16% additional margin by two independent sources), but implementing
+a genuine capture-point/CoP-based controller — replacing the ad-hoc
+proportional/admittance/integral corrections tried this session — is the
+higher-leverage next step, not yet attempted in any form.
+
+**Not yet done:** actually implementing this controller (adapting
+Pratt/Koolen's CoP-repulsion law and capture-region footstep placement to
+megadroid's position-only architecture, likely replacing or substantially
+restructuring `ankle_roll_admittance` and the footstep-adaptation logic
+in `sim_walk_recede.py`); reading the sixth procured paper
+(`Walking_Control_Algorithm_of_Biped_Humanoid_Robot_on_Uneven_and_
+Inclined_Floor.pdf`, terrain-focused, lower priority); reading Part 2's
+remaining sections (walking-task footstep calculator details, Section
+6-7 discussion). No decision made yet on when/whether to pursue any of
+this — flagged for the user's call, matching this session's standing
+practice throughout.
 
