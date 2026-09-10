@@ -41,14 +41,23 @@ drivetrain:
     provides_reduction: false
     ratio: 1
     notes: >
-      RECORDED ASSUMPTION, 2026-09-10: HTD 5M belt stages are treated as
-      transmission for remote motor mounting (keeping mass proximal), NOT as
-      an additional reduction stage. No belt ratio has ever been specified in
-      this design -- geometry.yaml defines only belt pitch and width. This is
-      deliberately the conservative reading: it yields the SMALLEST torque
-      envelope, so simulation constrains the controller harder rather than
-      flattering it. If a real belt reduction is later dimensioned, raising
-      this ratio raises the whole envelope.
+      RECORDED ASSUMPTION, 2026-09-10, and a KNOWN UNDERSTATEMENT for six
+      joints. No belt ratio is specified anywhere in design/*.yaml --
+      geometry.yaml defines only belt pitch and width. However BOM.csv lists
+      "Secondary Belt Reduction Components" (qty 6) for hip_pitch, hip_roll
+      and knee_pitch on both sides, so those six joints are intended to carry
+      a real belt reduction of an as-yet-unspecified ratio; the remaining
+      seven (ankle_pitch, ankle_roll, torso_pitch/roll/yaw) have none listed.
+      Modelling 1:1 uniformly is therefore EXACT for those seven and
+      CONSERVATIVE for the six -- their true envelope is >= the figure below.
+      Deliberately chosen: a uniform floor keeps simulation constraining the
+      controller rather than flattering it, and avoids inventing a ratio that
+      has never been engineered. Dimension the belt stages in P6, then split
+      this into per-joint-group envelopes.
+    per_joint_group_note: >
+      When the belt ratio is specified, this block should become per-group
+      rather than global: {hip_pitch, hip_roll, knee_pitch} carry gearbox x
+      belt, {ankle_pitch, ankle_roll, torso_*} carry gearbox only.
   efficiency: 0.70             # PLACEHOLDER -- combined gearbox + belt losses.
                                 # Planetary gearsets of this class are commonly
                                 # 0.6-0.8; measure on the real drivetrain (P6).
@@ -62,6 +71,12 @@ output:
                                 # Recorded for reference; not enforced in
                                 # simulation (see modeling_limitations).
   uniform_across_joints: true
+  uniform_is_a_floor_not_a_fact: >
+    A single envelope is applied to every joint, but see
+    drivetrain.belt_stage.notes: BOM.csv indicates six joints (hip_pitch,
+    hip_roll, knee_pitch, both sides) are intended to carry a secondary belt
+    reduction whose ratio has never been specified. For those six this figure
+    is a LOWER BOUND, not their real capability.
   notes: >
     A single envelope applies to every actuated joint because a single motor
     and a single gearbox class are used throughout. For scale: the measured
