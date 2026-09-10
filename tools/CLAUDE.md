@@ -2269,3 +2269,72 @@ cause (roll runaway, six parameters ruled out).
 to ASIMO/HUBO-class 1.25 km/h, and the per-joint structure HUBO uses is
 the eventual right answer rather than a uniform ratio. Both are recorded
 in `design/actuation.yaml` rather than left implicit.
+
+### 2026-09-10 — CoP-repulsion re-tested with a working actuation path: exhausted, and the original negative result is finally explained
+
+The 80:1 drivetrain and the Stage 2 realisation findings made one previously
+inconclusive mechanism worth re-opening. It is now closed properly.
+
+**First, why it never had a chance -- the missing explanation.** Two prior
+investigations recorded CoP-repulsion as having "zero measurable effect"
+without explaining why. The reason is the actuation path. The law computes
+`tau_x_target = desired_cop_shift_y * F_z`, clamped to the foot half-width.
+A FULL-FOOT demand (40 mm at body weight) is 3.77 N·m -- and routed through
+`ankle_roll_admittance`'s proportional law at `K_ADM_RECEDE=5000`, that
+yields **0.043 degrees of ankle_roll**. The mechanism was mis-plumbed, not
+merely ineffective: no gain, sign or baseline could have made it act,
+because a maximum demand produced a twentieth of a degree of motion.
+
+Architecture D Stage 2 measured the same thing independently and by a
+different route: proportional realisation gain 0.06, integral 1.01.
+
+**Correcting my own claim from earlier today.** I attributed the original
+CoP verdict to a degraded baseline and torque-limited ankles. That was
+wrong on both counts -- path (a) Stage 3 had already re-run the K_IC sweep
+on the re-tuned baseline under UNLIMITED torque and still found nothing, so
+neither the baseline nor the torque envelope was the explanation. The
+0.043deg authority figure is.
+
+**The proper re-test.** Re-routed CoP-repulsion through the integral
+realisation Stage 2 measured at gain 1.01 (`offset += k_i * (tau_target -
+tau_measured)`, clamped to the 4deg Stage 2 validated), at the new 80:1
+envelope, against the lateral push battery. Experimental source patch, not
+committed.
+
+| K_IC | 5N | 10N | 15N | 20N | 30N |
+|---|---|---|---|---|---|
+| **0 (baseline)** | **7.76** | 77.21 | 79.12 | 98.17 | 76.57 |
+| -1 | 89.79 | 90.95 | 78.67 | 77.09 | 77.22 |
+| -5 | 78.18 | 77.91 | 77.58 | 76.96 | 78.03 |
+| -60 | 77.81 | 78.31 | 79.16 | 78.45 | 78.66 |
+| +5 | 90.51 | 78.55 | 78.44 | 78.18 | 78.68 |
+| +60 | 91.13 | 82.05 | 78.65 | 78.03 | 78.80 |
+
+**Every nonzero K_IC is WORSE than the baseline**, at both signs and every
+magnitude tested -- it loses the 5 N push the baseline survives. So with the
+realisation path finally working, the mechanism is not neutral, it is
+actively harmful during walking.
+
+**Why it helps standing and hurts walking.** In `mpc_balance.py`'s standing
+test the same integral realisation worked (CoP tracking error 0.0 mm, bound
+inactive) because `dcm_err` is small and quiet at rest. During walking
+`dcm_err` is inherently large and oscillating -- it swings every step by
+construction, since the DCM tracks a moving reference. An integral loop
+chasing it injects a step-synchronous disturbance into ankle_roll rather
+than correcting anything. This is the same shape as Stage 2's clamp
+finding: authority that is useful when small becomes a disturbance when the
+signal driving it is large.
+
+**Conclusion: CoP-repulsion is exhausted for this system.** Three
+independent tests now: proportional law on a degraded baseline (nothing),
+proportional law on the re-tuned baseline under unlimited torque (nothing),
+and integral realisation with measured gain 1.01 at the 80:1 envelope
+(actively worse). The third is the decisive one, because it is the only one
+where the actuator could actually deliver what the law asked for. `K_IC`
+stays at 0.0 and the wiring stays present-but-inert; there is now a
+measured reason for that rather than an unexplained null.
+
+**What this does NOT close.** Architecture E's capture-region footstep
+placement remains untried -- it is a stepping mechanism, not an ankle one,
+so none of the above bears on it. It is now the only untried item from the
+original eight that the 80:1 envelope plausibly unblocks.
