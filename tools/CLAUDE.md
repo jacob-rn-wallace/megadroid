@@ -2338,3 +2338,66 @@ measured reason for that rather than an unexplained null.
 placement remains untried -- it is a stepping mechanism, not an ankle one,
 so none of the above bears on it. It is now the only untried item from the
 original eight that the 80:1 envelope plausibly unblocks.
+
+### 2026-09-10 — Capture-region footstep placement (architecture E) tried: a false positive caught by the timing check, and the eighth approach closes
+
+The last untried mechanism of the eight in the architecture review, and the
+one the 80:1 envelope plausibly unblocked (its stated blocker was that a
+recovery step is a high-torque manoeuvre the robot could not afford).
+
+**What was built.** Koolen/Pratt Part 2 Algorithm 1 in spirit: predict the
+capture point at touchdown, treat a foot-sized box around it as the 1-step
+capture region, and move the NOMINAL footstep only as far as needed to land
+inside it. This is structurally different from the committed law, which
+always chases the capture point and then clamps the delta -- capture-region
+placement leaves the foot alone whenever the nominal step is already viable.
+Experimental source patch, deliberately not committed.
+
+**Nominal walking: genuinely, mildly better.** 6.31deg vs the committed
+law's 8.76deg at n=8, with no regression. Same clean step range though --
+both fall at n=18.
+
+**The apparent push-recovery win, and why it was not one.** At the standard
+`push_at=2.0s` the smallest region tested, r=(40,15)mm, survived **20 N at
+7.35deg where the committed law falls at 90.31deg**, and cleaned up 15 N
+(6.31 vs 26.57). That would have been the first genuine push-recovery
+improvement this project has produced.
+
+**It does not survive the timing check.** Re-run across seven push timings
+(1.6-2.8 s):
+
+| 15 N | 1.6 | 1.8 | 2.0 | 2.2 | 2.4 | 2.6 | 2.8 | survived |
+|---|---|---|---|---|---|---|---|---|
+| committed law | 77.5 | 6.5 | 26.6 | 80.6 | 90.7 | 9.7 | 7.0 | **4/7** |
+| capture region | 76.7 | 16.1 | 6.3 | 78.0 | 28.1 | 73.2 | 77.5 | 3/7 |
+
+| 20 N | 1.6 | 1.8 | 2.0 | 2.2 | 2.4 | 2.6 | 2.8 | survived |
+|---|---|---|---|---|---|---|---|---|
+| committed law | 77.1 | 76.5 | 90.3 | 76.9 | 87.6 | **12.0** | 77.7 | 1/7 |
+| capture region | 76.5 | 78.7 | **7.4** | 75.9 | 76.5 | 78.2 | 76.3 | 1/7 |
+
+At 20 N both survive exactly ONE timing out of seven -- the committed law at
+2.6 s, capture-region at 2.0 s. They are the same result with the lucky cell
+in a different place. At 15 N capture-region is WORSE (3/7 vs 4/7).
+
+**This is the timing-chaos entry above cashing out as a methodology rule.**
+That entry established a 10 ms shift can flip this system between clean
+recovery and a 90deg fall. The direct consequence: **a single-timing push
+result is not evidence.** Every push number in this file measured at one
+`push_at` should be read as one sample from a chaotic distribution, not as
+a property of the mechanism. Had this been reported on the 2.0 s column
+alone it would have gone in as a win.
+
+**Conclusion: architecture E is exhausted for push recovery, and all eight
+approaches from the review have now been tried.** What survives is a modest
+nominal-walking gain (8.76 -> 6.31 deg at n=8, same step range). Left
+uncommitted: it is an experimental patch with no self-test, and the gain is
+small and verified at one step count. Available if wanted, not shipped on
+that evidence.
+
+**Also recorded, correcting the previous entry.** The 80:1 envelope supports
+**8 clean steps, not 45**. The earlier entry reported `--steps 8` walking at
+8.76deg, which is true, but only the documented step count was checked; n=18
+falls (77.27deg) under the real torque limit where unlimited torque reached
+n=45. The drivetrain fix recovered the milestone as documented, with a much
+shorter clean range than the pre-envelope figure.
