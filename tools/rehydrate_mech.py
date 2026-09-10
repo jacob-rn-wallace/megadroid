@@ -46,6 +46,7 @@ def main():
     joints = load_yaml(DESIGN_DIR / "joints.yaml")
     geometry = load_yaml(DESIGN_DIR / "geometry.yaml")
     sensing = load_yaml(DESIGN_DIR / "sensors.yaml")
+    actuation = load_yaml(DESIGN_DIR / "actuation.yaml")
 
     # Construct metadata (publication authority)
     meta = {
@@ -68,6 +69,7 @@ def main():
         joints=joints,
         geometry=geometry,
         sensing=sensing,
+        actuation=actuation,
     )
 
     # Write output

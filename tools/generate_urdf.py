@@ -25,6 +25,16 @@ def load_yaml(path: Path):
         return yaml.safe_load(f)
 
 
+# Joint limits sourced from design/actuation.yaml rather than hardcoded --
+# these were literals (effort=100.0, velocity=1.0) until 2026-09-10, neither
+# of which described the real drivetrain. Loaded at import so the
+# add_revolute_joint defaults can reference them without threading the value
+# through all eight call sites.
+_ACTUATION = load_yaml(DESIGN_DIR / "actuation.yaml")
+PEAK_JOINT_TORQUE_NM = _ACTUATION["output"]["peak_joint_torque_nm"]
+MAX_JOINT_SPEED_RAD_S = _ACTUATION["output"]["max_joint_speed_rad_s"]
+
+
 def prettify_xml(elem):
     """Return a pretty-printed XML string."""
     rough_string = ET.tostring(elem, encoding="unicode")
@@ -144,7 +154,8 @@ def add_link(robot, name, visual_origin_xyz, visual_origin_rpy, geometry, color_
 
 def add_revolute_joint(robot, name, parent, child, origin_xyz, origin_rpy,
                         axis_xyz, lower_rad, upper_rad,
-                        effort=100.0, velocity=1.0):
+                        effort=PEAK_JOINT_TORQUE_NM,
+                        velocity=MAX_JOINT_SPEED_RAD_S):
     """Helper to add a revolute joint."""
     joint = ET.SubElement(robot, "joint", name=name, type="revolute")
     ET.SubElement(joint, "parent", link=parent)

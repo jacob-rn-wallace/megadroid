@@ -107,12 +107,23 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 
 ### 6.2 Gear Reduction
 - Standardized gearbox classes reused across joints
+- Gearbox class: **{{ actuation.gearbox_class }}**
 - No joint uses a bespoke, one-off gearbox design
-- Exact ratios are implementation details documented in `MECH.md`
+- Total drivetrain reduction: **{{ actuation.total_reduction }}:1**
 - All belt-driven transmission stages use HTD 5M timing belts with standardized width
   as defined in `design/geometry.yaml`.
+- Belt stages provide {{ "additional reduction" if actuation.belt_provides_reduction else "**transmission only, not reduction**" }} — belts exist to mount motors proximally, keeping mass off the distal links.
 - Belt pitch and width are standardized across all joints to minimize part count,
   simplify sourcing, and improve serviceability.
+
+### 6.3 Output Torque Envelope
+- Peak sustained joint torque: **{{ actuation.peak_joint_torque_nm }} N·m** at every actuated joint
+- A single envelope applies to all joints, since one motor and one gearbox class are used throughout
+- This envelope is enforced in simulation as an actuator force limit, so simulated
+  results reflect a bounded drivetrain rather than unlimited torque
+- Motor stall torque, no-load speed, and drivetrain efficiency are currently
+  estimates pending physical verification — see `design/actuation.yaml`, which also
+  records what this model does **not** capture (torque–speed droop, thermal limits, belt compliance)
 ---
 
 ## 7. Sensors
@@ -126,7 +137,18 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - {{ "No motor current sensing" if not sensing.motor_sensing.current_sensing else "Motor current sensing present" }}
 - {{ "No motor-side velocity sensing" if not sensing.motor_sensing.velocity_sensing else "Motor-side velocity sensing present" }}
 
-### 7.3 End-of-Limb Force/Torque Sensing
+### 7.3 Inertial Sensing
+{% if sensing.inertial_sensing.imu.present -%}
+- **{{ sensing.inertial_sensing.imu.axes }}-axis IMU** — gyroscope + accelerometer
+- Mounting: {{ sensing.inertial_sensing.imu.mounting_location }}
+- {{ "Magnetometer included" if sensing.inertial_sensing.imu.magnetometer else "**No magnetometer**" }} — brushed DC motors make indoor magnetic heading unreliable; relative yaw is recovered from leg odometry against the planted foot, with slow absolute-yaw drift accepted
+- IMU is **included in MVS cost accounting**
+- Rationale: pelvis orientation and centre-of-mass velocity are required feedback states for every model-based balance method this design targets, and are not observable from joint encoders and foot force/torque alone
+{%- else -%}
+- No inertial sensing in the MVS
+{%- endif %}
+
+### 7.4 End-of-Limb Force/Torque Sensing
 - Each foot includes a **6-DOF force/torque sensor**
 - Form factor: {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.shape }}, {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.diameter_mm }}mm diameter × {{ sensing.end_of_limb_sensing.ft_sensor.form_factor.height_mm }}mm height
 - Mounting: {{ sensing.end_of_limb_sensing.ft_sensor.mounting_location }}

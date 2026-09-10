@@ -205,25 +205,70 @@ F/T sensors are mechanically required but **excluded from cost accounting**.
 
 ---
 
+## 6a. Inertial Sensor Integration
+
+{% if sensing.inertial_sensing.imu.present -%}
+A single **{{ sensing.inertial_sensing.imu.axes }}-axis IMU** (gyroscope + accelerometer{{ " + magnetometer" if sensing.inertial_sensing.imu.magnetometer else "" }}) is mounted at the pelvis.
+
+**Mounting and integration:**
+- Location: {{ sensing.inertial_sensing.imu.mounting_location }}
+- Co-locating the IMU with the base frame origin means its measurements need no transform before use — readings are already expressed about the frame the kinematics are defined in
+- Should be mounted on the pelvis structure rather than on a motor bracket, to keep brushed-motor vibration out of the accelerometer signal
+- Rigid mounting is required: any compliance between the IMU and the pelvis structure appears directly as orientation error
+
+**Function:**
+Provides pelvis orientation and angular rate. Together with joint encoders and the
+foot force/torque sensors, this is what makes centre-of-mass position and velocity
+observable — neither is recoverable from encoders and foot sensing alone, and both are
+required feedback states for the balance methods this design targets.
+
+**Cost accounting:**
+The IMU is **included in cost accounting**, unlike the F/T sensors.
+{%- else -%}
+No inertial sensing is present in the MVS.
+{%- endif %}
+
+---
+
 ## 7. Actuator Integration
 
 ### 7.1 Motors
 
-- All actuators use **775 brushed DC motors**
+- All actuators use **{{ actuation.motor.model }}**
 - Motors mounted proximally where feasible
 - Motors mechanically isolated from bending loads
 
 ### 7.2 Gearboxes
 
 - Modular gearbox designs reused across joints
+- Gearbox class: **{{ actuation.drivetrain.gearbox.class }}**, reused at every actuated joint
 - Only a small number of gearbox ratios permitted
 - No joint-specific one-off gearbox designs
 
-Exact gearbox ratios and part selections are documented in `BOM.csv`.
+Exact gearbox part selections are documented in `BOM.csv`.
 
-### 7.3 Belt Reduction Standard (Locked)
+### 7.3 Belt Standard (Locked)
 
-All belt reduction stages in Megadroid use HTD 5M timing belts with standardized width as defined in `design/geometry.yaml`.
+All belt stages in Megadroid use HTD 5M timing belts with standardized width as defined in `design/geometry.yaml`.
+
+{% if actuation.drivetrain.belt_stage.provides_reduction -%}
+Belt stages provide additional reduction on top of the gearbox.
+{%- else -%}
+Belt stages are **transmission only and provide no reduction** ({{ actuation.drivetrain.belt_stage.ratio }}:1). Their mechanical purpose is to let motors mount proximally while driving a distal joint axis, keeping mass off the far end of each limb. Total drivetrain reduction therefore comes entirely from the gearbox.
+{%- endif %}
+
+### 7.4 Output Torque Envelope
+
+- Total reduction: **{{ actuation.drivetrain.total_reduction }}:1**
+- Peak joint torque: **{{ actuation.output.peak_joint_torque_nm }} N·m**, uniform across all actuated joints
+- Maximum joint speed: **{{ actuation.output.max_joint_speed_rad_s }} rad/s**
+
+This envelope bounds what any control strategy can demand of a joint, and is enforced
+as an actuator limit in the generated simulation model. Motor stall torque, no-load
+speed, and drivetrain efficiency are estimates pending physical measurement — see
+`design/actuation.yaml` for the values, their provenance, and the effects this model
+deliberately does not capture (torque–speed droop, thermal limits, belt compliance,
+gear backlash).
 
 ---
 

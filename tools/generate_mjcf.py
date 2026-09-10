@@ -104,8 +104,17 @@ def get_spring(joints_data, joint_name):
 
 # ── MJCF builder ───────────────────────────────────────────────────────────────
 
-def create_mjcf(joints_data, geo_data, kin_data, mass_data):
+def create_mjcf(joints_data, geo_data, kin_data, mass_data, actuation_data, sensors_data):
     masses = mass_data["bodies"]
+
+    # Per-joint torque envelope from design/actuation.yaml. Applied as a flat
+    # MuJoCo forcerange, which caps actuator output at all joint speeds -- a
+    # real brushed DC motor's torque falls with speed, so this is optimistic
+    # at high velocity and accurate near stall (recorded in that file's
+    # modeling_limitations). Before 2026-09-10 there was no forcerange at all,
+    # i.e. unbounded torque.
+    peak_torque = actuation_data["output"]["peak_joint_torque_nm"]
+    imu = sensors_data["inertial_sensing"]["imu"]
 
     geo = geo_data["anthropometrics"]
     thigh_len = geo["thigh_length_mm"] / 1000.0
@@ -158,6 +167,12 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
                   name="pelvis_geom", type="box",
                   size=f"0.10 {pelvis_hy:.4f} 0.075", pos="0 0 0",
                   rgba="0.5 0.5 0.5 1")
+
+    # IMU site (design/sensors.yaml inertial_sensing) -- at the pelvis body
+    # origin, which IS the pelvis_center base frame per design/kinematics.yaml,
+    # so gyro/accelerometer readings need no transform before use.
+    if imu["present"]:
+        ET.SubElement(pelvis, "site", name="imu_site", pos="0 0 0", size="0.005")
 
     # ── Legs ──────────────────────────────────────────────────────────────
     def add_leg(parent_body, side, y_sign):
@@ -366,18 +381,21 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
         lo, hi = get_range(joints_data, jname)
         rng = f"{lo:.6f} {hi:.6f}"
         loc = jdata.get("location", "")
+        frng = f"{-peak_torque:.6f} {peak_torque:.6f}"
         if loc in ("hip", "knee", "ankle"):
             for side in ("left", "right"):
                 ET.SubElement(actuator, "position",
                               name=f"act_{side}_{jname}",
                               joint=f"{side}_{jname}",
                               kp="150",
+                              forcerange=frng,
                               ctrlrange=rng)
         else:
             ET.SubElement(actuator, "position",
                           name=f"act_{jname}",
                           joint=jname,
                           kp="150",
+                          forcerange=frng,
                           ctrlrange=rng)
 
     # ── Sensors ───────────────────────────────────────────────────────────
@@ -399,6 +417,21 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data):
         ET.SubElement(sensor, "force", name=f"{s}_ft_force", site=f"{s}_ft_site")
         ET.SubElement(sensor, "torque", name=f"{s}_ft_torque", site=f"{s}_ft_site")
 
+    # 6-axis IMU (design/sensors.yaml inertial_sensing), at imu_site on the
+    # pelvis. These two plus the joint encoders and the foot F/T sensors above
+    # are the COMPLETE set of signals the real robot has -- a state estimator
+    # built on this model may read these and nothing else. The framepos/
+    # framequat sensors above and MuJoCo's subtree_com/subtree_linvel are
+    # privileged simulator state, valid for scoring an estimator but never as
+    # an input to one.
+    if imu["present"]:
+        if imu["gyroscope"]:
+            ET.SubElement(sensor, "gyro", name="imu_gyro", site="imu_site")
+        if imu["accelerometer"]:
+            ET.SubElement(sensor, "accelerometer", name="imu_accel", site="imu_site")
+        if imu["magnetometer"]:
+            ET.SubElement(sensor, "magnetometer", name="imu_mag", site="imu_site")
+
     return mujoco
 
 
@@ -410,9 +443,11 @@ def main():
     geo     = load_yaml(DESIGN_DIR / "geometry.yaml")
     kin     = load_yaml(DESIGN_DIR / "kinematics.yaml")
     mass    = load_yaml(DESIGN_DIR / "mass.yaml")
+    act     = load_yaml(DESIGN_DIR / "actuation.yaml")
+    sens    = load_yaml(DESIGN_DIR / "sensors.yaml")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    root = create_mjcf(joints, geo, kin, mass)
+    root = create_mjcf(joints, geo, kin, mass, act, sens)
     xml_str = prettify(root)
     OUTPUT_FILE.write_text(xml_str)
 
