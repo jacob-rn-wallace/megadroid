@@ -159,6 +159,46 @@ If only some tests get done, this is the priority:
 4. **Test G (IMU)** — unblocks honest estimator tuning; needs no fixture.
 5. **Tests D, E** — refine the control model once the envelope is known.
 
+## Prior art
+
+Surveyed 2026-09-10 for existing open designs that could be adapted rather
+than built from scratch. Nothing matches whole; the rig splits into two
+halves and the better prior art is on the half that isn't a dynamometer.
+
+**The filter.** Published motor dynos measure at the *motor shaft* — high
+RPM, low torque — and their load absorbers (eddy brakes, propeller loads, a
+second motor) are sized for that regime. Test A measures at the *joint
+output*, after the full reduction recorded in `design/actuation.yaml`: low
+speed, high torque, the inverse regime. Their instrumentation and logging
+transfer; their loading mechanisms do not. At joint speeds this low, a
+quasi-static sweep against a friction brake and a load cell is simpler than
+absorbing the power electrically.
+
+| Test | Closest existing design | What transfers |
+|---|---|---|
+| A, B, C | [Capo01 ODrive dynamometer](https://github.com/Capo01/odrive_based_electric_motor_dynamometer) (GPL-3.0) | Absorber on a pivot arm with a load cell reading reaction torque; current shunts on both sides so motor and controller losses separate. Brushless/ODrive electronics and its 3.5 N·m brake are both unusable here. |
+| A | [Cambridge Univ. Drone Society motor test stand](http://cuds.soc.srcf.net/2021/07/25/designing-a-motor-test-stand-part-1/) | Build detail for the lever-arm-onto-load-cell fixture — the concrete version of the cheap Test A fallback noted under Cost. |
+| A–C | [RAPID: An Inexpensive Open Source Dynamometer for Robotics Applications](https://ieeexplore.ieee.org/document/6584831/) ([RG](https://www.researchgate.net/publication/264566981_RAPID_An_Inexpensive_Open_Source_Dynamometer_for_Robotics_Applications)) | Purpose-built for brushed DC, robotics-oriented, automated PWM sweep. **Two caveats** below. |
+| D | [Open-source test stand for backlash measurement in UART servo motors](https://www.sciencedirect.com/science/article/pii/S2468067226000271) | Lock-and-release fixture geometry, extensible with a load cell to give backlash as a function of applied torque — exactly Test D. Different actuator class, same rig. |
+| F | [CNC Kitchen Open-Pull](https://github.com/CNCKitchen/Open-Pull), [UMTK](https://peer.asee.org/use-of-a-low-cost-open-source-universal-mechanical-testing-machine-in-an-introductory-materials-science-course.pdf), [low-cost UTM](https://hackaday.io/project/192166-low-cost-universal-tensile-testing-machine/details), [OSE testing machine](https://wiki.opensourceecology.org/wiki/Open_Source_Universal_Material_Science_Destructive_Testing_Machine) | Leadscrew + load cell frames that do compression, not just tension. Gives force-vs-displacement to settling — the stiffness half of the sole measurement. |
+| — | [Design and Characterization of 3D Printed, Open-Source Actuators for Legged Locomotion](https://arxiv.org/pdf/2202.12395) | Methodology, not hardware: the same characterisation problem in the same application domain. |
+
+**RAPID's two caveats.** First, the paper asserts drawings, schematics and
+software are freely downloadable, but the files could not be located —
+verify they are reachable before planning around it. Second, and more
+important: its headline feature is modelling system inertia and friction to
+*remove the need for a torque sensor*. Test B **is** the friction
+measurement. A rig that assumes a friction model to infer torque cannot
+measure the friction. Its sweep automation transfers; its measurement
+principle is disqualified here.
+
+**What this suggests for the build order.** It reinforces Test F first for a
+second, independent reason: it is a compression test, not a dyno problem, and
+the open hardware for it is markedly better. A UTM-style frame covers the
+stiffness half; damping still needs the drop test, which is a mass, a guide
+rail and a load cell — cheap enough not to need a donor design. Then build
+Test A as a static reaction-arm fixture, which serves B, C, D and E unchanged.
+
 ## Cost
 
 Roughly $65 in flight parts plus bench instrumentation. A reaction torque sensor
