@@ -8,7 +8,7 @@ authority: authoritative
 
 **Status:** Authoritative  
 **Scope:** Minimum Viable System (MVS)  
-**Last rehydrated:** 2026-09-09
+**Last rehydrated:** 2026-09-10
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -109,12 +109,23 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 
 ### 6.2 Gear Reduction
 - Standardized gearbox classes reused across joints
+- Gearbox class: **20:1 planetary**
 - No joint uses a bespoke, one-off gearbox design
-- Exact ratios are implementation details documented in `MECH.md`
+- Total drivetrain reduction: **20:1**
 - All belt-driven transmission stages use HTD 5M timing belts with standardized width
   as defined in `design/geometry.yaml`.
+- Belt stages provide **transmission only, not reduction** — belts exist to mount motors proximally, keeping mass off the distal links.
 - Belt pitch and width are standardized across all joints to minimize part count,
   simplify sourcing, and improve serviceability.
+
+### 6.3 Output Torque Envelope
+- Peak sustained joint torque: **2.8 N·m** at every actuated joint
+- A single envelope applies to all joints, since one motor and one gearbox class are used throughout
+- This envelope is enforced in simulation as an actuator force limit, so simulated
+  results reflect a bounded drivetrain rather than unlimited torque
+- Motor stall torque, no-load speed, and drivetrain efficiency are currently
+  estimates pending physical verification — see `design/actuation.yaml`, which also
+  records what this model does **not** capture (torque–speed droop, thermal limits, belt compliance)
 ---
 
 ## 7. Sensors
@@ -128,7 +139,13 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - No motor current sensing
 - No motor-side velocity sensing
 
-### 7.3 End-of-Limb Force/Torque Sensing
+### 7.3 Inertial Sensing
+- **6-axis IMU** — gyroscope + accelerometer
+- Mounting: pelvis, at the pelvis_center base frame origin
+- **No magnetometer** — brushed DC motors make indoor magnetic heading unreliable; relative yaw is recovered from leg odometry against the planted foot, with slow absolute-yaw drift accepted
+- IMU is **included in MVS cost accounting**
+- Rationale: pelvis orientation and centre-of-mass velocity are required feedback states for every model-based balance method this design targets, and are not observable from joint encoders and foot force/torque alone
+### 7.4 End-of-Limb Force/Torque Sensing
 - Each foot includes a **6-DOF force/torque sensor**
 - Form factor: cylindrical, 107mm diameter × 56mm height
 - Mounting: distal_face_of_lower_leg_module

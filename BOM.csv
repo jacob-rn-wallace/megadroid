@@ -9,6 +9,7 @@ Actuation,775 Brushed DC Motor,13,18,234,Yes,Identical motor used for all actuat
 Actuation,20:1 Planetary Gearbox (775 compatible),13,25,325,Yes,Standardized gearbox class reused across joints
 Actuation,Secondary Belt Reduction Components,6,12,72,Yes,Used for hip pitch/roll and knee pitch joints
 Sensors,Absolute Joint Encoder,13,8,104,Yes,Joint-mounted output encoders — all 13 actuated joints (design/sensors.yaml)
+Sensors,6-Axis IMU (gyro + accelerometer),1,15,15,Yes,Pelvis-mounted at base frame origin; no magnetometer (design/sensors.yaml)
 Control,Waveshare RP2350-CAN Controller,3,22,66,Yes,Left leg, right leg, torso
 Control,Raspberry Pi (Linux SBC),1,45,45,Yes,High-level control and supervision
 Power,60V to 24V DC/DC Converter (≥50A),1,85,85,Yes,Centralized power conversion
