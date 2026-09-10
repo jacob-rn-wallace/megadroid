@@ -878,6 +878,29 @@ def _selftest_stage2(model):
 # kept for the nominal-walking-quality gain alone.
 K_DCM_RECEDE = -0.77
 
+# K_ADM_RECEDE: this file's own admittance gain -- deliberately NOT lw.K_ADM,
+# same rationale as K_DCM_RECEDE above (this file's receding-horizon loop
+# has its own stability margins, not assumed to match lw.run_walk's).
+#
+# RE-SWEPT 2026-09-09 (path (a) Stage 0): while re-establishing a clean
+# baseline for the b_nom_y/CoP-repulsion investigation, direct measurement
+# found the design commit `dca7009` (finalizing ankle_roll's actuator mass
+# in design/geometry.yaml/joints.yaml/mass.yaml, AFTER K_DCM_RECEDE/
+# MAX_FOOTSTEP_ADAPT_Y_M above were tuned) had silently shifted dynamics
+# again -- lw.K_ADM=2500 (this file's prior shared default) now falls by
+# n=40 (90.30deg), not the "flat through n=30" the surrounding constants'
+# own comments claimed. A coordinate-descent re-sweep (K_DCM_RECEDE and
+# MAX_FOOTSTEP_ADAPT_Y_M re-confirmed as still-optimal at their existing
+# values; only K_ADM had drifted) found 5000 flat through n=45 (6.31-6.43
+# deg) where 2500 falls by n=40 -- kept as this file's own default. Does
+# NOT change the push-recovery picture: with this baseline, exactly one
+# push per axis survives in the 5-30N battery (sagittal 10N, lateral none
+# reliably) -- same chaotic, knife-edge, no-real-margin character as every
+# other gain in this stack, not a robustness improvement, just a nominal-
+# walking one. NOT shared back into lw.K_ADM -- lw.run_walk's own stability
+# margin for this value was not re-verified this pass.
+K_ADM_RECEDE = 5000
+
 # Slow outer loop cadence -- footstep retarget + short-horizon replan. Not
 # every physics tick (dt=0.002s, 500Hz): the DCM/CoM trajectory only needs
 # to be as fresh as the measurement driving it, and re-solving every tick
@@ -968,6 +991,69 @@ ALPHA3_DCM_OFFSET = 1e20
 # be costliest (see the plan's Stage 1 risk). Starting point, not yet swept.
 COMMIT_FRACTION = 0.85
 
+# EMA-based b_nom_y estimate (path (a), 2026-09-09 -- see tools/CLAUDE.md's
+# b_nom_y investigation entries for the derivation and why the two prior
+# extremes both failed). Expressed as a DIMENSIONLESS multiple of
+# swing_to_xy_nominal[1] rather than an absolute-meters offset -- this is
+# what makes a cross-swing EMA well-posed at all, since
+# swing_to_xy_nominal[1] itself flips sign every swing (alternating feet)
+# while a multiplier k does not. BETA_B_NOM/MAX_B_NOM_DRIFT_K implement the
+# "slowly-adapting, anchored, not a full reset" design flagged as untried in
+# the b_nom_y magnitude-sweep entry: a per-swing measurement (identical
+# formula to the reverted full-recalibration attempt) is blended into a
+# persistent EMA at a slow rate, then clamped to stay within
+# MAX_B_NOM_DRIFT_K of the anchor.
+#
+# K_B_NOM_ANCHOR IS NOT the "theoretically pure" -0.8636 value from the
+# periodicity-condition derivation -- anchoring there was tried first this
+# pass and immediately reproduced the already-closed-out magnitude-sweep
+# finding (k=-0.8636 held per-swing: 94.04deg, falls by n=10; confirmed
+# again here at n=6: 26.78deg vs. the <20deg gate, selftest failure). That
+# sweep's own conclusion stands: the REST of the stack (K_DCM_RECEDE, the
+# footstep clamps) was jointly re-tuned around k=-0.2, not the theoretical
+# value, so -0.2 is the anchor here too -- what's actually new is letting a
+# slow EMA nudge k away from -0.2 toward the real per-swing measurement
+# (genuine model-mismatch tracking), bounded to stay within the
+# sweep-validated safe band (roughly [-0.4, 0], per that entry's table).
+K_B_NOM_ANCHOR = -0.2
+BETA_B_NOM = 0.01
+MAX_B_NOM_DRIFT_K = 0.08
+
+# BETA_B_NOM/MAX_B_NOM_DRIFT_K found by a bounded grid sweep (12 configs x
+# nominal-walk step counts 18/25/30/35/40, diagnostic-only, see the
+# accompanying tools/CLAUDE.md entry): non-monotonic and knife-edge, exactly
+# the same character as every other gain margin found this session (e.g.
+# K_ADM's own comment) -- adjacent (beta, drift) cells swing between
+# near-flat stability and an early fall with no smooth trend, so this is
+# the best CELL found in the swept range, not a local optimum with margin.
+# (0.01, 0.08) is flat 6.32deg through n=35 (a real, substantial
+# improvement over the actual current baseline -- see below -- which falls
+# by n=25 at 82deg), falling only at n=40.
+#
+# IMPORTANT CONTEXT discovered while establishing this baseline: the
+# previously-committed b_nom_y=-0.2x/K_DCM_RECEDE=-0.77 combination's own
+# comments claim "flat 6.32deg through n=30" -- that claim no longer holds
+# against the CURRENT MJCF model (falls at n=25/30, 82deg, verified directly
+# against the unmodified committed code). The design commit immediately
+# after that tuning (`dca7009`, finalizing ankle_roll's actuator mass in
+# design/geometry.yaml/joints.yaml/mass.yaml) shifted z_c/Tc again -- the
+# same class of margin-crossing effect flagged in K_DCM_RECEDE's own comment
+# for the ORIGINAL ankle_roll actuation change -- and nobody re-validated
+# the n=25/30 tail after that follow-up design edit. This EMA fix's
+# improvement is measured against that real (degraded) current baseline,
+# not the stale documented one.
+
+# CoP-repulsion ankle-torque target gain (path (a), Stage 2). K_IC=0.0 is an
+# exact no-op (tau_x_target stays 0.0, identical to ankle_roll_admittance's
+# own default) -- see the wiring in run_walk_recede's fast inner loop and
+# tools/CLAUDE.md's CoP-repulsion entry for the mechanism (Koolen/Pratt
+# capture-point-based CoP target, clamped to the foot's physical half-width
+# BEFORE multiplying by measured vertical force, not after -- clamping the
+# resulting torque instead lets an oversized gain saturate
+# ankle_roll_admittance's own clamp in bang-bang chatter, the bug found and
+# fixed in the original implementation of this mechanism).
+K_IC = 0.0
+
 # Do NOT start retargeting right at swing onset. capture_point_footstep's
 # growth term exp(omega*(T-t)) is LARGEST right at swing start (T-t at its
 # max) and shrinks toward 1 approaching touchdown -- found empirically, not
@@ -1004,9 +1090,11 @@ def _nominal_next_touchdown(stance_xy, new_swing_side, step_length, step_width):
 
 def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                      render_every=10, verbose=True, k_dcm=K_DCM_RECEDE,
-                     k_adm=lw.K_ADM,
+                     k_adm=K_ADM_RECEDE,
                      replan_period=REPLAN_PERIOD_S, push_at=None, push_force=(0.0, 0.0),
-                     push_duration=0.1):
+                     push_duration=0.1,
+                     k_b_nom_anchor=K_B_NOM_ANCHOR, beta_b_nom=BETA_B_NOM,
+                     max_b_nom_drift_k=MAX_B_NOM_DRIFT_K, k_ic=K_IC):
     """Drive the robot with the receding-horizon controller: the first step
     is bootstrapped exactly like lw.run_walk (same dwell/shift/first-step
     plan, same initial MuJoCo state), then from the SECOND step onward the
@@ -1115,6 +1203,12 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
     retarget_t0 = retarget_tau = None
     foot_positions = None   # {"left": xy, "right": xy}, tracked from switchover onward
 
+    # b_nom_y EMA state (path (a), Stage 1) -- persists ACROSS swings
+    # (unlike retarget_active etc. above), initialized to the anchor value;
+    # b_nom_y_calibrated_this_swing gates the one-time per-swing measurement.
+    b_nom_y_k_ema = k_b_nom_anchor
+    b_nom_y_calibrated_this_swing = False
+
     t_next_replan = t_switchover
 
     pelvis_x0 = data.xpos[pelvis_id, 0]
@@ -1133,6 +1227,18 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                                                    f"{side}_ft_torque")]
         for side in ("left", "right")
     }
+    # CoP-repulsion (Stage 2): vertical-force channel of the same F/T sensor,
+    # and the foot's real physical half-width read from the MJCF model
+    # itself (generate_mjcf.py's `{side}_foot_geom`, box half-extents)
+    # rather than duplicating that literal here -- this file already derives
+    # geometric constants from `model` elsewhere (solve_walk_pose,
+    # solve_walk_com_height) instead of re-hardcoding design values.
+    ft_force_adr = {
+        side: model.sensor_adr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR,
+                                                   f"{side}_ft_force")]
+        for side in ("left", "right")
+    }
+    foot_half_width_m = float(model.geom("left_foot_geom").size[1])
     mujoco.mj_rnePostConstraint(model, data)   # seed for the first iteration's read
 
     step = 0
@@ -1169,6 +1275,7 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                                                  # possibly-already-adapted value
             foot_positions = {stance_side: stance_xy, swing_side: swing_from_xy}
             retarget_active = False
+            b_nom_y_calibrated_this_swing = False
             t_next_replan = t
 
         # ---- Measure real state and update filters ONCE per tick. Both the
@@ -1204,19 +1311,29 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                 # b_nom_y: NOT nominal_dcm_offset(step_len_y, ...) -- that's
                 # ~0 by construction on this straight-line gait (see tools/
                 # CLAUDE.md's 2026-09-09 b_nom_y entries for the full
-                # derivation of why, and why 4 different attempts to
-                # "correctly" fix its magnitude/reference point all failed
-                # or regressed). This fixed -0.2x scale, found via a
-                # coordinated grid search jointly with K_DCM_RECEDE and
-                # MAX_FOOTSTEP_ADAPT_Y_M (not swept alone), gives a real,
-                # non-regressive nominal-walking improvement (flat 6.32deg
-                # through n=30, vs. falling at n=25 before) with sagittal
-                # push recovery preserved. It does NOT fix lateral push
-                # recovery (still only 5N survives, same ceiling as before)
-                # -- kept for the walking-quality gain alone, not claimed to
-                # solve push-robustness.
+                # derivation of why, and why 4 different fixed-magnitude
+                # attempts all failed or regressed). Path (a): a per-swing
+                # EMA estimate (see K_B_NOM_ANCHOR/BETA_B_NOM/
+                # MAX_B_NOM_DRIFT_K's block comment above), measured once per
+                # swing at the first retarget tick and held for the rest of
+                # that swing -- the untried middle ground between a static
+                # constant (drifted, fell by step 7-9) and a full per-swing
+                # reset (zero restoring force, fell by step ~8-10).
+                if not b_nom_y_calibrated_this_swing:
+                    growth_now = math.exp(omega * (T_touchdown_nominal - t))
+                    measured_offset = (stance_xy[1]
+                                        + (xi_filtered[1] - stance_xy[1]) * growth_now
+                                        - swing_to_xy_nominal[1])
+                    k_measured = measured_offset / swing_to_xy_nominal[1]
+                    b_nom_y_k_ema = ((1 - beta_b_nom) * b_nom_y_k_ema
+                                      + beta_b_nom * k_measured)
+                    b_nom_y_k_ema = float(np.clip(
+                        b_nom_y_k_ema,
+                        k_b_nom_anchor - max_b_nom_drift_k,
+                        k_b_nom_anchor + max_b_nom_drift_k))
+                    b_nom_y_calibrated_this_swing = True
                 b_nom = (nominal_dcm_offset(step_len_x, t_ss, omega),
-                         -0.2 * swing_to_xy_nominal[1])
+                         b_nom_y_k_ema * swing_to_xy_nominal[1])
                 p_new, T_new, _ = capture_point_footstep_with_timing(
                     stance_xy, xi_filtered, b_nom, omega, t, T_touchdown_nominal,
                     step_len_x, step_len_y, alpha1=ALPHA1_FOOTSTEP,
@@ -1309,8 +1426,20 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
         # replaced), since a foot in the air reads ~0 torque already.
         for side in ("left", "right"):
             tau_x = data.sensordata[ft_torque_adr[side]]
+            # CoP-repulsion (Stage 2, path (a)): k_ic=0.0 is an exact no-op
+            # (tau_x_target stays 0.0). Clamp the DESIRED CoP SHIFT itself to
+            # the foot's physical half-width before multiplying by measured
+            # vertical force -- clamping the resulting torque instead lets an
+            # oversized k_ic saturate ankle_roll_admittance's own clamp in
+            # bang-bang chatter (see tools/CLAUDE.md's CoP-repulsion entry).
+            tau_x_target = 0.0
+            if k_ic != 0.0:
+                f_z = data.sensordata[ft_force_adr[side] + 2]
+                desired_cop_shift_y = float(np.clip(
+                    k_ic * dcm_err[1], -foot_half_width_m, foot_half_width_m))
+                tau_x_target = desired_cop_shift_y * f_z
             data.ctrl[act_index[f"act_{side}_ankle_roll"]] = lw.ankle_roll_admittance(
-                tau_x, k_adm=k_adm)
+                tau_x, tau_x_target=tau_x_target, k_adm=k_adm)
 
         for side in ("left", "right"):
             hip_origin = lw.hip_origin_for_side(pelvis_xyz_cmd, side)
@@ -1367,6 +1496,7 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
             T_touchdown = t_swing_start + t_ss
             T_touchdown_nominal = T_touchdown   # fresh fixed reference for the new swing
             retarget_active = False
+            b_nom_y_calibrated_this_swing = False
             t_next_replan = data.time
 
     pelvis_x_final = data.xpos[pelvis_id, 0]

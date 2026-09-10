@@ -1558,3 +1558,88 @@ simultaneously, and neither was tested working together with a
 correctly-functioning partner), or accept this as the architecture's
 current honest limit.
 
+### 2026-09-09 — Path (a) attempted (Plan Mode, approved): EMA b_nom_y + re-wired CoP-repulsion, jointly re-tuned -- real nominal-walking win, but an 8th mechanism fails to move the lateral push ceiling, plus a significant baseline-drift discovery along the way
+
+User's call, choosing between "fix b_nom_y properly + wire CoP-repulsion
+together" and "accept the current limit": scoped via Plan Mode
+(`.claude/plans/validated-floating-origami.md`) to implement the one
+genuinely untried piece flagged in the b_nom_y magnitude-sweep entry above
+-- a slowly-adapting, anchor-bounded EMA, not a static constant or a full
+per-swing reset -- and layer the previously-reverted CoP-repulsion mechanism
+on top, testing both together for the first time.
+
+**Stage 1 -- EMA b_nom_y, a real nominal-walking win.** Implemented in
+`run_walk_recede`: a per-swing measurement (identical formula to the
+reverted full-recalibration attempt) blended into a persistent EMA at a slow
+rate, anchored to k=-0.2 (NOT the "theoretically pure" -0.8636 derived
+earlier -- anchoring there was tried first and immediately reproduced that
+value's own already-documented catastrophic failure, confirming the earlier
+sweep's conclusion that the rest of the stack is tuned around -0.2, not the
+theoretical value), and clamped to stay within a bounded drift of that
+anchor. `BETA_B_NOM`/`MAX_B_NOM_DRIFT_K` found by a bounded grid sweep --
+non-monotonic and knife-edge, same character as every other gain margin in
+this file -- with (0.01, 0.08) the best cell found.
+
+**Significant discovery while establishing a baseline for that sweep: this
+file's own push-recovery characterization was already stale.** The
+`b_nom_y=-0.2x`/`K_DCM_RECEDE=-0.77` commit (`628b560`) predates `dca7009`
+(finalizing ankle_roll's actuator mass in
+`design/geometry.yaml`/`joints.yaml`/`mass.yaml`) -- the same class of
+z_c/Tc-shifting design change already documented once before crossing this
+file's K_DCM margins. Direct measurement against the CURRENT MJCF (not
+runtime overrides -- the actual committed code) showed the documented "flat
+through n=30" claim no longer holds (falls by n=25, 82deg), and more
+importantly the push-recovery numbers had drifted too: even 5N lateral --
+every prior entry's one always-safe push -- now falls (88deg), and sagittal
+"4/5 survive" is down to 1/5. Nobody had re-validated push recovery after
+`dca7009` landed. This means the CoP-repulsion entry above (`c511a4d`,
+"zero measurable effect") was run against a baseline that had silently
+degraded underneath it, though as Stage 3 below shows, re-running it on a
+properly re-validated baseline reaches the same conclusion anyway.
+
+**Stage 0 (added mid-session, user's call after the drift discovery) --
+coordinate-descent re-tune against the current MJCF.** `K_DCM_RECEDE=-0.77`
+and `MAX_FOOTSTEP_ADAPT_Y_M=0.03` re-confirmed as still locally optimal
+(re-swept directly, not assumed). `K_ADM` had drifted: the previous shared
+default (`lw.K_ADM=2500`) now falls by n=40; `5000` holds flat through n=45
+(6.31-6.43deg). Added as `K_ADM_RECEDE`, this file's own value -- NOT pushed
+back into `lw.K_ADM`, since `lw.run_walk`'s own margin for this value was
+not re-verified this pass. This re-tune, combined with the EMA fix, is a
+real, substantial, verified nominal-walking improvement: flat through n=45
+where the actual current baseline was falling by n=25.
+
+**Stage 3 -- the actual path (a) question, on the now-validated baseline:
+still no.** Swept `K_IC` (the re-wired CoP-repulsion gain, foot-half-width
+clamp now sourced from the MJCF model at runtime rather than a duplicated
+literal) from -50 to 50 against the full lateral push battery
+(push_at=2.0s, n_steps=18). The 10N ceiling never moves -- consistently
+78-81deg regardless of sign or magnitude, indistinguishable from `K_IC=0`.
+`K_IC` does perturb the 5N cell (non-monotonically -- some values survive,
+most don't) but never the actual failure boundary. This is the EIGHTH
+structurally distinct mechanism to fail at this specific question (four
+b_nom_y fixes, reachability clamping, the coordinated re-tune, CoP-repulsion
+alone, and now corrected-b_nom_y + CoP-repulsion together) -- and this time
+tested on a baseline that is actually trustworthy, closing the loop the
+earlier CoP-repulsion entry couldn't.
+
+**What's kept, what isn't.** Committed: the EMA b_nom_y fix and
+`K_ADM_RECEDE=5000`, both real and independently verified nominal-walking
+wins (flat through n=45, all self-tests pass) -- kept per the same standing
+practice as `628b560`, on the user's explicit call. NOT committed: any
+nonzero `K_IC` -- the CoP-repulsion wiring ships present but inert
+(`K_IC=0.0` default, exact no-op), available for a future attempt but with
+no validated reason to activate it.
+
+**Where this leaves lateral push recovery:** unresolved, after what is now
+eight structurally distinct, independently-tested mechanisms, all
+neutral-or-harmful on this specific question despite two of them (the
+2026-09-08/09 re-tunes) producing real, kept nominal-walking gains along the
+way. The push-recovery response itself looks chaotic/knife-edge at every
+gain checked this session (K_DCM_RECEDE, Y_clamp, K_ADM, K_IC alike) --
+exactly one isolated cell survives per axis in most sweeps, with no smooth
+margin anywhere nearby -- which is itself informative: this may not be a
+missing mechanism so much as a system operating with no real disturbance-
+rejection margin at all at these force magnitudes, for reasons deeper than
+any single gain or reference term. Accepting the current architecture's
+limit at this force range is now a well-evidenced, not a premature, call.
+
