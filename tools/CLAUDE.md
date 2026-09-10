@@ -1643,3 +1643,81 @@ rejection margin at all at these force magnitudes, for reasons deeper than
 any single gain or reference term. Accepting the current architecture's
 limit at this force range is now a well-evidenced, not a premature, call.
 
+### 2026-09-10 — Investigating the d_inf-vs-empirical-zero-effect discrepancy: the axis-mismatch in the margin calculation is real but only half the story, and the "receding horizon erases the correction signal" hypothesis is cleanly ruled out
+
+The 2026-09-09 literature synthesis's `d_inf~=89mm` margin calculation was
+the basis for prioritizing CoP-repulsion over hip/torso strategy. That
+mechanism has since been correctly implemented and shown zero measurable
+effect, even at 5N (12mm required shift, theoretically trivial against an
+89mm margin). This entry investigates why, as a bounded diagnostic (Plan
+Mode approved, `.claude/plans/validated-floating-origami.md`), not a new
+control mechanism.
+
+**Finding 1 -- the d_inf calculation mixed sagittal and lateral parameters.**
+Reconstructing it (`d_inf = l_max*e^(-omega0*t_ss)/(1-e^(-omega0*t_ss)) +
+r_max`) reproduces ~89mm using `r_max=0.075` (the foot's SAGITTAL
+half-LENGTH) and `l_max=0.05` (`MAX_FOOTSTEP_ADAPT_X_M`, the sagittal
+clamp) -- both sagittal values, applied to what was presented as a general
+margin. Recomputed with the correct LATERAL values (`r_max=0.040`, the foot
+half-WIDTH; `l_max=0.03`, `MAX_FOOTSTEP_ADAPT_Y_M`): **d_inf_lateral ~=
+48mm**, on the current model (z_c=0.5258m, omega0=4.32rad/s -- both shifted
+slightly from the original calc's inputs, consistent with the same
+z_c/Tc-drift pattern documented elsewhere this session). This is a real
+correction to that earlier claim, roughly half the originally stated
+margin.
+
+**But 48mm still doesn't explain the empirical result.** 10N requires only
+24.1mm of capture-point shift -- half of even the corrected 48mm margin,
+should be comfortably recoverable -- yet it reliably falls at ~80deg in
+every push-battery run this session. The axis-mismatch correction is real
+and worth keeping as the accurate number, but it closes roughly half the
+gap, not all of it.
+
+**Finding 2 -- ruled out: the receding-horizon architecture does NOT
+structurally erase the correction signal.** Hypothesis: `replan_horizon`
+rebuilds its reference every `REPLAN_PERIOD_S=0.1s` from the robot's actual
+(possibly disturbed) current state, so `dcm_err` -- the signal driving
+every correction mechanism tried all session -- could shrink toward zero
+within ~1 replan period of a push without the robot actually recovering its
+intended path, explaining why every mechanism shows an identical wall.
+Added `push_at`/`push_force`/`push_duration` to `sim_walk_lipm.py`'s
+`run_walk` (mirroring `run_walk_recede`'s existing convention exactly --
+this function had no push-testing support before) specifically to test
+this: `run_walk`'s FIXED whole-walk horizon, computed once and never
+rebuilt from live state, is architecturally immune to this failure mode if
+it's real.
+
+**Result: `run_walk` fails in the exact same pattern.** Full lateral
+battery (5/10/15/20/30N, push_at=2.0s, n=12 -- this file's own clean range
+also drifted from the documented n=3-14 down to n<=12, same z_c/Tc-shift
+pattern as `run_walk_recede`): 5N/15N/20N/30N all fall (91.71-95.76deg);
+only 10N survives (8.30deg) -- one isolated lucky cell, at a COMPLETELY
+DIFFERENT force than `run_walk_recede`'s own one surviving cell (5N, under
+its current re-tuned defaults). An architecture that never re-anchors its
+reference to the disturbed state fails just as completely, and just as
+chaotically, as one that does. Hypothesis 2 is cleanly ruled out.
+
+**What's left, and what's newly suggested by this result.** Two candidate
+explanations were investigated; neither fully explains the empirical
+result, but the pattern in Finding 2's data is itself a clue: TWO
+architecturally different controllers each survive exactly one isolated
+force value, and those values don't match each other. That's much more
+consistent with high sensitivity to the PRECISE PHASE of the gait cycle at
+which a push lands (single- vs double-support, swing progress fraction)
+than with anything about corrective authority, gain tuning, or reference-
+tracking architecture -- if survival depended on those, the same force
+should behave consistently across similar configurations, not flip
+unpredictably. This has a precedent already in this file (2026-09-08: "same
+15N lateral push, six different push times... fell at nearly every timing
+too"), but that check never found a survival case, and was never re-run
+against the current (re-tuned, drift-corrected) baselines with a FINE
+timing sweep at a single fixed force to characterize the shape of that
+sensitivity. Flagged for the user's call before pursuing it -- this would
+be a genuinely different diagnostic than anything tried so far (sweeping
+WHEN the push lands, not what mechanism resists it), not a continuation of
+either hypothesis in this entry.
+
+**Kept:** `push_at`/`push_force`/`push_duration` support in `sim_walk_lipm.
+py`'s `run_walk` -- real, reusable diagnostic infrastructure, additive and
+no-op when `push_at=None`, `--selftest` re-verified clean.
+

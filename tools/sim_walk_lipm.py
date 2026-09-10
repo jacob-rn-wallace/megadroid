@@ -1291,7 +1291,7 @@ def interpolate_plan(ts, arr, t):
 
 
 def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, k_dcm=K_DCM,
-             k_adm=K_ADM):
+             k_adm=K_ADM, push_at=None, push_force=(0.0, 0.0), push_duration=0.1):
     """Build the offline DCM/CoM/footstep plan (Stages 0-3), then drive it
     with real MuJoCo dynamics (mj_step). Unlike Stages 5's pure offline
     plan, joint targets here are computed LIVE every step from real
@@ -1328,8 +1328,16 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
     push this size likely needs bigger corrective action than an ankle
     alone provides -- larger/faster footstep placement changes, or a hip
     strategy -- not another local ankle_roll mechanism. See
-    tools/CLAUDE.md's dated entry for the full push-test data. Returns a
-    summary dict; optionally renders an offscreen GIF."""
+    tools/CLAUDE.md's dated entry for the full push-test data. That "direct
+    re-test" was run against sim_walk_recede.py, not this function -- this
+    function had no push-testing support at all until the 2026-09-10 entry
+    (push_at/push_force/push_duration, same pelvis-xfrc_applied convention
+    as run_walk_recede) added it, specifically to compare this file's FIXED
+    whole-walk horizon (computed once, never rebuilt from live state)
+    against sim_walk_recede.py's receding horizon (rebuilt every
+    REPLAN_PERIOD_S from the actual measured state) under the same
+    disturbance -- see that entry for why the distinction matters. Returns
+    a summary dict; optionally renders an offscreen GIF."""
     data = mujoco.MjData(model)
 
     pelvis_z, hip_deg, knee_deg, ankle_deg = solve_walk_pose(model)
@@ -1410,6 +1418,12 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
 
     for step in range(n_sim_steps):
         t = data.time
+
+        if push_at is not None and push_at <= t < push_at + push_duration:
+            data.xfrc_applied[pelvis_id, 0] = push_force[0]
+            data.xfrc_applied[pelvis_id, 1] = push_force[1]
+        else:
+            data.xfrc_applied[pelvis_id, :] = 0.0
 
         # Real DCM tracking control (see comment above K_DCM): correct the
         # pelvis position target using the MEASURED capture point, not just
