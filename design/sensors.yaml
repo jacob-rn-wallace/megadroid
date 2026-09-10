@@ -29,6 +29,41 @@ motor_sensing:
     architecture, consistent with position-only control (no torque or
     impedance control).
 
+inertial_sensing:
+  imu:
+    present: true
+    axes: 6
+    gyroscope: true
+    accelerometer: true
+    magnetometer: false
+    mounting_location: "pelvis, at the pelvis_center base frame origin"
+    cost_accounting: "included"
+    added: "2026-09-10"
+    rationale: >
+      ADDED 2026-09-10 as a deliberate sensor-strategy revision (SPEC.md
+      Section 15.3). Without an IMU the MVS can measure joint angles and
+      foot force/torque, but NOT pelvis orientation or absolute CoM
+      velocity -- and every model-based balance method this project's
+      reference library points at (ZMP preview control, DCM/capture-point
+      tracking, LIPM MPC, capturability-based control) requires CoM
+      velocity as a feedback state. Simulation had been masking this: the
+      P3 controllers read MuJoCo's privileged world-frame CoM position and
+      velocity directly, a state the robot as previously specified could
+      never have produced. The IMU closes that gap and is what makes a
+      real state estimator possible.
+    magnetometer_rationale: >
+      Deliberately omitted. Thirteen brushed DC motors operating close to
+      the sensor make indoor magnetic heading unreliable, and a
+      magnetometer would add a calibration burden for a measurement the
+      gait does not need: absolute yaw is not required for balance, and
+      relative yaw is recoverable from leg odometry against the planted
+      foot. Accepted consequence -- estimated yaw drifts slowly with no
+      absolute reference.
+    cost_rationale: >
+      Included in MVS cost accounting, unlike the F/T sensors below. A
+      6-axis MEMS IMU is a low-cost commodity part, so excluding it would
+      misrepresent the build cost rather than protect the cost target.
+
 end_of_limb_sensing:
   ft_sensor:
     form_factor:

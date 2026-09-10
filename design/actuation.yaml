@@ -1,3 +1,85 @@
-# Megadroid authoritative design parameters
-# This file is a single source of truth.
-# Do not duplicate values in markdown documents.
+# Megadroid authoritative actuation parameters
+# This file is the single source of truth for motor selection, drivetrain
+# reduction, and the per-joint output torque envelope.
+# Do not duplicate values from this file in markdown documents.
+
+meta:
+  scope: "MVS actuation and drivetrain"
+  notes: >
+    Populated 2026-09-10. Before this, motor_model/motor_voltage/
+    motor_count_mvs were hardcoded as Python literals in
+    tools/rehydrate_spec.py and the per-joint torque envelope did not exist
+    anywhere -- generate_mjcf.py emitted position actuators with no
+    forcerange, so every P3 simulation result to date described a robot
+    with unbounded joint torque. Changes to motor type or control mode
+    require SPEC.md revision (see SPEC.md Section 15, Change Control).
+
+motor:
+  model: "775 brushed DC motors"
+  voltage_nominal_v: 24
+  count_mvs: 13
+  stall_torque_nm: 0.20        # PLACEHOLDER -- representative 775-class figure at
+                                # 24V, NOT a datasheet value for a selected part.
+                                # 775 motors vary widely between vendors. Must be
+                                # replaced with a measured or datasheet figure once
+                                # a specific motor is selected (P6).
+  no_load_speed_rpm: 15000     # PLACEHOLDER -- same caveat as stall_torque_nm.
+  rationale: >
+    Chosen for cost and availability rather than performance: the 775 is a
+    commodity brushed motor, which is what makes the hobbyist cost target
+    reachable. High gear reduction (below) converts its low output torque
+    into usable joint torque at the expense of joint speed.
+
+drivetrain:
+  gearbox:
+    class: "20:1 planetary"
+    ratio: 20
+    notes: >
+      Single standardized gearbox class reused across all actuated joints
+      (SPEC.md Section 6.2 -- no joint uses a bespoke gearbox).
+  belt_stage:
+    provides_reduction: false
+    ratio: 1
+    notes: >
+      RECORDED ASSUMPTION, 2026-09-10: HTD 5M belt stages are treated as
+      transmission for remote motor mounting (keeping mass proximal), NOT as
+      an additional reduction stage. No belt ratio has ever been specified in
+      this design -- geometry.yaml defines only belt pitch and width. This is
+      deliberately the conservative reading: it yields the SMALLEST torque
+      envelope, so simulation constrains the controller harder rather than
+      flattering it. If a real belt reduction is later dimensioned, raising
+      this ratio raises the whole envelope.
+  efficiency: 0.70             # PLACEHOLDER -- combined gearbox + belt losses.
+                                # Planetary gearsets of this class are commonly
+                                # 0.6-0.8; measure on the real drivetrain (P6).
+  total_reduction: 20          # gearbox.ratio * belt_stage.ratio
+
+output:
+  peak_joint_torque_nm: 2.8    # DERIVED: motor.stall_torque_nm * total_reduction
+                                # * efficiency = 0.20 * 20 * 0.70 = 2.8
+  max_joint_speed_rad_s: 78.5  # DERIVED: no_load_speed_rpm / total_reduction,
+                                # converted -- 15000/20 = 750 rpm = 78.5 rad/s.
+                                # Recorded for reference; not enforced in
+                                # simulation (see modeling_limitations).
+  uniform_across_joints: true
+  notes: >
+    A single envelope applies to every actuated joint because a single motor
+    and a single gearbox class are used throughout. For scale: the measured
+    static standing hold (tools/sim_static_pose.py, current model) is
+    0.655 N-m at knee_pitch and 1.33 N-m total per leg, so this envelope
+    leaves roughly 2x margin over static stance before any dynamic demand.
+
+modeling_limitations:
+  flat_torque_cap: >
+    peak_joint_torque_nm is applied in simulation as a FLAT cap (MuJoCo
+    actuator forcerange). A real brushed DC motor's torque falls
+    approximately linearly with speed, so a flat cap is optimistic at high
+    joint velocity and accurate only near stall. Modeling the true
+    torque-speed curve would require a velocity-dependent actuator model.
+  thermal: >
+    Stall torque is an instantaneous figure. Continuous operation at this
+    level would overheat a 775; no thermal or duty-cycle model exists here.
+  compliance: >
+    Belt stretch and gear backlash are not modeled. design/sensors.yaml's
+    joint-mounted encoder policy exists specifically because these are
+    expected to be significant.
