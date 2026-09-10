@@ -2401,3 +2401,87 @@ that evidence.
 falls (77.27deg) under the real torque limit where unlimited torque reached
 n=45. The drivetrain fix recovered the milestone as documented, with a much
 shorter clean range than the pre-envelope figure.
+
+### 2026-09-10 — The robot was never following its own plan: 215% lateral over-swing found, fixed, and the clean walking range doubles
+
+Chasing the inverse-dynamics discrepancy from the entry above led to a check
+this project had never run in any form: compare the robot's ACTUAL
+centre-of-mass trajectory against the one its own planner asked for.
+
+**The two axes behave completely differently.**
+
+| axis | actual sway | planned sway | ratio |
+|---|---|---|---|
+| sagittal | 272.2 mm | 284.3 mm | **96%** |
+| lateral | 85.2 mm | 56.3 mm | **151%** (215% on `sim_walk_recede`) |
+
+Sagittal tracking is fine. Lateral over-swings by 1.5-2x, and this is during
+CLEAN walking, not while falling -- measured on a 4-step run peaking at
+7.53deg. Testing for phase lag ruled that out: a 140 ms shift barely helps
+(22.9 -> 20.8 mm RMS), so it is an amplitude failure, not a timing one.
+
+For scale: 85 mm peak-to-peak is +-42.6 mm, which exceeds BOTH the 40 mm
+foot half-width and the 37.8 mm corrected capturability margin. **The CoM
+routinely swings past the edge of the support polygon as normal operation.**
+
+**Root cause: `K_DCM_RECEDE` was one gain applied to both axes.** Correct
+for sagittal, badly wrong for lateral. Nobody had compared planned against
+actual sway, so a 2x lateral tracking failure sat unnoticed underneath every
+mechanism built on top of it.
+
+**Fix: a separate lateral gain, scaled UP not down.** Over-swing here means
+loose tracking, so tightening it reduces the error -- the opposite of the
+intuition that over-swing means too much gain. Swept 1.0-3.0, non-monotonic
+as always: 215%, 121%, 181%, 249%, 121%. `K_DCM_Y_SCALE = 1.5` committed
+(`f63ad0d`).
+
+**Result -- the clean walking range doubles.** At the real 80:1 envelope:
+
+| n_steps | before | after |
+|---|---|---|
+| 8 | 8.76 | **6.27** |
+| 10 | 31.02 | **6.27** |
+| 12 | 77.27 | **6.27** |
+| 14 | falls | **6.27** |
+| 16 | falls | **7.11** |
+| 18 | falls | 24.63 (marginal) |
+| 20 | falls | 78.29 |
+
+Eight to sixteen clean steps, flat 6.27deg throughout, on deterministic
+no-push runs across seven step counts -- not a lucky cell.
+
+**But it buys NO push margin, so my unifying theory is half wrong.** The
+hypothesis was that over-swing consumed the stability margin and therefore
+explained BOTH the walking-range limit AND the eleven failed push-recovery
+mechanisms. Push survival across 7 timings at n=8 (where both configs walk):
+
+| F_y | before | after |
+|---|---|---|
+| 5 N | 6/7 | 7/7 |
+| 10 N | 4/7 | 5/7 |
+| 15 N | 4/7 | **2/7** |
+| 20 N | 1/7 | 1/7 |
+| 30 N | 0/7 | 0/7 |
+
+Net neutral -- slightly better at low force, worse at 15 N. **Lateral
+over-swing explains the walking-range limit and NOT the push-recovery
+failures. They are two separate problems**, which is a narrowing even though
+it is less satisfying than one root cause.
+
+**A methodology error of mine, recorded because this file tracks those too.**
+The first version of that push comparison ran at n=12, where the pre-fix
+config does not walk nominally -- comparing push survival between a config
+that walks and one that does not measures nothing coherent. It produced a
+plausible-looking table (5/7 at 5 N for a config that falls unpushed) that
+would have been written up as a real comparison had the inconsistency not
+been noticed. Same class as the capture-region false positive: a number that
+looks like a result without measuring what it claims. **Rule: only compare
+push survival at step counts where every config under test walks unpushed.**
+
+**Related correction to earlier push data in this file.** Measured properly
+-- multi-timing, at a step count where it actually walks -- the pre-fix
+baseline survives 6/7 at 5 N and 4/7 at 10 N. Earlier entries recorded much
+worse push performance, but those were taken at single timings and at step
+counts near or beyond the walking limit. Push numbers elsewhere in this file
+predating this entry should be treated as pessimistic and methodologically
+weak, not as clean measurements of the mechanism under test.
