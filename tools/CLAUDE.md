@@ -1769,3 +1769,84 @@ arbitrarily different outcomes. Accepting this as the current
 architecture's real limit at this force range is now the well-evidenced
 conclusion, not a premature one.
 
+### 2026-09-10 — sim_walk_gait.py's stale-vs-actuated ankle_roll mismatch fixed; the 3-step regression itself resists six independently-tested parameters, all consistent with a step-3-specific compounding instability
+
+Spot-checking all five documented P3 milestones against the current MJCF
+(prompted by the drift already found twice this session) found
+`sim_walk_gait.py` -- one of the "done" milestones -- now falls at 60.01deg
+after only 2/3 steps. Unlike the other two files' regressions, this one
+wasn't ordinary gain drift: the file's own docstring says its lateral
+strategy (hip_roll ZMP feedback) was designed BECAUSE ankle_roll was a
+"passive, spring-centered" joint at the time. That's no longer true --
+ankle_roll became fully actuated (2026-09-09 decision) -- but this file
+never added a controller for it, so it sat rigidly at 0deg via `generate_
+mjcf.py`'s stiff `kp=150` position servo the whole run, nothing like the
+compliant joint the strategy assumes. User's call: fix the control law.
+
+**Fix implemented and correctly wired.** Added `left_ankle_roll`/
+`right_ankle_roll` to `Gait.act`, an `ft_torque_adr` lookup (same pattern
+as `sim_walk_lipm.py`/`sim_walk_recede.py`), a `mj_forward`+`mj_
+rnePostConstraint` seed call in `run()` (this file had neither before --
+also fixes `Gait.__init__`'s own `self.initial_height` read, previously
+taken pre-forward-kinematics), and a per-tick call to the already-validated
+`lw.ankle_roll_admittance` (imported from `sim_walk_lipm.py`, not
+reimplemented), gated by a new file-scoped `K_ADM_GAIT`.
+
+**But the actual regression resists it, and five other parameters
+besides.** Root-caused first: the fall is PURELY roll, not pitch (traced
+axis-resolved -- pitch stays bounded -40 to +9deg throughout; roll grows
+from ~0 to 60+deg, accelerating, with pitch flat near 0deg exactly when
+roll takes off). Roll starts drifting mid-way through STEP 2 (not step 3),
+partially oscillates in sign for the first ~1.5 steps (consistent with the
+schedule's intended alternating-side symmetry), then stops reversing and
+grows monotonically from ~step 2's shift phase onward, through step 3.
+
+Six parameters swept against the `--steps 3` pass criterion, all
+independently negative:
+- `K_ADM_GAIT` (new ankle_roll admittance gain): 0-15000 initially showed
+  ZERO variation -- traced to a units mistake (typical torque is only
+  ~1.2-1.6Nm mean, so `tau/k_adm` at k_adm>=100 is a fraction of a degree,
+  nowhere near enough to matter); re-swept 1-100 (spanning negligible to
+  fully-saturated correction) -- still no improvement, and the saturated
+  range (2-30) is actively WORSE (fails a full step earlier, at step 2).
+- Sign-flipped admittance, same range: identical negative pattern --
+  rules out a sign-trap (this codebase has real precedent for those, e.g.
+  `ankle_roll_admittance`'s own doc comment, but not here).
+- `ROLL_KP` (the pre-existing hip_roll ZMP gain, untouched since before
+  the `dca7009` mass/geometry shift that affected every other gain this
+  session): 0.5-5.0, no improvement; 2.0-3.0 actively worse.
+- `solve_hip_roll_shift(model)`: re-verified geometrically exact at
+  4.250deg, matching the historical value precisely (pure kinematics, not
+  mass-dependent, so `dca7009` shouldn't have moved it, and didn't).
+- `ANKLE_KP_SINGLE`/`ANKLE_KP_DOUBLE` (sagittal gains): 1-10 and 0.1-3
+  respectively, no improvement (expected, given the failure is pure roll,
+  but checked rather than assumed).
+- `PARTIAL_BALANCE_ALPHA` (stance-knee balance blend, could plausibly
+  shift lateral pendulum dynamics via effective leg length): 0.0-1.0, no
+  improvement.
+
+**A clarifying note on the data, not a new finding:** every failing run's
+reported `max_tilt` clusters tightly at 60.0-60.3deg regardless of which
+parameter or value was swept. This is NOT evidence all six parameters
+produce equivalent dynamics -- the sim halts the instant tilt crosses
+`MAX_TILT_DEG=60.0`, so that number is just "the value at the moment it
+stopped," not a growth-rate or margin signal. The informative metric is
+`steps_completed`: every one of the ~50 configs tested across six
+parameters stayed at 2 (same failure point as baseline) or regressed to 1
+(worse); none reached 3.
+
+**Where this leaves things.** The ankle_roll actuation mismatch is real
+and now correctly fixed in code (kept, not reverted -- real infrastructure
+fixing a real staleness bug, same precedent as path (a)'s `K_IC` shipping
+present-but-inert). The 3-step milestone itself remains broken: six
+independently-tested parameters, all negative, consistent with a
+compounding instability specific to how residual roll carries from step 2
+into step 3 (the same "local gains can't fix a structural compounding
+problem" theme as this session's much longer lateral-push-recovery
+investigation above) rather than any single mistuned constant. `sim_walk_
+gait.py` is already explicitly superseded by `sim_walk_lipm.py` for the
+smooth-walking goal per its own docstring -- given the depth already
+invested (six parameters, ~50 configs) without a working value, further
+investigation here should be its own deliberately-scoped effort, not
+open-ended continuation.
+

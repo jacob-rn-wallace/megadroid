@@ -184,6 +184,7 @@ import numpy as np
 import mujoco
 
 import sim_zmp_balance as sb
+import sim_walk_lipm as lw
 
 MJCF_PATH = sb.MJCF_PATH
 
@@ -219,6 +220,27 @@ ROLL_KP = 1.5                  # lateral (y) ZMP -> hip-roll gain, rad/m — lik
 ZMP_FILTER_ALPHA = 0.02        # EMA weight on each new raw ZMP sample (both axes)
 MAX_ANKLE_CORRECTION_RAD = math.radians(15.0)
 MAX_ROLL_CORRECTION_RAD = math.radians(10.0)
+
+# K_ADM_GAIT: this file's own ankle_roll admittance gain (see
+# lw.ankle_roll_admittance's block comment for the mechanism and its sign
+# convention). Added 2026-09-10 -- this file's balance strategy (hip_roll
+# ZMP feedback, above) was written when ankle_roll was still a passive,
+# spring-centered joint; it became fully actuated (2026-09-09 design
+# decision) but this file never added a controller for it, leaving it
+# rigidly held at 0deg by generate_mjcf.py's stiff kp=150 position
+# actuator -- nothing like the compliant joint the hip_roll strategy was
+# designed around. This is a real, correctly-wired fix to that mismatch,
+# but HONEST RESULT: it does NOT fix the 3-step regression this file also
+# has (see tools/CLAUDE.md's dated entry) -- swept 1-15000 plus the
+# sign-flipped correction, no configuration reaches 3 steps, and the
+# saturated-low-gain range (2-30) is actively worse (fails a step earlier).
+# 2500 is kept as the default because it's provably not harmful (matches
+# baseline's steps_completed exactly across the whole 100-15000 range
+# tested) and consistent with lw.K_ADM's own value, not because it's been
+# shown to help -- ships present-and-correctly-wired but inert relative to
+# this file's own pass criterion, same precedent as path (a)'s K_IC in
+# sim_walk_recede.py.
+K_ADM_GAIT = 2500
 
 MAX_TILT_DEG = 60.0            # generous — single support genuinely leans more; catches real falls only
 MAX_HEIGHT_DROP_M = 0.3
@@ -376,7 +398,16 @@ class Gait:
                     for name in ("left_hip_pitch", "right_hip_pitch",
                                  "left_knee_pitch", "right_knee_pitch",
                                  "left_ankle_pitch", "right_ankle_pitch",
-                                 "left_hip_roll", "right_hip_roll")}
+                                 "left_hip_roll", "right_hip_roll",
+                                 "left_ankle_roll", "right_ankle_roll")}
+        # F/T-sensor admittance control for ankle_roll -- see K_ADM_GAIT's
+        # own comment and lw.ankle_roll_admittance's block comment. Same
+        # sensor_adr pattern as sim_walk_lipm.py/sim_walk_recede.py.
+        self.ft_torque_adr = {
+            side: model.sensor_adr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SENSOR,
+                                                       f"{side}_ft_torque")]
+            for side in ("left", "right")
+        }
         self.hip_deg = {"left": sb.NOMINAL_HIP_DEG, "right": sb.NOMINAL_HIP_DEG}
         self.knee_deg = {"left": sb.NOMINAL_KNEE_DEG, "right": sb.NOMINAL_KNEE_DEG}
         # Scheduled hip_roll target per leg, before the lateral feedback
@@ -409,13 +440,20 @@ class Gait:
         rx, ry = self.foot_pos("right")
         return (lx + rx) / 2.0, (ly + ry) / 2.0
 
-    def apply_ctrl(self, ankle_correction_rad, roll_correction_rad, stance_side):
+    def apply_ctrl(self, ankle_correction_rad, roll_correction_rad, stance_side,
+                    ankle_roll_corr_rad=None):
         """stance_side's knee/ankle come from stance_knee_table (partial
         CoM-balance correction — see StanceKneeTable); the other leg
         uses self.knee_deg (its own schedule — nominal, or the swing
         clearance bump during swing()) plus the plain level-foot
         relation, since it hasn't drifted far from nominal yet whenever
-        this matters (see foot_level_ankle_deg)."""
+        this matters (see foot_level_ankle_deg).
+
+        ankle_roll_corr_rad is {"left": rad, "right": rad} from
+        lw.ankle_roll_admittance, applied PER FOOT unconditionally (see
+        K_ADM_GAIT's comment) — a foot in the air reads ~0 torque so its
+        own correction is already ~0, no stance/swing bookkeeping needed,
+        same as the other files' use of this function."""
         d, act = self.data, self.act
         d.ctrl[act["left_hip_pitch"]] = math.radians(self.hip_deg["left"])
         d.ctrl[act["right_hip_pitch"]] = math.radians(self.hip_deg["right"])
@@ -429,6 +467,8 @@ class Gait:
                 ankle_deg = foot_level_ankle_deg(self.hip_deg[side], knee_deg)
             d.ctrl[act[f"{side}_knee_pitch"]] = math.radians(knee_deg)
             d.ctrl[act[f"{side}_ankle_pitch"]] = math.radians(ankle_deg) + ankle_correction_rad
+            if ankle_roll_corr_rad is not None:
+                d.ctrl[act[f"{side}_ankle_roll"]] = ankle_roll_corr_rad[side]
 
     def step_physics(self, stance_target, stance_side, ankle_kp, frame_sink=None, roll_feedback=True):
         """Advance one physics step with the current joint targets and
@@ -454,7 +494,16 @@ class Gait:
             # Note the minus sign: increasing hip_roll DECREASES pelvis/ZMP y
             # (verified empirically — the inverse of the ankle/x relationship).
             roll_corr = np.clip(-ROLL_KP * y_error, -MAX_ROLL_CORRECTION_RAD, MAX_ROLL_CORRECTION_RAD)
-        self.apply_ctrl(ankle_corr, roll_corr, stance_side)
+        # ankle_roll admittance (see K_ADM_GAIT's comment): reads the F/T
+        # torque from the END of the PREVIOUS tick's mj_rnePostConstraint
+        # (or the pre-loop seed call for the very first tick) — same
+        # one-tick-lag convention as sim_walk_lipm.py/sim_walk_recede.py.
+        ankle_roll_corr = {
+            side: lw.ankle_roll_admittance(self.data.sensordata[self.ft_torque_adr[side]],
+                                             k_adm=K_ADM_GAIT)
+            for side in ("left", "right")
+        }
+        self.apply_ctrl(ankle_corr, roll_corr, stance_side, ankle_roll_corr)
 
         mujoco.mj_step(self.model, self.data)
         mujoco.mj_rnePostConstraint(self.model, self.data)
@@ -559,6 +608,13 @@ def run(n_steps, render_path=None, render_fps=30):
     root_z, target_x0, target_y0 = sb.solve_nominal_geometry(model)
     hip_roll_shift_deg = solve_hip_roll_shift(model)
     sb.set_initial_state(model, data, root_z)
+    # Seed forward kinematics + F/T sensor state before Gait reads xpos/
+    # sensordata for the first time (self.initial_height below, and
+    # step_physics's ankle_roll admittance read) — this file had no
+    # mj_forward call here before the ankle_roll admittance addition, and
+    # mj_resetData + manual qpos edits alone don't populate xpos/sensordata.
+    mujoco.mj_forward(model, data)
+    mujoco.mj_rnePostConstraint(model, data)
 
     gait = Gait(model, data)
     gait.zx_filtered = target_x0
