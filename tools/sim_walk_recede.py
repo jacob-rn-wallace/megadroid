@@ -878,6 +878,29 @@ def _selftest_stage2(model):
 # kept for the nominal-walking-quality gain alone.
 K_DCM_RECEDE = -0.77
 
+# K_DCM_Y_SCALE: the lateral DCM gain, as a multiple of K_DCM_RECEDE.
+#
+# Until 2026-09-10 K_DCM_RECEDE was applied to BOTH axes with a single value.
+# Comparing the robot's ACTUAL centre-of-mass trajectory against the one its
+# own planner asked for -- a check this codebase had never run -- showed the
+# two axes behave completely differently:
+#   sagittal: actual sway 96% of planned amplitude (tracking fine)
+#   lateral : actual sway 215% of planned amplitude (over-swinging 2x)
+# The lateral CoM was routinely swinging past both the foot half-width (40mm)
+# and the corrected capturability margin (37.8mm) during NORMAL walking, so
+# the stability margin was already spent before any disturbance arrived.
+#
+# Scaling the lateral gain up (not down -- tighter tracking means smaller
+# error) fixes it. Swept 1.0-3.0, non-monotonic as every gain in this file is:
+#   K_y      1.0    1.5    2.0    2.5    3.0
+#   sway    215%   121%   181%   249%   121%
+#   clean      8     16     <10    <10     12   steps
+# 1.5 is the best cell: lateral sway 215% -> 121% of plan, peak tilt
+# 8.76 -> 6.27deg, and the clean step range DOUBLES from 8 to 16 at the real
+# 80:1 torque envelope. Verified across four independent step counts
+# (8/10/12/16), all deterministic no-push runs.
+K_DCM_Y_SCALE = 1.5
+
 # K_ADM_RECEDE: this file's own admittance gain -- deliberately NOT lw.K_ADM,
 # same rationale as K_DCM_RECEDE above (this file's receding-horizon loop
 # has its own stability margins, not assumed to match lw.run_walk's).
@@ -1093,6 +1116,7 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
                      k_adm=K_ADM_RECEDE,
                      replan_period=REPLAN_PERIOD_S, push_at=None, push_force=(0.0, 0.0),
                      push_duration=0.1,
+                     k_dcm_y_scale=K_DCM_Y_SCALE,
                      k_b_nom_anchor=K_B_NOM_ANCHOR, beta_b_nom=BETA_B_NOM,
                      max_b_nom_drift_k=MAX_B_NOM_DRIFT_K, k_ic=K_IC):
     """Drive the robot with the receding-horizon controller: the first step
@@ -1397,7 +1421,10 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
 
         dcm_err = xi_filtered - xi_planned
         max_dcm_err_m = max(max_dcm_err_m, float(np.linalg.norm(dcm_err)))
-        correction = np.clip(k_dcm * dcm_err, -lw.MAX_DCM_CORRECTION_M, lw.MAX_DCM_CORRECTION_M)
+        # Per-axis DCM gain -- see K_DCM_Y_SCALE. A single shared gain was
+        # correct for sagittal and left lateral over-swinging 2x.
+        correction = np.clip(np.array([k_dcm, k_dcm * k_dcm_y_scale]) * dcm_err,
+                              -lw.MAX_DCM_CORRECTION_M, lw.MAX_DCM_CORRECTION_M)
         pelvis_xy_cmd = x_com_planned + offset + correction
         pelvis_xyz_cmd = np.array([pelvis_xy_cmd[0], pelvis_xy_cmd[1], pelvis_z])
 
