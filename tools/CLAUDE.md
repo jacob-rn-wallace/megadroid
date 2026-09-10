@@ -1850,3 +1850,57 @@ invested (six parameters, ~50 configs) without a working value, further
 investigation here should be its own deliberately-scoped effort, not
 open-ended continuation.
 
+### 2026-09-10 — P3 milestone audit: 2 of 5 documented quick-reference commands are currently broken, and nothing in preflight/CI would have caught it
+
+Prompted by finding the same silent drift three separate times in one
+session (`sim_walk_recede.py`'s nominal-walk claims, `sim_walk_lipm.py`'s
+`run_walk` clean range, `sim_walk_gait.py`'s 3-step milestone), ran every
+P3 validation script exactly as the root `CLAUDE.md` quick-reference table
+documents it, against the current committed code + MJCF:
+
+| Command (as documented) | Result |
+|---|---|
+| `sim_static_pose.py` | PASS |
+| `sim_zmp_balance.py` | PASS |
+| `sim_walk_gait.py` | **FAIL** — falls at 60deg, 2/3 steps |
+| `sim_walk_lipm.py --steps 15` | **FAIL** — falls at 90.27deg |
+| `sim_walk_recede.py --steps 8` | PASS (6.31deg) |
+
+**Two of the five documented commands fail**, and one of the five
+milestones this file's own "Where work stopped" section lists as done
+(three-step quasi-static walking) has quietly regressed. `sim_walk_lipm.
+py`'s own docstring claims n=3-14 clean at <=6.4deg; measured now, n=12 is
+the real boundary (n=14: 69.44deg, n=15: 90.27deg). The `--steps 15`
+figure in the root quick-reference table is therefore also stale.
+
+**Root cause is the same in every case, and it is a PROCESS gap, not a
+control-law one.** `dca7009` (finalizing ankle_roll's actuator mass in
+`design/geometry.yaml`/`joints.yaml`/`mass.yaml`) shifted z_c/Tc after
+those gains were tuned — the same class of margin-crossing effect
+`K_DCM_RECEDE`'s own comment already documents happening once before for
+this exact joint. Nothing re-ran the sims afterward, so three files'
+documented claims silently went stale and were then used as trusted
+baselines by later investigations (including this session's own
+CoP-repulsion work, which measured "zero effect" against a baseline that
+had already degraded underneath it — see that entry above).
+
+**Why nothing caught it:** `preflight.py` and both CI workflows
+(`validate.yml`, `rehydration-check.yml`) run only the cheap validators
+(`validate_dof_consistency.py`, `validate_no_geometry_literals.py`) and
+the rehydration diff. No MuJoCo sim runs at all. A `design/*.yaml` edit
+can therefore invalidate every walking-gait claim in the repo, pass all
+gates, and merge clean. Given this has now happened at least once with
+three-file blast radius, wiring a cheap sim-regression gate (even just
+`sim_static_pose.py` + `sim_zmp_balance.py` + short walking runs at the
+documented step counts) into preflight or CI is a real, identified gap —
+NOT yet done, deliberately: fixing it requires first restoring a passing
+baseline for the two broken commands, otherwise the gate lands red.
+`sim_walk_recede.py` was re-tuned this session (`ca8925d`);
+`sim_walk_lipm.py`'s `run_walk` and `sim_walk_gait.py` have not been.
+
+**Standing accuracy note for anyone reading the docs:** treat any
+performance number in a docstring or the root quick-reference table as
+"true when written," not "true now," unless it postdates `dca7009`. The
+numbers in this entry and the three above it are measured against the
+current model.
+
