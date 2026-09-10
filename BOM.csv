@@ -7,7 +7,7 @@ authority: derived
 Subsystem,Item,Quantity,UnitCostUSD,ExtendedCostUSD,CostIncluded,Notes
 Actuation,775 Brushed DC Motor,13,18,234,Yes,Identical motor used for all actuated joints — includes ankle_roll (temporarily actuated, see design/joints.yaml)
 Actuation,20:1 Planetary Gearbox (775 compatible),13,25,325,Yes,Standardized gearbox class reused across joints
-Actuation,Secondary Belt Reduction Components,6,12,72,Yes,Used for hip pitch/roll and knee pitch joints
+Actuation,Secondary Belt Reduction Components (4:1),13,12,156,Yes,4:1 belt on ALL actuated joints incl. ankles — ankle-less scope never walks at any ratio (design/actuation.yaml)
 Sensors,Absolute Joint Encoder,13,8,104,Yes,Joint-mounted output encoders — all 13 actuated joints (design/sensors.yaml)
 Sensors,6-Axis IMU (gyro + accelerometer),1,15,15,Yes,Pelvis-mounted at base frame origin; no magnetometer (design/sensors.yaml)
 Control,Waveshare RP2350-CAN Controller,3,22,66,Yes,Left leg, right leg, torso

@@ -246,12 +246,12 @@ Exact gearbox part selections are documented in `BOM.csv`.
 
 All belt stages in Megadroid use HTD 5M timing belts with standardized width as defined in `design/geometry.yaml`.
 
-Belt stages are **transmission only and provide no reduction** (1:1). Their mechanical purpose is to let motors mount proximally while driving a distal joint axis, keeping mass off the far end of each limb. Total drivetrain reduction therefore comes entirely from the gearbox.
+Belt stages provide additional reduction on top of the gearbox.
 ### 7.4 Output Torque Envelope
 
-- Total reduction: **20:1**
-- Peak joint torque: **2.8 N·m**, uniform across all actuated joints
-- Maximum joint speed: **78.5 rad/s**
+- Total reduction: **80:1**
+- Peak joint torque: **11.2 N·m**, uniform across all actuated joints
+- Maximum joint speed: **19.6 rad/s**
 
 This envelope bounds what any control strategy can demand of a joint, and is enforced
 as an actuator limit in the generated simulation model. Motor stall torque, no-load

@@ -111,15 +111,15 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - Standardized gearbox classes reused across joints
 - Gearbox class: **20:1 planetary**
 - No joint uses a bespoke, one-off gearbox design
-- Total drivetrain reduction: **20:1**
+- Total drivetrain reduction: **80:1**
 - All belt-driven transmission stages use HTD 5M timing belts with standardized width
   as defined in `design/geometry.yaml`.
-- Belt stages provide **transmission only, not reduction** — belts exist to mount motors proximally, keeping mass off the distal links.
+- Belt stages provide additional reduction — belts exist to mount motors proximally, keeping mass off the distal links.
 - Belt pitch and width are standardized across all joints to minimize part count,
   simplify sourcing, and improve serviceability.
 
 ### 6.3 Output Torque Envelope
-- Peak sustained joint torque: **2.8 N·m** at every actuated joint
+- Peak sustained joint torque: **11.2 N·m** at every actuated joint
 - A single envelope applies to all joints, since one motor and one gearbox class are used throughout
 - This envelope is enforced in simulation as an actuator force limit, so simulated
   results reflect a bounded drivetrain rather than unlimited torque
