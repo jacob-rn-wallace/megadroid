@@ -114,6 +114,13 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data, actuation_data, sens
     # modeling_limitations). Before 2026-09-10 there was no forcerange at all,
     # i.e. unbounded torque.
     peak_torque = actuation_data["output"]["peak_joint_torque_nm"]
+
+    # Sole contact compliance (design/geometry.yaml foot_stack.sole). BOM has
+    # always specified a compliant pad; before 2026-09-10 this model emitted a
+    # rigid box on a rigid plane, which made ground reaction discontinuous tick
+    # to tick and dominated the robot's disturbance behaviour.
+    _sole = geo_data["foot_stack"]["sole"]
+    sole_solref = f'{_sole["contact_timeconst_s"]} {_sole["contact_dampratio"]}'
     imu = sensors_data["inertial_sensing"]["imu"]
 
     geo = geo_data["anthropometrics"]
@@ -304,6 +311,7 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data, actuation_data, sens
                       name=f"{s}_foot_geom", type="box",
                       size="0.075 0.040 0.020",
                       pos="0 0 0.020",
+                      solref=sole_solref,
                       rgba="0.1 0.1 0.1 1")
 
     add_leg(pelvis, "left",  +1.0)
