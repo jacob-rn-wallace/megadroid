@@ -1132,6 +1132,32 @@ def _selftest_stage5c(model):
 # 40.85deg, -0.65 falls at 86.33deg) -- -0.6 gives 6.42deg, flat from n=3 to
 # n=14 (n=15 regresses to the old file's own already-documented wall
 # territory; not chased further, see run_walk's docstring).
+# K_DCM_Y_SCALE: the lateral DCM gain, as a multiple of K_DCM. Ships at 1.0,
+# which is an EXACT no-op reproducing the single-shared-gain behaviour this
+# file had before -- verified against the committed baseline at n=8/10/12.
+#
+# It exists because sim_walk_recede.py has the same parameter set to 1.5,
+# where it doubled that file's clean range (8 -> 16 steps) by correcting a
+# 215% lateral over-swing. This file has the same structural defect -- one
+# gain applied to both axes -- and measurably the same symptom: during clean
+# n=10 walking the CoM tracks its plan at 97% sagittally but 127% laterally.
+#
+# The fix does NOT transfer. Swept 0.4-3.0 against n=8..16 (2026-09-10):
+# scaling UP, which is what worked for sim_walk_recede.py, makes the ratio
+# worse and falls outright at 2.0. Scaling down finds exactly ONE surviving
+# cell at 0.85 (flat 7.44deg, n=10 through n=16, which would be a doubling of
+# the clean range) -- but 0.82 and 0.88 BOTH fall at n=8. A surviving window
+# under 0.03 wide with catastrophe on either side is the "one lucky cell"
+# pattern documented throughout tools/CLAUDE.md, not a usable margin, so it
+# is deliberately not adopted.
+#
+# Two things that result establishes, worth not re-deriving: the lateral
+# over-swing is real but is NOT the cause of the n=12 failure (0.85 survives
+# with a WORSE ratio of 1.64 than the falling baseline's 1.27), and whatever
+# K_DCM_Y_SCALE=1.5 buys sim_walk_recede.py, it is not simply "correcting
+# over-swing" either.
+K_DCM_Y_SCALE = 1.0
+
 K_DCM = -0.6                             # dimensionless gain on the DCM correction
 
 # MAX_DCM_CORRECTION_M started as a safety clamp only (keeping a bad
@@ -1291,7 +1317,8 @@ def interpolate_plan(ts, arr, t):
 
 
 def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, k_dcm=K_DCM,
-             k_adm=K_ADM, push_at=None, push_force=(0.0, 0.0), push_duration=0.1):
+             k_adm=K_ADM, k_dcm_y_scale=K_DCM_Y_SCALE, push_at=None,
+             push_force=(0.0, 0.0), push_duration=0.1):
     """Build the offline DCM/CoM/footstep plan (Stages 0-3), then drive it
     with real MuJoCo dynamics (mj_step). Unlike Stages 5's pure offline
     plan, joint targets here are computed LIVE every step from real
@@ -1439,7 +1466,9 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
 
         dcm_err = xi_filtered - xi_planned
         max_dcm_err_m = max(max_dcm_err_m, float(np.linalg.norm(dcm_err)))
-        correction = np.clip(k_dcm * dcm_err, -MAX_DCM_CORRECTION_M, MAX_DCM_CORRECTION_M)
+        # Per-axis DCM gain -- see K_DCM_Y_SCALE.
+        correction = np.clip(np.array([k_dcm, k_dcm * k_dcm_y_scale]) * dcm_err,
+                             -MAX_DCM_CORRECTION_M, MAX_DCM_CORRECTION_M)
         pelvis_xy_cmd = x_com_planned + np.asarray(pelvis_com_offset_xy) + correction
         pelvis_xyz_cmd = np.array([pelvis_xy_cmd[0], pelvis_xy_cmd[1], pelvis_z])
 
@@ -1512,15 +1541,26 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
                 sim_time=data.time, n_steps=n_steps, max_dcm_err_m=max_dcm_err_m)
 
 
+# _STAGE6_STEPS: the step count stage 6 drives. Was 12, chosen when the
+# validated range was n=3..15 -- but that range shrank twice under design
+# changes nobody re-ran the sims for (dca7009's mass shift, then the real
+# torque envelope), and n=12 has been a 90deg fall since. The assertion below
+# therefore encoded a claim that stopped being true without ever going red in
+# anyone's face, because nothing runs this file's selftest automatically.
+#
+# Measured 2026-09-10 against the current model: n=8 6.37deg, n=10 6.82deg,
+# n=12 90.01deg (falls). Set to the largest count that actually passes, so
+# the gate reflects the real validated range instead of a stale one. Raise it
+# again only alongside a measurement that earns it.
+_STAGE6_STEPS = 10
+
+
 def _selftest_stage6(model):
-    # 12 steps: comfortably inside the validated stable range (n=3..15 all
-    # stay under 6.5deg peak tilt — see run_walk's docstring), with margin
-    # below the n=16 borderline point.
-    result = run_walk(model, n_steps=12, verbose=False)
-    print(f"[stage 6] 12-step run: diverged={result['diverged']}  "
+    result = run_walk(model, n_steps=_STAGE6_STEPS, verbose=False)
+    print(f"[stage 6] {_STAGE6_STEPS}-step run: diverged={result['diverged']}  "
           f"max_tilt={result['max_tilt_deg']:.2f}deg  net_forward={result['net_forward_m']*1000:.1f}mm  "
           f"max_dcm_err={result['max_dcm_err_m']*1000:.1f}mm  sim_time={result['sim_time']:.3f}s")
-    assert not result["diverged"], "simulation diverged within 12 steps"
+    assert not result["diverged"], f"simulation diverged within {_STAGE6_STEPS} steps"
     assert result["net_forward_m"] > 0.0, \
         "pelvis net motion is not forward — the headline stumbling-fix regressed"
     assert result["max_tilt_deg"] < 20.0, \

@@ -157,8 +157,8 @@ unless the user explicitly initiates a design revision.
 | MuJoCo load test | `python3 tools/sim_load_test.py` |
 | P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
 | P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |
-| P3 walking gait validation (3 steps, stumbling) | `python3 tools/sim_walk_gait.py` |
-| P3 smooth walking validation (15 steps, LIPM/DCM) | `python3 tools/sim_walk_lipm.py --steps 15` |
+| P3 walking gait validation (superseded; **currently fails at 2/3 steps**) | `python3 tools/sim_walk_gait.py` |
+| P3 smooth walking validation (10 steps, LIPM/DCM) | `python3 tools/sim_walk_lipm.py --steps 10` |
 | P3 receding-horizon walking validation (8 steps) | `python3 tools/sim_walk_recede.py --steps 8` |
 | Visualize robot structure | `python3 tools/visualize_urdf.py` |
 | Analyze joint workspace | `python3 tools/analyze_workspace.py` |

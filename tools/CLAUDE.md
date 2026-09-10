@@ -2611,3 +2611,96 @@ NOT re-measured mechanism by mechanism; what is now known is that the
 compliant baseline itself is far stronger than any pre-2026-09-10 entry
 records (12/12 at 5 N, 9/12 at 10 N), so those ceilings understate the
 current controller rather than overstating it.
+
+### 2026-09-10 — The two stale milestones re-run against compliant contact: sim_walk_gait's negative result CONFIRMED, sim_walk_lipm's missing per-axis DCM gain found and rejected, and its selftest was silently red
+
+The sole-compliance fix made every pre-2026-09-10 result provisional, and two
+of the five documented P3 commands had been failing since the P3 milestone
+audit. Neither had been re-examined against the corrected contact model.
+
+**Baseline first, against the current committed model:**
+
+| check | result |
+|---|---|
+| `sim_walk_lipm --steps 8` | 6.37deg |
+| `sim_walk_lipm --steps 10` | 6.82deg |
+| `sim_walk_lipm --steps 12` | **90.01deg falls** |
+| `sim_walk_gait --steps 3` | **falls, 60.03deg, 2/3 steps** |
+
+`sim_walk_gait`'s swing progress is worth noting: **206.7mm**, versus the 17mm
+it managed under the 2.8 N·m envelope. The drivetrain fix restored it to
+roughly its historical behaviour, so it is no longer torque-starved -- it
+fails for its own documented reason.
+
+**sim_walk_gait: the six-parameter negative result CONFIRMED.** That sweep was
+scored against rigid contact, so `docs/P3_MODEL_FIDELITY.md`'s own rule makes
+it provisional. Re-ran the two roll-relevant gains against compliant contact
+(`ROLL_KP` 0.5-4.0, `K_ADM_GAIT` 10-5000, the informative metric being
+`steps_completed`, not the tilt figure -- that clusters at 60deg only because
+the sim halts at `MAX_TILT_DEG`):
+
+| ROLL_KP | K_ADM_GAIT | steps | swing mm |
+|---|---|---|---|
+| 0.5 / 1.0 / **1.5** / 2.5 / 4.0 | 2500 | 2 / 2 / **2** / 1 / 1 | 127 / 197 / **207** / 10 / 28 |
+| 1.5 | 10 / 50 / 200 / 1000 / 5000 | 1 / 2 / 2 / 2 / 2 | 14 / 38 / 216 / 210 / 209 |
+
+Every config reaches 2 steps or regresses to 1; none reaches 3. Unlike push
+recovery, **this failure is not a contact-model artifact** -- the compliant
+sole does not touch it. The roll runaway is real and remains what its own
+entry says it is: a compounding instability in how residual roll carries from
+step 2 into step 3. Verdict stands; not investigated further, per that entry's
+own note that this deserves a scoped effort rather than open-ended
+continuation, and `sim_walk_gait` is explicitly superseded anyway.
+
+**sim_walk_lipm: found the structural defect that fixed sim_walk_recede, and
+it does not transfer.** `K_DCM_Y_SCALE` was only ever added to
+`sim_walk_recede.py`; `run_walk` still applied one `K_DCM` to both axes. Ran
+the diagnostic that cracked recede -- planned vs actual CoM, per axis, during
+CLEAN n=10 walking -- and found the same symptom, milder: **sagittal tracks at
+97%, lateral over-swings to 127%** (recede's was 215%).
+
+Sweeping the new per-axis gain, however:
+
+| K_DCM_Y_SCALE | n=8 | n=10 | n=12 | n=14 | n=16 | lateral ratio |
+|---|---|---|---|---|---|---|
+| 0.78 | 90.35 | 93.02 | 93.04 | 93.05 | 93.05 | — |
+| 0.82 | 94.47 | 94.16 | 94.16 | 94.16 | 94.16 | — |
+| **0.85** | **7.85** | **7.44** | **7.44** | **7.44** | **7.44** | 1.64 |
+| 0.88 | 92.61 | 93.46 | 93.46 | 93.47 | 93.47 | — |
+| 0.96 | 8.19 | 9.30 | 91.80 | 93.79 | 93.68 | — |
+| 1.00 (committed) | 6.37 | 6.82 | **90.01** | — | — | 1.27 |
+| 1.50 (recede's value) | — | 6.79 | — | — | — | 1.31 |
+| 2.00 | — | 85.17 | — | — | — | 5.09 |
+
+Scaling UP -- what doubled recede's range -- makes the ratio worse here and
+falls outright at 2.0. Scaling down finds **exactly one surviving cell at
+0.85**, flat 7.44deg from n=10 through n=16, which would be a doubling of the
+clean range. **It is not adopted.** 0.82 and 0.88 both fall at n=8: a
+surviving window under 0.03 wide with catastrophe on either side is the
+"one lucky cell" pattern this file documents repeatedly, and committing it
+would ship a configuration one rounding error from falling.
+
+**Two things that settles, worth not re-deriving.** The lateral over-swing is
+real but is NOT the cause of the n=12 failure -- 0.85 survives with a *worse*
+ratio (1.64) than the falling baseline's (1.27), so the metric does not
+predict survival here. And by extension, whatever `K_DCM_Y_SCALE=1.5` buys
+`sim_walk_recede.py`, "correcting over-swing" is not a sufficient account of
+it either. That earlier entry's causal story is weaker than it reads.
+
+**A separate find: `sim_walk_lipm.py --selftest` was already red.**
+`_selftest_stage6` drives 12 steps and asserts <20deg, so it had been failing
+since the torque envelope landed -- but nothing runs it automatically, so a
+stale assertion sat there without going red in anyone's face. This is the same
+process gap the P3 milestone audit identified and deliberately left open
+("fixing it requires first restoring a passing baseline"). Stage 6 now drives
+`_STAGE6_STEPS = 10`, the largest count that actually passes, so the gate
+reflects the measured range instead of a claim that expired two design changes
+ago. **Both selftests are green as of this entry** (lipm stage 6: 6.82deg;
+recede stage 3: 6.69deg, unregressed).
+
+**What ships:** the per-axis gain, present but **inert** at
+`K_DCM_Y_SCALE = 1.0` -- verified an exact no-op, reproducing 6.37 / 6.82 /
+90.01 at n=8/10/12 digit-for-digit. Same precedent as `K_IC`: the wiring and
+the measured reason not to activate it are both more useful kept than
+rediscovered. The `--steps 15` figure in the root quick-reference table
+remains stale; the honest current range is **n=10**.
