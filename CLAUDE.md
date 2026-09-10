@@ -25,6 +25,23 @@ Completed stages: **P1** (Authoritative Design Definition) and **P2** (Kinematic
 P3 simulation/gait work is documented in `tools/CLAUDE.md` — read it before
 touching any `tools/sim_*.py` or `tools/generate_mjcf.py` file.
 
+**Read `docs/P3_MODEL_FIDELITY.md` first.** Its finding governs how to read
+everything else: the blocker to validated walking was simulation fidelity, not
+control theory. Four separate model defects were found (no actuator torque
+limits, controllers consuming privileged state, gains stale after a design
+change, and rigid foot contact where the design specifies a compliant sole),
+each capable of invalidating results built on it. Consequences that affect any
+new work:
+
+- **Push-recovery results predating 2026-09-10 are provisional** — they were
+  scored against a contact model that flips outcomes on a 10 ms perturbation.
+- **A single-timing push result is not evidence.** Sweep timings, report counts.
+- **Only compare push survival at step counts where every configuration walks
+  unpushed.**
+- Several authoritative values are still PLACEHOLDERs (motor stall torque,
+  drivetrain efficiency, belt ratio, sole compliance, link masses, IMU noise).
+  Conclusions resting on them carry that uncertainty.
+
 ---
 
 ## Licensing
