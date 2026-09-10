@@ -129,6 +129,43 @@ foot_stack:
   constraints:
     ft_sensor_load_path: "axial_only"
     bending_moments_allowed: false
+  sole:
+    compliant_pad: true
+    contact_timeconst_s: 0.05      # PLACEHOLDER -- see rationale below. This is a
+                                    # PHYSICAL property of the sole pad, not a tuning
+                                    # knob, and it is not yet measured.
+    contact_dampratio: 1.0
+    rationale: >
+      BOM.csv has always specified a "Flat Sole Plate Assembly (compliant sole
+      pad) -- rigid plate + compliant pad for vertical shock absorption", but the
+      generated MuJoCo model represented the foot as a RIGID box on a rigid plane
+      with default contact parameters. The simulation was therefore modelling a
+      robot that was never designed, and sim_zmp_balance.py's own docstring had
+      already noticed the consequence without connecting it: MuJoCo's box-plane
+      contact "activates different corner subsets frame to frame", i.e. the ground
+      reaction force is discontinuous tick to tick. That was treated as sensor
+      noise and filtered; it is actually noise in the physics, and every
+      controller in this project has been fighting it.
+    measured_effect: >
+      Contact compliance dominates this robot's disturbance behaviour. Sweeping
+      the timeconst (2026-09-10, 10N lateral push, 12 timings, n=12):
+        0.02 (rigid, previous): 0/12 survived
+        0.03: 0/12   0.04: 2/12   0.05: 9/12   0.06: 11/12   0.07: 3/12
+      Eleven separate control mechanisms had previously failed to move push
+      recovery at all. A contact-model correction moves it from 0/12 to 9/12.
+      There is a genuine tradeoff against nominal walking range: 0.03 walks
+      cleanly to n=20 where rigid falls, while 0.06+ degrades long-horizon
+      walking (n=16 goes 6.85 -> 16.05deg).
+    why_this_value: >
+      0.05 is chosen as a physically plausible mid-range value for a rubber sole
+      pad that preserves the nominal walking range (clean to n=16, marginal at
+      n=20) while recovering most of the push benefit. It is NOT chosen by
+      optimising the simulation score -- 0.06 scores better on pushes and worse
+      on walking, and picking on score would repeat exactly the model-flattering
+      this project has spent effort correcting elsewhere.
+      MUST BE MEASURED IN P6 against the real pad. The sweep above shows outcomes
+      are highly sensitive to it, so an unmeasured value means the disturbance
+      results carry that uncertainty.
   notes: >
     Stack order and constraints ensure force/torque sensors are not subjected
     to parasitic bending moments. Both ankle axes (pitch, bundled inside
