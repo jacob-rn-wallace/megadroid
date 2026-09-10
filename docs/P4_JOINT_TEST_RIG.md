@@ -61,7 +61,7 @@ One joint, using the robot's actual parts so the numbers transfer:
 
 | Item | Purpose |
 |---|---|
-| Reaction torque sensor or lever arm + load cell | Ground truth output torque |
+| Lever arm + harvested bar load cell | Ground truth output torque — see *Load cells* below |
 | Shunt/hall current sensor on the 24 V line | Electrical power in |
 | Thermocouple on motor case | Thermal limit |
 | Adjustable brake or mass-on-lever load | Sweep the operating point |
@@ -73,6 +73,33 @@ correct — the rig characterises the drivetrain so the robot doesn't have to.
 Mechanically, mount the output shaft in double shear per
 `geometry.yaml.bearing_support` — the rig should not introduce a compliance the
 robot won't have.
+
+### Load cells
+
+Torque measurement is **not** the cost driver this document originally assumed.
+The build sources bar-type load cells by harvesting them from used Wii Fit
+Balance Boards — four per board, one per corner, at a small fraction of the
+price of equivalent new cells. The same supply is what makes the foot F/T
+sensors effectively free (`design/sensors.yaml`,
+`end_of_limb_sensing.ft_sensor.cost_accounting: excluded`), so the rig and the
+robot draw on one stock of parts.
+
+Two consequences for this rig, both of which are reasons to bench-characterise
+a cell *before* designing anything around it:
+
+- **Confirm the sensitive axis.** These are bending-beam cells: gauges read
+  bending strain with one end fixed and load applied at the other. Loaded along
+  the beam's long axis instead, output is small and off-axis moments dominate.
+  For the Test A lever arm this is easy to get right — mount the cell in its
+  native cantilever orientation and drive it perpendicular to the beam — but it
+  must be deliberate, not assumed.
+- **Establish the per-cell rating and linearity.** A board's total rating
+  divided by four is a starting guess, not a specification, and harvested parts
+  carry no datasheet. Test A stalls the joint against this cell, so its range
+  has to cover peak output torque over the lever length actually used.
+
+Characterising one cell costs nothing beyond a set of known masses, and it
+doubles as the first step of the F/T sensor work. Added as **Test H** below.
 
 ---
 
@@ -147,6 +174,32 @@ drift and noise density.
 complementary-filter constant **cannot be honestly tuned** until this exists —
 the sweep currently rewards a setting that would diverge on hardware.
 
+### Test H — Harvested load-cell characterisation *(no rig needed)*
+Hang known masses from a single cell in its native cantilever mounting. Record
+output against load; repeat off-axis and after a thermal soak next to a running
+motor.
+
+**Yields:** sensitive axis confirmed, usable range, linearity, off-axis
+sensitivity, and thermal drift — the four things a datasheet would give and a
+harvested part does not. Prerequisite for Test A (which loads a cell to joint
+stall torque) and for the foot F/T sensors, which use six of the same cells
+each.
+
+*Would change the design if:* per-cell range proves too low for peak joint
+torque at a practical lever length, or off-axis sensitivity is high enough that
+a six-cell wrench solution would be poorly conditioned.
+
+**Note the signal-chain cost, which is where the real expense moved.** Twelve
+channels across two feet need amplification and multi-channel 24-bit
+acquisition. The commodity HX711 samples far too slowly for a walking control
+loop, so a faster front end (or one converter per cell) is the part of the F/T
+story that actually costs money and schedule. That also exposes a modelling
+gap: the MJCF's force/torque sensors are read every control tick with no
+bandwidth, latency, quantisation or noise model at all — the same class of
+unmodelled-hardware defect `docs/P3_MODEL_FIDELITY.md` documents four instances
+of. Whatever sample rate the real chain achieves should be measured here and
+fed back into the simulation.
+
 ---
 
 ## Order of value
@@ -154,10 +207,11 @@ the sweep currently rewards a setting that would diverge on hardware.
 If only some tests get done, this is the priority:
 
 1. **Test F (sole)** — cheapest, and the parameter shown to dominate disturbance behaviour.
-2. **Test A (torque–speed)** — sizes everything; resolves three placeholders at once.
-3. **Test C (thermal)** — determines whether the envelope is real or instantaneous.
-4. **Test G (IMU)** — unblocks honest estimator tuning; needs no fixture.
-5. **Tests D, E** — refine the control model once the envelope is known.
+2. **Test H (load cell)** — trivially cheap, and Tests A and F both depend on trusting a harvested cell.
+3. **Test A (torque–speed)** — sizes everything; resolves three placeholders at once.
+4. **Test C (thermal)** — determines whether the envelope is real or instantaneous.
+5. **Test G (IMU)** — unblocks honest estimator tuning; needs no fixture.
+6. **Tests D, E** — refine the control model once the envelope is known.
 
 ## Prior art
 
@@ -178,19 +232,63 @@ absorbing the power electrically.
 |---|---|---|
 | A, B, C | [Capo01 ODrive dynamometer](https://github.com/Capo01/odrive_based_electric_motor_dynamometer) (GPL-3.0) | Absorber on a pivot arm with a load cell reading reaction torque; current shunts on both sides so motor and controller losses separate. Brushless/ODrive electronics and its 3.5 N·m brake are both unusable here. |
 | A | [Cambridge Univ. Drone Society motor test stand](http://cuds.soc.srcf.net/2021/07/25/designing-a-motor-test-stand-part-1/) | Build detail for the lever-arm-onto-load-cell fixture — the concrete version of the cheap Test A fallback noted under Cost. |
-| A–C | [RAPID: An Inexpensive Open Source Dynamometer for Robotics Applications](https://ieeexplore.ieee.org/document/6584831/) ([RG](https://www.researchgate.net/publication/264566981_RAPID_An_Inexpensive_Open_Source_Dynamometer_for_Robotics_Applications)) | Purpose-built for brushed DC, robotics-oriented, automated PWM sweep. **Two caveats** below. |
+| A–C | [RAPID: An Inexpensive Open Source Dynamometer for Robotics Applications](https://ieeexplore.ieee.org/document/6584831/) (Morozovsky, Moroto & Bewley, UCSD, 2013 — paper in `reference-material/`) | Purpose-built for brushed DC, robotics-oriented, automated PWM sweep. Full CAD, BOM and software located — see below, along with **what it cannot do for us**. |
 | D | [Open-source test stand for backlash measurement in UART servo motors](https://www.sciencedirect.com/science/article/pii/S2468067226000271) | Lock-and-release fixture geometry, extensible with a load cell to give backlash as a function of applied torque — exactly Test D. Different actuator class, same rig. |
 | F | [CNC Kitchen Open-Pull](https://github.com/CNCKitchen/Open-Pull), [UMTK](https://peer.asee.org/use-of-a-low-cost-open-source-universal-mechanical-testing-machine-in-an-introductory-materials-science-course.pdf), [low-cost UTM](https://hackaday.io/project/192166-low-cost-universal-tensile-testing-machine/details), [OSE testing machine](https://wiki.opensourceecology.org/wiki/Open_Source_Universal_Material_Science_Destructive_Testing_Machine) | Leadscrew + load cell frames that do compression, not just tension. Gives force-vs-displacement to settling — the stiffness half of the sole measurement. |
 | — | [Design and Characterization of 3D Printed, Open-Source Actuators for Legged Locomotion](https://arxiv.org/pdf/2202.12395) | Methodology, not hardware: the same characterisation problem in the same application domain. |
 
-**RAPID's two caveats.** First, the paper asserts drawings, schematics and
-software are freely downloadable, but the files could not be located —
-verify they are reachable before planning around it. Second, and more
-important: its headline feature is modelling system inertia and friction to
-*remove the need for a torque sensor*. Test B **is** the friction
-measurement. A rig that assumes a friction model to infer torque cannot
-measure the friction. Its sweep automation transfers; its measurement
-principle is disqualified here.
+### RAPID: where the files are, and what they are good for
+
+The paper points at `http://robotics.ucsd.edu/dyno`, which is dead — the
+Wayback Machine holds exactly one capture of it, from 2024, already a 404.
+The files survive as **Supplemental File 5** of the lead author's
+dissertation, [*Design, Dynamics, and Control of Mobile Robotic Systems*
+(Morozovsky, UCSD 2014)](https://escholarship.org/uc/item/15d2s309), open
+access:
+
+```
+https://escholarship.org/content/qt15d2s309/supp/DC_Motor_Dynamometer_Files.zip
+```
+
+Retrieved and unpacked to `reference-material/humanoid-robotics/
+RAPID-dynamometer-files/` (gitignored, like the rest of that tree):
+
+| File | Contents |
+|---|---|
+| `Bill_of_Materials.pdf` | Full parts list |
+| `UCSD_RAPID_CAD.zip` | 9 STL + 2 DXF — base plate, chuck/motor/encoder towers, inertial disc, clamping hub, shaft adapter, full assembly |
+| `adapterPlates.zip` | 3 parametric SolidWorks parts + STLs (the only editable-source parts in the set) |
+| `DynoMiniLabVIEW_2012.zip` | LabVIEW 2012 project, 17 VIs, FPGA bitfiles |
+
+**Three limits, now read from the paper rather than inferred.**
+
+1. **The load is an inertial disc, not a brake** (§II-A) — it spins the motor
+   up and characterises the spin-down, fitting a gray-box model by least
+   squares. There is no sustained loaded operating point, so **Test C is
+   impossible on this rig**: a thermal rating needs the motor held under load
+   to steady state, which a spin-down cannot do.
+2. **No torque sensor, deliberately** — friction is *modelled* to avoid one.
+   Test B exists to *measure* that friction. A rig that assumes a friction
+   model to infer torque cannot measure the friction, so B is out too.
+3. **Scale mismatch at the chuck.** Its three-jaw chuck spans 1.00–6.35 mm
+   shafts, sized for motor-shaft work; megadroid's standard joint output
+   shaft (`design/geometry.yaml`) is 12 mm. The chuck tower would need
+   redesigning, and only the adapter plates ship as editable CAD — the towers
+   are STL, so that means re-modelling from mesh or DXF.
+
+**What is genuinely worth taking.** The BOM is a validated parts list for
+brushed-DC characterisation (US Digital E6 2500 CPR encoder, Allegro ACS712
+current sensor, Toshiba TB6612FNG driver, NI myDAQ). The `basePlate.dxf` and
+`inertialDisk.dxf` are laser-cut-ready. And the **method** deserves separate
+consideration from the hardware: gray-box parameter identification from
+spin-down tests recovers motor constants without any torque sensor, which
+would resolve items 1 and 2 of the table at the top of this document —
+`stall_torque_nm` and `no_load_speed_rpm` — for the price of an encoder and
+a current sensor. It handles geared motors explicitly (effective inertia
+`J_E = J_gearbox + γ²·J_motor`). That is a real, cheap alternative route to
+the motor parameters; it simply cannot also deliver B, C, or the output-side
+droop curve, so it complements the reaction-arm fixture rather than
+replacing it.
 
 **What this suggests for the build order.** It reinforces Test F first for a
 second, independent reason: it is a compression test, not a dyno problem, and
@@ -201,7 +299,11 @@ Test A as a static reaction-arm fixture, which serves B, C, D and E unchanged.
 
 ## Cost
 
-Roughly $65 in flight parts plus bench instrumentation. A reaction torque sensor
+Roughly $65 in flight parts plus bench instrumentation, and the instrumentation
+is cheaper than first assumed: load cells come from used Balance Boards rather
+than as a several-hundred-dollar reaction torque sensor. What remains is the
+signal chain (amplification and fast multi-channel acquisition, per Test H), a
+thermocouple, and a current sensor. A reaction torque sensor
 is the main expense; a lever arm and kitchen scale is a crude but workable
 substitute for Test A if budget matters more than precision.
 
