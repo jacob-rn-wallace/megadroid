@@ -2013,3 +2013,72 @@ controllers stop consuming ground truth, which will regress them on top
 of the torque regression -- two variables at once, and the plan was
 explicit about not doing that in one pass.
 
+### 2026-09-10 — Architecture D, Stage 0: the torque gap is NOT a servo-gain artifact, and the reason is sharper than either hypothesis — there is no kp that both stands and walks
+
+Stage 0 of the Architecture D build (constraint-aware LIPM MPC, chosen after
+the full architecture review). Its purpose was to settle a confound left
+open by the entry above: `kp=150` was chosen when torque was unlimited, and
+against a 2.8 N·m cap it saturates at **1.07deg of tracking error**, so
+"the drivetrain cannot power this gait" and "the servo gain is 5-10x too
+stiff for this actuator" produce identical symptoms. A peak 9x the RMS is
+the classic signature of the latter.
+
+**Swept kp against the receding-horizon gait, 8 steps, real 2.8 N·m cap:**
+
+| kp | saturates at | max tilt | % samples at limit | RMS N·m |
+|---|---|---|---|---|
+| 150 | 1.07deg | 77.59 | 29.1% | 1.78 |
+| 100 | 1.60deg | 78.34 | 33.9% | 1.90 |
+| 64 | 2.51deg | 91.36 | 26.6% | 1.65 |
+| 32 | 5.01deg | 93.12 | 11.1% | 1.31 |
+| 16 | 10.03deg | 92.65 | 6.1% | 1.05 |
+| 8 | 20.05deg | 90.73 | **0.4%** | 0.79 |
+
+Lowering kp does exactly what it should to saturation -- 29.1% -> 0.4%,
+RMS 1.78 -> 0.79 N·m, i.e. the drivetrain ends up with plenty of headroom.
+**And the robot still falls at every single value.** So the walking failure
+is not torque saturation, and the confound is settled in the direction that
+does NOT let the drivetrain off the hook.
+
+**Why no kp works, which is the actually interesting part.** Checked
+whether the robot can even STAND across kp (`sim_zmp_balance.py`, 5s):
+
+| kp | standing, 2.8 N·m cap | standing, unlimited torque |
+|---|---|---|
+| 150 | 0.33deg (OK) | 0.33deg (OK) |
+| 64 | 32.74deg (falls) | 36.05deg (falls) |
+| 32 | 34.07deg (falls) | 36.19deg (falls) |
+
+It falls at kp=64 *with torque unlimited*, so that failure is **pure
+compliance, not torque**. Standing needs only ~1.33 N·m/leg, comfortably
+inside the envelope. What breaks is the pose: `sim_zmp_balance.py`'s
+balanced crouch is FK-solved and, per that file's own docstring, is stable
+*with no active control at all* -- but only while the joints hold it
+near-rigidly. Soften them and the robot sags out of the geometry that was
+doing the balancing, and no amount of torque recovers it.
+
+**Conclusion: the position-servo stiffness window is empty at this torque
+envelope.** Stiffness is doing structural work here (holding a statically
+balanced pose), not just trajectory tracking. High kp is required to hold
+the pose and guarantees saturation during dynamic motion; low kp removes
+the saturation and loses the pose. kp=150 is the only value that stands,
+and at kp=150 walking clips the torque limit 29% of the time.
+
+**What this means for the previous entry, stated plainly.** Its headline --
+"the drivetrain cannot power this gait" -- survives, but the mechanism was
+described too loosely. It is not simply that the motors are 1.5-3x too
+weak in isolation. It is that a stiff position servo *tracking a
+trajectory generated without knowledge of the torque limit* will demand
+whatever that trajectory costs, and this one costs more than the drivetrain
+has. The gain is not the bug and re-tuning it is not the fix.
+
+**Which is precisely the argument for D**, and worth recording as the
+reason to keep going rather than as a setback: an MPC that plans the CoP
+inside the feasible box never commands the infeasible trajectory in the
+first place, so the saturation has no opportunity to arise. It is also an
+argument for F (HUBO-style local feedback), where compliance is handled
+explicitly per-joint instead of being an emergent property of one global
+stiffness constant. `kp` is therefore left at 150 -- not endorsed, but the
+only value the current pose survives, and changing it belongs with a
+control architecture that does not depend on near-rigid joints to stand up.
+
