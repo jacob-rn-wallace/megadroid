@@ -2485,3 +2485,75 @@ worse push performance, but those were taken at single timings and at step
 counts near or beyond the walking limit. Push numbers elsewhere in this file
 predating this entry should be treated as pessimistic and methodologically
 weak, not as clean measurements of the mechanism under test.
+
+### 2026-09-10 — The chaos was substantially a modelling artifact: the design specifies a compliant sole, the simulation modelled a rigid box
+
+The user asked why this has been so hard when Honda and Waseda fielded
+reliably-walking bipeds in the mid-90s, and whether classical control was the
+wrong choice. Investigating that question found something more useful than an
+answer to it.
+
+**The gap.** `BOM.csv` has always specified a "Flat Sole Plate Assembly
+(compliant sole pad) -- rigid plate + compliant pad for vertical shock
+absorption". `generate_mjcf.py` emitted the foot as a rigid box on a rigid
+plane with MuJoCo's default contact. **The simulation was modelling a robot
+that was never designed.**
+
+`sim_zmp_balance.py`'s own docstring had already recorded the consequence
+without connecting it: MuJoCo box-plane contact "activates different corner
+subsets frame to frame". That was diagnosed as a noisy ZMP *measurement* and
+filtered with an EMA. It is noise in the PHYSICS -- discontinuous ground
+reaction force tick to tick -- and every controller in this project has been
+fighting it since.
+
+**Contact compliance dominates disturbance behaviour.** Sweeping the sole
+timeconst (10N lateral push, 12 timings, n=12; nominal walking alongside):
+
+| solref | n=8 | n=16 | n=20 | 5N | 10N | 15N | 20N |
+|---|---|---|---|---|---|---|---|
+| 0.02 rigid | 6.27 | 7.11 | 78.29 | 8/12 | **0/12** | 0/12 | 0/12 |
+| 0.03 | 6.42 | 6.85 | **7.88** | 11/12 | 0/12 | 1/12 | 0/12 |
+| 0.04 | 6.54 | 6.54 | 15.68 | 12/12 | 2/12 | 0/12 | 0/12 |
+| 0.05 | 6.69 | 6.69 | 20.99 | 12/12 | **9/12** | 2/12 | 1/12 |
+| 0.06 | 6.79 | 16.05 | 90.95 | 12/12 | **11/12** | 4/12 | 0/12 |
+| 0.07 | 6.67 | 91.39 | 91.39 | 12/12 | 3/12 | 2/12 | 0/12 |
+
+**Eleven separate control mechanisms failed to move 10N push recovery at
+all. A contact-model correction moves it from 0/12 to 9/12.**
+
+The character changes too, not just the count. A coarser sweep showed rigid
+contact producing alternating survive/fall between adjacent 10ms samples,
+while compliance produces contiguous blocks -- survival becomes a smooth
+function of where in the gait cycle the push lands, which is how a real robot
+behaves.
+
+**Value chosen deliberately NOT by score.** 0.05 preserves the nominal
+walking range while recovering most of the push benefit; 0.06 scores better
+on pushes and worse on walking. Picking on score would repeat exactly the
+model-flattering this project has spent effort correcting. Recorded as a
+PLACEHOLDER in `design/geometry.yaml` -- it is a PHYSICAL property of the
+pad, currently unmeasured, and the sweep shows outcomes are highly sensitive
+to it. Must be measured in P6.
+
+**What this means for the rest of this file, stated plainly.** Every push
+result recorded before this entry was measured against a contact model that
+flips outcomes on a 10ms perturbation. Those verdicts are not necessarily
+wrong, but they are **not trustworthy** -- the capture-region false positive
+was the visible instance of this, and there may be invisible ones in the
+other direction. **Treat all pre-2026-09-10 push-recovery conclusions as
+provisional.** That specifically includes the "exhausted" verdicts on
+CoP-repulsion and capture-region placement, both of which were scored
+against rigid contact.
+
+**And it partly answers the user's question.** The classical techniques were
+not the wrong choice. Honda and Waseda were tuning control against real
+physics; this project has been tuning against a model that was wrong in at
+least four separate ways discovered this session -- unlimited torque,
+ground-truth state, stale gains, and rigid contact. Each took a measurement
+to find. The difficulty has been substantially about model fidelity rather
+than control theory.
+
+**Battery after the change:** load test, static pose, ZMP balance and
+`sim_walk_recede --selftest` all pass; receding-horizon nominal walking flat
+at 6.69deg across n=8/12/16, marginal at n=20. `sim_walk_lipm` and
+`sim_walk_gait` unchanged (separate documented causes).
