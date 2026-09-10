@@ -38,45 +38,81 @@ drivetrain:
       Single standardized gearbox class reused across all actuated joints
       (SPEC.md Section 6.2 -- no joint uses a bespoke gearbox).
   belt_stage:
-    provides_reduction: false
-    ratio: 1
+    provides_reduction: true
+    ratio: 4
+    applies_to: "all actuated joints"
     notes: >
-      RECORDED ASSUMPTION, 2026-09-10, and a KNOWN UNDERSTATEMENT for six
-      joints. No belt ratio is specified anywhere in design/*.yaml --
-      geometry.yaml defines only belt pitch and width. However BOM.csv lists
-      "Secondary Belt Reduction Components" (qty 6) for hip_pitch, hip_roll
-      and knee_pitch on both sides, so those six joints are intended to carry
-      a real belt reduction of an as-yet-unspecified ratio; the remaining
-      seven (ankle_pitch, ankle_roll, torso_pitch/roll/yaw) have none listed.
-      Modelling 1:1 uniformly is therefore EXACT for those seven and
-      CONSERVATIVE for the six -- their true envelope is >= the figure below.
-      Deliberately chosen: a uniform floor keeps simulation constraining the
-      controller rather than flattering it, and avoids inventing a ratio that
-      has never been engineered. Dimension the belt stages in P6, then split
-      this into per-joint-group envelopes.
+      SET 2026-09-10, replacing the earlier 1:1 placeholder. 4:1 on every
+      actuated joint, giving 80:1 total. Two measurements bound this:
+
+      TORQUE FLOOR. With the previous 20:1 (2.8 N-m/joint), the validated
+      walking gait clipped its torque limit on 28.1% of samples and fell
+      (77.59deg). Sweeping the ratio in simulation, 3x (60:1) is the first
+      value that walks -- 6.32deg peak tilt, matching the unlimited-torque
+      baseline -- and 4x leaves margin for the motor's torque-speed droop
+      (0.4% of samples short vs 1.8% at 3x).
+
+      CRITICALLY, THE BELT MUST INCLUDE THE ANKLES. BOM.csv previously
+      listed secondary belt reduction on six joints only (hip_pitch,
+      hip_roll, knee_pitch). Applied to that scope the gait NEVER walks at
+      any ratio tested up to 6x: raising hip and knee simply promotes
+      ankle_pitch to the binding joint (p95 demand 8.38 N-m). HUBO KHR-3
+      agrees -- it puts a 2:1 pulley-belt on both ankle roll and ankle
+      pitch, on top of a 100:1 harmonic drive.
+
+      SPEED CEILING. Human motion-capture regression (CMU database, see
+      reference-material/motion-capture-cmu) gives knee omega_95 = 11.0
+      rad/s per leg-length/s of walking speed. At matched normalised speed
+      this predicted our gait's knee omega_95 within 2% of the simulated
+      value, so it transfers. It caps the knee at ~123:1 for HUBO-speed
+      walking and ~74:1 for fast human walking. 80:1 sits inside the first
+      and just outside the second.
+    scope_limitation: >
+      THIS RATIO IS SCOPED TO THE GAIT THAT CURRENTLY EXISTS, which walks at
+      0.48 km/h. It is NOT sufficient for ASIMO/HUBO-class walking speed
+      (1.25 km/h), and that is a known gap rather than an oversight.
+      Torque demand at 1.25 km/h could not be measured: the controller only
+      walks at 0.36-0.48 km/h, and three separate attempts to measure beyond
+      it failed (slower cadence detunes the controller into falling;
+      inverse dynamics on the planned trajectory disagreed with the forward
+      simulation by 2x; longer steps fall above 0.10 m). Scaling arguments
+      put the requirement at 1.25 km/h somewhere in 143-357:1, which starts
+      ABOVE the 123:1 knee speed ceiling -- meaning a single 775 per joint
+      may not close at that speed regardless of ratio. HUBO's answer to the
+      same collision was two 150W motors on the knee at 120:1, not more
+      reduction. Revisit this block when a controller exists that walks
+      faster than 0.48 km/h.
     per_joint_group_note: >
-      When the belt ratio is specified, this block should become per-group
-      rather than global: {hip_pitch, hip_roll, knee_pitch} carry gearbox x
-      belt, {ankle_pitch, ankle_roll, torso_*} carry gearbox only.
+      A uniform 4:1 is an interim simplification. The eventual structure
+      should be per-joint, scaled INVERSELY to each joint's speed demand,
+      because the knee is speed-limited and the hip is torque-limited.
+      Computed ceilings at HUBO speed: knee ~123:1, hip ~238:1. HUBO KHR-3's
+      own leg confirms the pattern almost exactly -- knee 120:1, hip
+      288-300:1, ankle 200:1.
   efficiency: 0.70             # PLACEHOLDER -- combined gearbox + belt losses.
                                 # Planetary gearsets of this class are commonly
                                 # 0.6-0.8; measure on the real drivetrain (P6).
-  total_reduction: 20          # gearbox.ratio * belt_stage.ratio
+  total_reduction: 80          # gearbox.ratio * belt_stage.ratio = 20 * 4
 
 output:
-  peak_joint_torque_nm: 2.8    # DERIVED: motor.stall_torque_nm * total_reduction
-                                # * efficiency = 0.20 * 20 * 0.70 = 2.8
-  max_joint_speed_rad_s: 78.5  # DERIVED: no_load_speed_rpm / total_reduction,
-                                # converted -- 15000/20 = 750 rpm = 78.5 rad/s.
+  peak_joint_torque_nm: 11.2   # DERIVED: motor.stall_torque_nm * total_reduction
+                                # * efficiency = 0.20 * 80 * 0.70 = 11.2
+  max_joint_speed_rad_s: 19.6  # DERIVED: no_load_speed_rpm / total_reduction,
+                                # converted -- 15000/80 = 187.5 rpm = 19.6 rad/s.
                                 # Recorded for reference; not enforced in
                                 # simulation (see modeling_limitations).
+                                # For scale: measured knee p95 speed in the
+                                # current gait is 2.4 rad/s, and the human-
+                                # mocap prediction for HUBO-speed walking is
+                                # 6.4 rad/s -- so speed is not binding at the
+                                # gait speeds reachable today.
   uniform_across_joints: true
-  uniform_is_a_floor_not_a_fact: >
-    A single envelope is applied to every joint, but see
-    drivetrain.belt_stage.notes: BOM.csv indicates six joints (hip_pitch,
-    hip_roll, knee_pitch, both sides) are intended to carry a secondary belt
-    reduction whose ratio has never been specified. For those six this figure
-    is a LOWER BOUND, not their real capability.
+  uniform_is_an_interim_simplification: >
+    A single envelope is applied to every joint. See
+    drivetrain.belt_stage.per_joint_group_note: the right structure is
+    per-joint ratios scaled inversely to speed demand, which is what HUBO
+    KHR-3 does. Uniform 80:1 is recorded because it is what simulation
+    actually validated for the current gait, not because it is optimal.
   notes: >
     A single envelope applies to every actuated joint because a single motor
     and a single gearbox class are used throughout. For scale: the measured
