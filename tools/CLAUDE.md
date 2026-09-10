@@ -1904,3 +1904,112 @@ performance number in a docstring or the root quick-reference table as
 numbers in this entry and the three above it are measured against the
 current model.
 
+### 2026-09-10 — Torque envelope modelled and IMU added: standing survives, all three walking gaits do not, and the state estimator turns out to be good enough
+
+Two design revisions (`96ea7de`, `9b16f7b`) and their consequences. Both
+came out of stepping back over the candidate control architectures, which
+found that every P3 result to date rested on two things simulation was
+quietly providing and hardware never could: unlimited joint torque, and a
+CoM state the sensor suite could not measure.
+
+**1. The torque envelope. `design/actuation.yaml` was an empty stub.**
+It now records the drivetrain: 775 brushed DC at 24V, 20:1 planetary,
+0.70 efficiency, giving **2.8 N·m per joint**, emitted into the MJCF as
+`forcerange` on all 13 actuators (previously absent entirely). Belt stages
+are recorded as 1:1 -- deliberately conservative, and a KNOWN
+understatement for six joints, since BOM.csv lists secondary belt
+reduction for hip_pitch/hip_roll/knee_pitch that no design file has ever
+given a ratio for.
+
+**Result -- standing passes, walking collapses:**
+
+| Check | Before (unlimited) | With 2.8 N·m |
+|---|---|---|
+| `sim_static_pose.py` | PASS | PASS (needs 1.33 N·m/leg) |
+| `sim_zmp_balance.py` | PASS | PASS (0.33deg tilt) |
+| `sim_walk_recede.py --steps 8` | 6.31deg | **77.59deg, falls** |
+| `sim_walk_lipm.py --steps 12` | ~6.4deg | **91.58deg, falls** |
+| `sim_walk_gait.py --steps 3` | 152mm swing progress | **17mm, barely moves** |
+
+Measured demand with the cap lifted (receding-horizon gait, 8 steps):
+peak **37.95 N·m** at right_knee_pitch, but that peak is largely a stiff
+position-servo transient and overstates the case. The honest figures are
+**RMS 4.08 N·m (1.5x the envelope)**, **p95 8.50 N·m (3.0x)**, and
+**28.1% of all samples over budget**. Eleven of thirteen joints exceed
+2.8 N·m at peak.
+
+Two observations worth carrying forward. First, the six joints BOM lists
+secondary belt reduction for are exactly the highest-demand ones
+(right_knee_pitch, both hip_pitches) -- a ~3:1 belt stage would put them
+near 8.4 N·m, which matches their measured p95 almost exactly. Second,
+that still would not close it: ankle_pitch demands p95 8.38 N·m with no
+belt reduction listed at all. So the drivetrain gap is real and is NOT
+uniformly distributed.
+
+**2. The IMU and the estimator.** `design/sensors.yaml` gained a 6-axis
+pelvis IMU (no magnetometer -- 13 brushed motors nearby; yaw comes from
+leg odometry, with drift accepted and reported). `tools/state_estimator.py`
+estimates CoM / CoM velocity / DCM from encoders + foot F/T + IMU ONLY,
+and is scored against MuJoCo truth it never reads.
+
+**A real sign trap, in this file's long tradition of them.** The
+complementary filter's accelerometer correction was written as
+`cross(up_pred, up_meas)`. That is a stable-but-wrong feedback loop: it
+drives the orientation estimate to the ANTIPODE and parks there. Symptom
+was a ~180deg flip about Y and ~170deg of apparent yaw drift; CoM error
+was 1108mm. Deriving it properly (applying `corr` as a body-frame
+increment makes the new body-frame world-up `R_corr^T * up_pred`, so
+`R_corr` must rotate up_meas -> up_pred) gives `cross(up_meas, up_pred)`.
+CoM error fell 1108mm -> 60mm. Checking the accelerometer's sign
+empirically first was what narrowed it -- MuJoCo reads +z when upright,
+so that half was already right.
+
+**Result -- the estimator is good enough, which was not the expected
+answer.** On a clean (unlimited-torque) 8-step run:
+
+| Quantity | RMS error |
+|---|---|
+| CoM, absolute world frame | 7.69 mm |
+| CoM velocity | 103.5 mm/s |
+| DCM, absolute | 25.57 mm |
+| yaw drift over 4.5s | 0.04 deg |
+| **CoM relative to stance foot** | **4.58 mm** |
+| **DCM relative to stance foot** | **25.81 mm** |
+
+The relative figures are the ones that matter: a balance controller
+consumes CoM *over the support polygon*, not absolute world pose, and
+odometry drift cancels in that difference. 4.58 mm against a 40 mm foot
+half-width and the corrected ~48 mm lateral capturability margin is
+comfortable. DCM-relative at 25.81 mm is about half the margin --
+significant, not disqualifying.
+
+**But the estimator tuning is not yet trustworthy, for the same reason
+the old torque results weren't.** Sweeping the accelerometer trust showed
+LESS correction is monotonically better, with zero correction best by a
+wide margin (0.48 mm CoM-rel). That is an artifact: MuJoCo's gyro is
+noise-free and bias-free, so pure integration is flawless in simulation
+and divergent on hardware. Tuning to it would repeat, in the estimator,
+exactly the mistake the torque envelope just corrected in the actuators.
+`ACCEL_TRUST_ALPHA` is therefore set to 0.001 (~2s time constant, a
+defensible textbook value) rather than the 0.0 the sim rewards, and the
+constant is marked as un-tunable until the MJCF models IMU noise and
+bias. **Treat every estimator figure above as a LOWER BOUND.**
+
+**Where this leaves the eight architectures.** The observability
+objection is substantially answered -- with the IMU, the balance-relevant
+state IS estimable to within the stability margin, so B/C/D/E/G are no
+longer gated on sensing. They are now gated on actuation instead, and
+harder: the gaits those architectures produce demand 1.5x sustained and
+3x p95 more torque than the drivetrain can deliver. The binding
+constraint has moved from "the robot cannot know where it is" to "the
+robot cannot push hard enough", which is a more tractable problem with
+two obvious levers (more reduction, or a controller that respects the
+envelope -- note this is precisely the constraint-aware MPC that
+Stephens' ladder credits with the largest single push-recovery gain).
+
+Not done, deliberately: the estimator is NOT wired into any controller.
+It was built to measure the gap, and it did. Wiring it in means the
+controllers stop consuming ground truth, which will regress them on top
+of the torque regression -- two variables at once, and the plan was
+explicit about not doing that in one pass.
+
