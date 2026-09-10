@@ -1,0 +1,53 @@
+name: Simulation Regression Gate
+
+# Runs the P3 simulation milestones that must stay green.
+#
+# The other two workflows run only the cheap validators and the rehydration
+# diff -- no MuJoCo -- so a design/*.yaml edit could invalidate every walking
+# claim in the repo and still merge clean. It has. See
+# tools/validate_sim_regression.py's docstring for the history.
+#
+# --require makes a missing mujoco a hard failure here, so the gate cannot
+# quietly degrade into a no-op in CI the way it is allowed to skip locally.
+
+on:
+  push:
+    paths:
+      - design/**
+      - tools/**
+      - simulation/**
+  pull_request:
+    paths:
+      - design/**
+      - tools/**
+      - simulation/**
+
+jobs:
+  sim-regression:
+    name: Run P3 simulation milestones
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml jinja2 numpy mujoco
+
+      - name: Regenerate the MuJoCo scene from design/*.yaml
+        # Gate the model the design files actually describe, not a checked-in
+        # artifact that may predate them -- the staleness this exists to catch
+        # would otherwise slip straight through.
+        run: |
+          python3 tools/generate_mjcf.py
+
+      - name: Run simulation regression gate
+        run: |
+          python3 tools/validate_sim_regression.py --require

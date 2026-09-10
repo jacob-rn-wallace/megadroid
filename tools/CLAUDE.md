@@ -2704,3 +2704,50 @@ recede stage 3: 6.69deg, unregressed).
 the measured reason not to activate it are both more useful kept than
 rediscovered. The `--steps 15` figure in the root quick-reference table
 remains stale; the honest current range is **n=10**.
+
+### 2026-09-10 — Simulation regression gate wired into preflight and CI: the process gap identified by the P3 milestone audit is closed
+
+The audit entry above identified this and deliberately left it open, because
+"fixing it requires first restoring a passing baseline for the two broken
+commands, otherwise the gate lands red." That precondition is now met for
+everything worth gating: `sim_walk_lipm.py`'s selftest is green again, and
+`sim_walk_gait.py` is excluded on its merits rather than to make a number look
+good.
+
+**`tools/validate_sim_regression.py`** (new) runs five checks -- model load,
+static pose, ZMP balance, and both walking selftests -- ordered cheapest-first.
+Each already owns its pass criteria and signals through its exit code, so the
+gate is a runner, not a second opinion.
+
+Total runtime is **~5.3 seconds**, which was the pleasant surprise: individual
+runs are 0.2-2.1s each. Simulation work in this project feels slow because of
+multi-config sweeps, not because a single run is expensive. There was never a
+runtime argument against gating this.
+
+**`sim_walk_gait.py` is deliberately excluded**, and the reason is recorded in
+the script so nobody quietly adds it: it fails at 2/3 steps for a documented
+cause re-confirmed against compliant contact this session, and it is superseded
+by `sim_walk_lipm.py`. Gating it would land the gate permanently red and train
+everyone to ignore it. If it is ever fixed, it goes in the same commit.
+
+**Interpreter handling.** These checks need `mujoco`; the rehydrators and
+validators do not, and the repo convention is that they run on system
+`python3`. The gate resolves the first interpreter that can import mujoco --
+the invoking one, then `$MEGADROID_SIM_PYTHON`, then a sibling
+`megadroid-venv` -- and SKIPS if none can, so `preflight.py` stays usable
+without a venv. CI passes `--require`, which turns that skip into a hard
+failure, so the gate cannot silently degrade into a no-op where it matters.
+
+**CI regenerates the MJCF from `design/*.yaml` before running.** Gating the
+checked-in artifact would let exactly the staleness this exists to catch slip
+through -- the failure mode was a design edit whose consequences nobody
+propagated. Verified the committed scene currently matches regeneration
+byte-for-byte.
+
+**Verified the gate can actually go red**, which is the only property that
+matters in a gate. Injected a known regression (stage 6 back to n=12, a
+90.01deg fall): exit 1, with the failing assertion printed. Restored: exit 0.
+Both no-mujoco branches exercised directly -- skip returns 0, `--require`
+exits 1.
+
+Preflight is now `[1/3] rehydrate -> [2/3] validate -> [3/3] sim gate`.

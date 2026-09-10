@@ -148,7 +148,8 @@ unless the user explicitly initiates a design revision.
 
 | Task | Command |
 |------|---------|
-| Pre-commit check (rehydrate + validate + status) | `python3 tools/preflight.py` |
+| Pre-commit check (rehydrate + validate + sim gate + status) | `python3 tools/preflight.py` |
+| Simulation regression gate on its own | `python3 tools/validate_sim_regression.py` |
 | Regenerate all derived docs | `python3 tools/rehydrate_all.py` |
 | Run all validators | `python3 tools/validate_all.py` |
 | Regenerate URDF | `python3 tools/generate_urdf.py` |
@@ -224,16 +225,29 @@ pip install pyyaml jinja2 numpy matplotlib mujoco
 
 ## CI
 
-Two GitHub Actions workflows run on push/PR when design files, templates, tools,
-or derived docs change:
+Three GitHub Actions workflows run on push/PR when design files, templates,
+tools, simulation assets, or derived docs change:
 
 - **`validate.yml`** — runs `validate_dof_consistency.py` and
   `validate_no_geometry_literals.py` when design files or derived docs change
 - **`rehydration-check.yml`** — regenerates derived docs and diffs them against
   committed versions; fails if content diverges (timestamps are allowed to differ)
+- **`sim-regression.yml`** — regenerates the MuJoCo scene from `design/*.yaml`,
+  then runs the P3 milestones that must stay green (model load, static pose, ZMP
+  balance, and both walking selftests)
 
-Both must pass before merging. If CI fails, fix `design/*.yaml` and rehydrate —
-do not patch the derived docs directly.
+All three must pass before merging. If the first two fail, fix `design/*.yaml`
+and rehydrate — do not patch the derived docs directly.
+
+**If `sim-regression.yml` fails, a design or tooling change has invalidated a
+validated P3 milestone.** Re-tune and re-measure. Do not update the documented
+numbers to match the new behaviour without understanding what moved — this gate
+exists precisely because that class of silent staleness happened repeatedly and
+was then built on as if trustworthy (see `docs/P3_MODEL_FIDELITY.md` and the P3
+milestone audit entry in `tools/CLAUDE.md`).
+
+`sim_walk_gait.py` is deliberately outside the gate: it fails for a documented,
+independently re-confirmed reason and is superseded by `sim_walk_lipm.py`.
 
 ---
 

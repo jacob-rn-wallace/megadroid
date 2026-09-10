@@ -65,16 +65,26 @@ def main():
     print("Megadroid preflight check")
     print("=" * 60)
 
-    print("\n[1/2] Rehydrating derived documents...")
+    print("\n[1/3] Rehydrating derived documents...")
     rehydrate_ok = all(run(s, s.split("/")[-1]) for s in REHYDRATORS)
     if not rehydrate_ok:
         print("\n✗ Rehydration failed — fix before committing.")
         sys.exit(1)
 
-    print("\n[2/2] Running validators...")
+    print("\n[2/3] Running validators...")
     validate_ok = all(run(s, s.split("/")[-1]) for s in VALIDATORS)
     if not validate_ok:
         print("\n✗ Validation failed — fix design/*.yaml and rehydrate.")
+        sys.exit(1)
+
+    # Simulation regression gate. Runs the P3 milestones that must stay green,
+    # because the cheap validators above cannot see a design change that
+    # invalidates them -- which has happened. See that script's docstring.
+    # Skips cleanly when mujoco is unavailable, so this stays runnable on a
+    # system Python.
+    print("\n[3/3] Running simulation regression gate...")
+    if not run("tools/validate_sim_regression.py", "validate_sim_regression.py"):
+        print("\n✗ Simulation regression gate failed — see output above.")
         sys.exit(1)
 
     print("\n" + "=" * 60)
