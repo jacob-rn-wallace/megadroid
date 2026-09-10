@@ -115,6 +115,10 @@ torque–speed curve, backlash, belt compliance, thermal behaviour under duty
 cycle, and position-servo response — five of the six rows above. A sole-pad
 drop test covers the sixth.
 
+**Scoped in `docs/P4_JOINT_TEST_RIG.md`** — fixture bill of materials, seven
+tests (A–G), which YAML field each one replaces, what result would reopen a
+design decision, and a priority order if only some get done.
+
 This is not a departure from the process. `PROCESS.md` Stage P4 requires
 "define actuator performance envelopes" and "validate gear ratios against
 simulated loads". A V-model pairs each design stage with a verification
