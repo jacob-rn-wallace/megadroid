@@ -2557,3 +2557,57 @@ than control theory.
 `sim_walk_recede --selftest` all pass; receding-horizon nominal walking flat
 at 6.69deg across n=8/12/16, marginal at n=20. `sim_walk_lipm` and
 `sim_walk_gait` unchanged (separate documented causes).
+
+### 2026-09-10 — Provisional verdicts re-tested against compliant contact: both CONFIRMED, and one was misleading in the other direction
+
+The sole-compliance correction made every prior push result provisional (see
+`docs/P3_MODEL_FIDELITY.md`). The two mechanisms whose "exhausted" verdicts
+mattered most were re-run against the corrected contact model.
+
+**Note the baseline is now a much harder opponent.** Against rigid contact the
+committed controller survived 0/12 timings at 10 N. Against compliant contact
+it survives 12/12 at 5 N and 9/12 at 10 N. A mechanism now has to beat a
+baseline that already handles most moderate pushes, rather than one that fails
+all of them.
+
+**Re-run 1 -- CoP-repulsion: verdict CONFIRMED.** `K_IC` swept both signs,
+11 timings, n=12:
+
+| K_IC | 5N | 10N | 15N | 20N |
+|---|---|---|---|---|
+| 0 (baseline) | 12/12 | 9/12 | 2/12 | 1/12 |
+| -1 | 12/12 | 10/12 | 2/12 | 1/12 |
+| -5 | 12/12 | 10/12 | 2/12 | 0/12 |
+| -20 | 12/12 | 10/12 | 3/12 | 0/12 |
+| +1 / +5 / +20 | 12/12 | 8-9/12 | 1-2/12 | 1/12 |
+
+Best case is +1 cell of 12 at 10 N and -1 at 20 N. Noise. `K_IC` stays inert
+at 0.0 -- the same conclusion as before, but now reached against a contact
+model that does not flip outcomes on a 10 ms perturbation, so it is a real
+verdict rather than a coin-flip average.
+
+**Re-run 2 -- capture-region footstep placement: verdict CONFIRMED, and more
+strongly than the original.**
+
+| config | n=8 | n=16 | 5N | 10N | 15N | 20N |
+|---|---|---|---|---|---|---|
+| baseline | 6.69 | 6.69 | 12/12 | 9/12 | 2/12 | 1/12 |
+| r=(40,15) mm | 8.12 | **90.85 falls** | 10/12 | 8/12 | 1/12 | 0/12 |
+| r=(75,40) mm | 6.02 | **91.61 falls** | 0/12 | 0/12 | 0/12 | 0/12 |
+
+Both region sizes now break nominal walking at n=16 and are equal or worse on
+every push magnitude.
+
+**And this reverses a finding from the rigid model.** Under rigid contact,
+capture-region's one redeeming feature was mildly BETTER nominal walking
+(6.31 vs 8.76 deg at n=8), recorded at the time as "does not regress and is
+slightly better". Under compliant contact it destroys the walking range
+entirely. That earlier reading was an artifact -- a reminder that rigid
+contact misled in both directions, not only toward false positives.
+
+**Status of the provisional list.** Both re-tested verdicts stand. The
+push-magnitude ceilings quoted in earlier entries remain provisional and were
+NOT re-measured mechanism by mechanism; what is now known is that the
+compliant baseline itself is far stronger than any pre-2026-09-10 entry
+records (12/12 at 5 N, 9/12 at 10 N), so those ceilings understate the
+current controller rather than overstating it.

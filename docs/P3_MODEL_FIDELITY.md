@@ -50,10 +50,22 @@ not necessarily wrong, but they are **not trustworthy**, and at least one
 false positive was caught in the act (capture-region footstep placement looked
 like a clear win at a single push timing and evaporated across seven).
 
-Explicitly provisional, pending re-test against compliant contact:
-- CoP-repulsion "exhausted" verdict
-- Capture-region footstep placement "exhausted" verdict
-- The push-magnitude ceilings quoted throughout `tools/CLAUDE.md`
+Status after re-testing against compliant contact (2026-09-10):
+- CoP-repulsion "exhausted" verdict — **CONFIRMED.** Best nonzero gain differs
+  from baseline by at most one cell in twelve, in both directions. Ships inert.
+- Capture-region footstep placement "exhausted" verdict — **CONFIRMED, more
+  strongly.** Both region sizes now break nominal walking at n=16 and are equal
+  or worse on every push magnitude. Its one redeeming feature under rigid
+  contact (mildly better nominal walking) was itself an artifact and reverses.
+- The push-magnitude ceilings quoted throughout `tools/CLAUDE.md` — **still
+  provisional**, not re-measured mechanism by mechanism. What is known is that
+  the compliant baseline is far stronger than any pre-2026-09-10 entry records
+  (12/12 timings at 5 N, 9/12 at 10 N, versus 0/12 at 10 N rigid), so those
+  ceilings understate the current controller rather than overstating it.
+
+Rigid contact misled in **both** directions — toward false positives (the
+capture-region single-timing "win") and false negatives (the baseline's true
+push performance). Neither error type should be assumed absent elsewhere.
 
 **Methodology rules adopted as a result:**
 1. A single-timing push result is not evidence. Sweep timings and report survival counts.
