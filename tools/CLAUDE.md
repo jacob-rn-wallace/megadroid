@@ -2193,3 +2193,79 @@ that this result is a direct argument for architecture F, whose whole premise
 is local per-joint compensators rather than a global model pushed through a
 lossy actuation path. Flagged for the user's call rather than continued solo.
 
+
+### 2026-09-10 — Drivetrain sized: 80:1 committed as an interim, and it recovers the primary walking milestone
+
+The user's call, after the architecture review put actuation as the binding
+constraint: fix the gearing rather than build another controller.
+
+**Torque floor.** At the previous 20:1 (2.8 N·m/joint) the validated
+receding-horizon gait clipped its limit on 28.1% of samples and fell
+(77.59deg). Sweeping the ratio: 3x (60:1) is the first value that walks --
+6.32deg, matching the unlimited-torque baseline -- and 4x (80:1) leaves
+margin for the motor's torque-speed droop (0.4% of samples short, vs 1.8%
+at 3x). Committed 80:1 = 20:1 gearbox x 4:1 belt, giving 11.2 N·m.
+
+**The belt must include the ankles, or no ratio works.** BOM.csv listed
+secondary belt reduction on six joints (hip_pitch, hip_roll, knee_pitch).
+At that scope the gait NEVER walks, at any ratio tested to 6x -- raising
+hip and knee simply promotes `ankle_pitch` (p95 demand 8.38 N·m) to the
+binding joint. BOM now covers all 13. HUBO KHR-3 independently agrees: it
+puts a 2:1 pulley-belt on BOTH ankle axes over a 100:1 harmonic drive.
+
+**Speed ceiling, from the project's own CMU motion-capture study**
+(`reference-material/motion-capture-cmu`, previously uncited here). Its
+regression gives knee omega_95 = 11.0 rad/s per leg-length/s. At matched
+normalised speed -- where stride time is invariant, so angular velocities
+transfer across scale -- it predicts our gait's knee omega_95 as 2.44 rad/s
+against a simulated 2.48. **Two percent agreement, which both validates our
+gait as kinematically human-realistic and validates the study for
+extrapolation.** It caps the knee at ~123:1 for HUBO-speed walking, ~74:1
+for fast human walking. It also endorses the sizing statistic: the study
+uses 95th percentile "robust to spikes", which is exactly why sizing
+against our 37.95 N·m peak (a kp=150 servo transient) was wrong.
+
+**HUBO KHR-3 leg, from the paper** (now in reference-material/humanoid-
+robotics/KAIST, read directly): hip_roll 120:1 x gear 2.5:1 = 300:1,
+hip_pitch 160:1 x belt 1.8:1 = 288:1, knee 120:1 x belt 1:1 with **two**
+150W motors, ankle roll/pitch 100:1 x belt 2:1 = 200:1. Brushed 24V DC
+motors -- the same actuator class as megadroid. The per-joint spread is
+not arbitrary: ratios scale INVERSELY to each joint's speed demand, and
+HUBO's knee (120:1) sits essentially on our computed ceiling (123:1).
+
+**What could NOT be measured, and it matters.** Torque demand at HUBO
+walking speed (1.25 km/h). The controller only walks at 0.36-0.48 km/h.
+Three attempts failed: slowing the cadence detunes the controller into
+falling (0.9s gave 84.99 N·m from a robot toppling, not a gentler gait);
+inverse dynamics on the planned trajectory disagreed with the forward sim
+by 2x (16.68 vs 8.50 N·m) and was abandoned when that validation failed;
+longer steps fall above 0.10 m. The two speeds that do walk are not even
+monotonic in torque, so there is no trend to fit. Scaling bounds the
+requirement at 1.25 km/h to 143-357:1, which starts ABOVE the 123:1 knee
+speed ceiling -- meaning **a single 775 per joint may not close at that
+speed at any ratio.** HUBO's answer to the same collision was two motors
+on the knee. Recorded in actuation.yaml's `scope_limitation`.
+
+**P3 battery at 80:1 (was 2.8 N·m -> now 11.2):**
+
+| check | at 2.8 N·m | at 11.2 N·m |
+|---|---|---|
+| `sim_static_pose.py` | PASS | PASS |
+| `sim_zmp_balance.py` | PASS | PASS |
+| `sim_walk_recede.py --steps 8` | 77.59deg fall | **8.76deg, WALKS** |
+| `sim_walk_lipm.py --steps 12` | 91.58deg fall | 91.59deg fall |
+| `sim_walk_gait.py --steps 3` | fell | fell |
+
+**The primary receding-horizon milestone is recovered.** The other two are
+not, and for reasons that are NOT torque. `sim_walk_lipm` demands only
+7.23 N·m p95 -- comfortably inside 11.2 -- and clips on just **0.1% of
+samples**, yet still falls. That is the same knife-edge sensitivity this
+file documents elsewhere (10 ms of push-timing flips outcomes; adjacent
+gain values swing between clean and falling): 0.1% clipping is enough.
+`sim_walk_gait`'s failure has its own separate, already-documented root
+cause (roll runaway, six parameters ruled out).
+
+**Standing caveat:** 80:1 is scoped to the 0.48 km/h gait that exists, not
+to ASIMO/HUBO-class 1.25 km/h, and the per-joint structure HUBO uses is
+the eventual right answer rather than a uniform ratio. Both are recorded
+in `design/actuation.yaml` rather than left implicit.
