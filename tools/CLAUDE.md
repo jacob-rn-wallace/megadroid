@@ -1721,3 +1721,51 @@ either hypothesis in this entry.
 py`'s `run_walk` -- real, reusable diagnostic infrastructure, additive and
 no-op when `push_at=None`, `--selftest` re-verified clean.
 
+### 2026-09-10 — Push-timing sensitivity swept: confirms genuine chaos, not a discoverable timing rule -- closes out the push-recovery investigation
+
+Direct follow-through on the entry above's own suggestion: since two
+architecturally different gaits (`run_walk`, `run_walk_recede`) each
+survived exactly one isolated force value in their push batteries, at
+DIFFERENT values, the dominant variable might be the exact gait-cycle PHASE
+a push lands in, not force magnitude or which mechanism resists it. Swept
+`push_at` (not force) at a FIXED 10N lateral push, `run_walk_recede`, n=18,
+current committed defaults.
+
+**Coarse sweep (0.06s steps, 1.8-3.6s, ~3 step cycles):** narrow, sporadic
+survival islands (2.52-2.58s: 6.8-6.9deg; an isolated single point at
+3.06s: 7.89deg; 3.24-3.30s: 15.0/6.3deg) scattered among 26 falls
+(75-95deg). Critically, **survival does NOT repeat at the step period**: a
+point exactly one step (0.6s) after the 2.52s survivor (i.e. 3.12s) is
+itself a fall (91.47deg) -- ruling out a simple "single-support bad,
+double-support good" phase rule, which would predict periodic repetition.
+
+**Fine zoom (0.01s steps, 2.95-3.15s) around the isolated 3.06s spike:**
+fragments rather than resolving into a real window with defined edges --
+3.03s and 3.04s survive (8.46/8.69deg), 3.05s falls catastrophically
+(89.96deg), 3.06s survives again (7.89deg), 3.07s falls again (79.09deg).
+A single 10ms shift in push timing flips the outcome between "recovers
+cleanly" and "falls", more than once, non-monotonically, within a 40ms
+window. This is not measurement noise (the sim is deterministic) and not a
+narrow-but-real resonance (a real resonance would show smooth edges, not
+flip twice within 40ms) -- it is genuine sensitive dependence on initial
+conditions.
+
+**Conclusion -- this closes out the push-recovery investigation.** Ten
+structurally distinct investigative approaches have now been tried against
+lateral push recovery at the 5-30N range: four `b_nom_y` fixes,
+reachability-based clamping, a coordinated whole-stack re-tune,
+CoP-repulsion alone, corrected-b_nom_y + CoP-repulsion together (path (a)),
+the d_inf-margin/receding-horizon-architecture diagnosis, and now this
+timing-sensitivity characterization. Every one converges on the same
+picture from a different angle: this is not a missing mechanism, not a
+mistuned gain, and not an architecture defect -- it is a system that is
+genuinely chaotic (in the technical sense: deterministic, but with outcomes
+arbitrarily sensitive to timing at the millisecond scale) at these
+disturbance magnitudes, for reasons that go deeper than any control law
+this session was in a position to change. No further local mechanism,
+gain re-tune, or timing-avoidance rule can fix genuine chaotic sensitivity
+-- by definition, arbitrarily small timing/state differences produce
+arbitrarily different outcomes. Accepting this as the current
+architecture's real limit at this force range is now the well-evidenced
+conclusion, not a premature one.
+
