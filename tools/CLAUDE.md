@@ -2082,3 +2082,114 @@ stiffness constant. `kp` is therefore left at 150 -- not endorsed, but the
 only value the current pose survives, and changing it belongs with a
 control architecture that does not depend on near-rigid joints to stand up.
 
+### 2026-09-10 — Architecture D, Stages 1-2: the QP is correct and the CoP cannot be delivered — a negative result, with the failing component identified precisely
+
+Stage 1 built the constraint-aware MPC core (`tools/mpc_lipm.py`); Stage 2
+wired it to standing balance (`tools/mpc_balance.py`) against
+`sim_zmp_balance.py`'s proportional ankle law, which is the one
+walking-adjacent thing still passing under the real torque envelope.
+
+**Stage 1: the QP is sound.** Condensed LIPM MPC, per axis, box-constrained.
+`--selftest` gates all pass exactly: condensed rollout vs step-by-step
+integration 2e-15; wide bounds vs closed form 0.0 in 2 iterations; KKT
+residual 0.0 with 16/16 bounds active; active entries exactly on the bound;
+warm vs cold start 0.0, converging in 1 iteration vs 11. Probed in
+isolation it behaves sensibly: 0 mm CoM error -> 0 mm CoP interior, 3.5 mm
+-> 17.7 mm interior, 20 mm -> at the bound.
+
+Solver is projected Newton, not FISTA as the plan specified. FISTA was
+written first and stalled at 3e-5 against the closed form after 20000
+iterations -- the Hessian is badly conditioned (DCM tracking over a horizon
+is nearly rank-deficient). The plan's requirement was the self-test gates,
+not the algorithm; the gates were kept and the solver changed.
+
+**Stage 2, finding 1: feedforward CoP realisation does not work.** The plan
+flagged "realise a desired CoP on a position-controlled robot" as the one
+genuinely unproven step. Commanding `theta_nominal + tau_des/kp`, sized so
+the servo's own stiffness delivers the desired ankle torque, measured:
+
+| axis | commanded | delivered | gain |
+|---|---|---|---|
+| lateral | 40 mm | 2.5 mm | 0.06 |
+| sagittal | 5 mm | -2.6 mm | -0.52 |
+| sagittal | >=20 mm | falls | -- |
+
+The stiff servo settles at a different equilibrium; delivered steady-state
+torque is not `kp * offset`, because `theta_actual` moves in response.
+
+(Two of my own errors on the way, both recorded because they shaped the
+design. Anchoring the offset at MEASURED angle instead of nominal removes
+the servo's absolute reference entirely and collapses the pose immediately
+-- the same failure Stage 0 showed the crouch cannot survive. And an early
+sign calibration reported sagittal sign=-1 as correct at +62 mm; that was
+measured mid-fall, and with proper settling sagittal works at neither sign.)
+
+**Finding 2: closed-loop torque tracking works, laterally.** Driving the
+offset with an integral loop on the MEASURED ankle torque from the foot F/T
+sensor, `offset += k_i * (tau_des - tau_meas)`, realises lateral CoP at
+**gain 1.01** (20 mm commanded -> 20.25 mm delivered). This is admittance
+control with a non-zero target -- exactly what `ankle_roll_admittance`'s
+`tau_x_target` parameter was added for earlier this session and left unused.
+
+**Sagittal resists both, structurally.** `ankle_pitch` is load-bearing for
+the balanced crouch, so a torque loop overriding it removes the support
+holding the robot up and it falls at either sign. The architecture was
+therefore split by axis: MPC governs LATERAL (the axis that has failed every
+push test this project has run), sagittal keeps the proportional law.
+
+**Finding 3: a clamp inherited without thinking made it worse than useless.**
+The first battery had the MPC falling at EVERY push including 5 N, while the
+baseline barely registers 5 N at 0.30deg. Cause was reusing
+`ankle_roll_admittance`'s +-15deg clamp for the closed-loop roll offset.
+Fifteen degrees of ankle roll on a foot 40 mm wide is not authority, it is a
+tipping moment: the integral winds up under a push and levers the robot over
+its own foot. Swept: 15deg -> 60.04deg (falls, bound active 65%), 8deg ->
+2.70deg, 4deg -> 0.97deg with bound activity collapsing to 2%. The 65% bound
+activity was the tell -- the QP was pegged because it was fighting a plant
+its own actuator command had destabilised.
+
+**Result with that fixed -- still a regression against the baseline:**
+
+| F_y | MPC tilt | bound active | baseline tilt |
+|---|---|---|---|
+| 5 N | 0.86 | 0.0% | 0.30 |
+| 10 N | 0.97 | 2.2% | 0.51 |
+| 15 N | 1.25 | 6.5% | 1.04 |
+| **20 N** | **60.01 falls** | **62.8%** | **1.77** |
+| 30 N | falls | 47.5% | falls |
+
+The MPC is worse on every push it survives and falls at 20 N, which the
+baseline handles comfortably. Neither moves the 30 N ceiling.
+
+**And it is not a tuning miss.** Swept the roll clamp 4-12deg against
+15/20/25/30 N: every value falls at 20 N and above, while larger clamps
+monotonically degrade the 15 N case (1.25 -> 36.96deg). There is no window.
+
+**Conclusion: the QP is not what failed -- the actuation path is.** Bound
+activity goes 0.0 -> 2.2 -> 6.5% across 5/10/15 N and then jumps to 62.8% at
+exactly the push that is lost. The QP correctly detects it has run out of
+feasible CoP; what it cannot do is make the CoP it asks for actually appear.
+The torque-derived bound (+-29.7 mm single support) turns out to be
+optimistic: the REALISABLE CoP authority through a position servo and a
+40 mm-wide foot is smaller still, so the MPC plans against a box it cannot
+reach.
+
+The baseline wins for an instructive reason. It never tries to place the CoP
+at all -- it is a direct pose correction (`ankle_pitch <- kp*(target -
+zmp_filtered)`) that the position servo executes natively. The MPC inserts
+desired CoP -> desired torque -> integral loop -> angle, and authority is
+lost at every layer. **On a position-controlled robot, commanding position
+directly beats commanding position in service of a force objective.**
+
+**Where this leaves D, honestly.** Its premise still holds -- planning inside
+the feasible set is the right idea, and the torque/CoP identity that makes
+the constraint expressible is real and verified. But D as specified assumes
+force control (Stephens' Sarcos Primus was hydraulic and force-controlled),
+and the admittance bridge that was supposed to substitute for it delivers
+enough authority for 15 N and not 20 N. Options, none yet chosen: take D to
+Stage 3 anyway on the theory that its value is in choosing footsteps and
+timing during WALKING rather than in standing CoP micro-placement; or accept
+that this result is a direct argument for architecture F, whose whole premise
+is local per-joint compensators rather than a global model pushed through a
+lossy actuation path. Flagged for the user's call rather than continued solo.
+
