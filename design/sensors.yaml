@@ -73,6 +73,25 @@ end_of_limb_sensing:
     mounting_location: distal_face_of_lower_leg_module
     mechanical_constraint: "hard"
     cost_accounting: "excluded"
+    cost_rationale: >
+      Excluded because the real cost is near zero, not because it is set
+      aside from the target -- unlike a component excluded for being
+      out of MVS scope, this one is excluded because accounting for it
+      properly would UNDERSTATE how cheap the build is. Each 6-DOF
+      sensor is built from six harvested Wii Fit Balance Board load
+      cells -- four bar-type cells per board, arranged Stewart-platform
+      style between two custom-machined aluminium discs within the
+      107mm/56mm envelope above. Three boards (twelve cells) supply
+      exactly two 6-DOF sensors, one per foot. Used Balance Boards cost
+      next to nothing, against hundreds of dollars per new bar load cell
+      of similar rating, putting each sensor at well under $100 and
+      potentially far less. Recorded 2026-09-10. The signal-chain
+      electronics this sourcing requires (multi-channel amplification
+      and fast acquisition -- the commodity HX711 is too slow for a
+      walking control loop) are a real cost and are NOT covered by this
+      exclusion; see docs/P4_JOINT_TEST_RIG.md's Load cells section for
+      that caveat and for the bending-beam mounting orientation these
+      cells need.
     load_path_requirement: >
       Ground reaction forces must pass axially through the sensor before
       entering the lower-leg module structure. This applies regardless of how
