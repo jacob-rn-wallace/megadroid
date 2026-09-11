@@ -17,6 +17,6 @@ Power,Main Fuse and Power Distribution Hardware,1,25,25,Yes,60V rail protection 
 Structure,Aluminum Plate Stock (Legs + Torso),1,120,120,Yes,Twin-rail box-bulkhead construction
 Structure,Bearings, Shafts, Fasteners (Bulk),1,110,110,Yes,Shared across joints and structure
 Feet,Flat Sole Plate Assembly (compliant sole pad),2,30,60,Yes,Rigid plate + compliant pad for vertical shock absorption
-Feet,6-DOF Force/Torque Sensor,2,0,0,No,Required mechanically but excluded from cost target
+Feet,6-DOF Force/Torque Sensor,2,0,0,No,Excluded because real cost is near-zero — built from 6 harvested Wii Fit Balance Board load cells each (design/sensors.yaml)
 Power,Toro 88675 Battery Pack,1,0,0,No,Excluded from cost target per SPEC
 TOTAL,,,,,,

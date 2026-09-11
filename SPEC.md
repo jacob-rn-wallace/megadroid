@@ -8,7 +8,7 @@ authority: authoritative
 
 **Status:** Authoritative  
 **Scope:** Minimum Viable System (MVS)  
-**Last rehydrated:** 2026-09-10
+**Last rehydrated:** 2026-09-11
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -151,6 +151,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - Mounting: distal_face_of_lower_leg_module
 - Sensor geometry is treated as a hard mechanical constraint
 - F/T sensors are **excluded from MVS cost accounting**
+- Rationale: excluded because the real cost is near zero, not because it is out of scope — each 6-DOF sensor is built from six load cells harvested from used Wii Fit Balance Boards (four bar-type cells per board), Stewart-platform arranged between two machined discs; three boards supply both feet's sensors at well under $100 each. The signal-chain electronics this requires are a separate, real cost not covered by this exclusion.
 
 ---
 
