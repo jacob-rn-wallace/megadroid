@@ -2751,3 +2751,118 @@ Both no-mujoco branches exercised directly -- skip returns 0, `--require`
 exits 1.
 
 Preflight is now `[1/3] rehydrate -> [2/3] validate -> [3/3] sim gate`.
+
+### 2026-10-18 — Ranged placeholders and a sensitivity sweep: the sole is the parameter that matters, torque is not, and the controller tuning is more fragile than the nominal gate shows
+
+The P4 test rig is a physical bottleneck, so the question was whether the
+unmeasured placeholders could be bounded from existing information instead
+(the approach a sibling project, conicoid-sim, uses: estimate a plausible range
+and take the midpoint). Not directly -- results here are knife-edge sensitive,
+so a lone midpoint says little about the rest of the range -- but the *range*
+is cheap to record and cheap to sweep.
+
+**Convention (new).** Each ranged placeholder keeps its scalar as the NOMINAL
+every tool uses, plus a sibling `estimate_ranges:` entry with `low`/`high` and
+its basis, in `design/actuation.yaml` and `design/geometry.yaml`. Midpoints are
+derived by the tool, never stored. `tools/sweep_estimates.py` builds each model
+in memory from overridden design data (the committed MJCF is never touched) and
+runs standing, `sim_walk_lipm` n=10, `sim_walk_recede` n=8/16, and a 12-timing
+lateral push battery at 5 N and 10 N (n=12, push window 2.0-3.1 s). ~7 minutes.
+
+**Ranges, with sources** (full basis in the YAML):
+
+| parameter | nominal | low | high | note |
+|---|---|---|---|---|
+| stall torque, N.m | 0.20 | 0.31 | 0.84 | vendor 24 V 775 variants; nominal is BELOW the whole range |
+| no-load speed, rpm | 15000 | 3800 | 12600 | nominal ABOVE range; not enforced in sim, so not swept |
+| drivetrain efficiency | 0.70 | 0.68 | 0.92 | hobby planetary x belt, to two-stage x HTD |
+| sole timeconst, s | 0.05 | 0.005 | 0.055 | mapped through measured foot sag, below |
+
+Stall and efficiency enter the sim only through peak torque = stall x 80 x eff,
+so they are swept jointly: 11.2 (current), 16.9 / 36.8 / 61.8 (low/mid/high).
+
+**The sole range is derived, not guessed, and it is the important one.**
+Measured static foot sag under body weight in this model: tc 0.005 -> 0.10 mm,
+0.02 -> 0.24 mm, 0.05 -> 0.53 mm, 0.07 -> 0.70 mm (about 0.05 + 9.5*tc mm).
+Physical pad sag per foot (~47 N on 150x80 mm) is F*t/(E*A): hard rubber
+(60A, 5 mm) ~0.007 mm; soft EVA foam (10 mm) ~0.2 mm; very soft gel ~0.55 mm.
+So the nominal 0.05 sits at the SOFT end of plausible pads, and an ordinary
+rubber sole is stiffer than anything the contact model can represent.
+Order-of-magnitude only: it ignores edge-loading while rocking and pad damping.
+
+**Result (16 points; tilt in degrees, * = fell; pushes = timings survived of 12):**
+
+| torque N.m | sole tc | stand | lipm10 | rec8 | rec16 | 5N | 10N |
+|---|---|---|---|---|---|---|---|
+| 11.2 (current) | 0.050 (current) | 0.30 | 6.82 | 6.69 | 6.69 | 10/12 | 8/12 |
+| 11.2 | 0.005 | 0.35 | 91.73* | 77.90* | 77.90* | 1/12 | 1/12 |
+| 11.2 | 0.030 | 0.31 | 90.66* | 6.42 | 6.85 | 12/12 | 8/12 |
+| 11.2 | 0.055 | 0.30 | 6.34 | 6.68 | 37.58* | 11/12 | 8/12 |
+| 16.9 | 0.050 | 0.30 | 47.35* | 6.28 | 78.65* | 12/12 | 7/12 |
+| 16.9 | 0.005 | 0.35 | 91.94* | 78.93* | 78.93* | 1/12 | 3/12 |
+| 16.9 | 0.030 | 0.31 | 90.11* | 6.09 | 7.23 | 12/12 | 8/12 |
+| 16.9 | 0.055 | 0.30 | 6.34 | 6.28 | 6.28 | 12/12 | 10/12 |
+| 36.8 | 0.050 | 0.30 | 65.09* | 6.02 | 6.04 | 12/12 | 7/12 |
+| 36.8 | 0.005 | 0.35 | 91.66* | 79.61* | 79.61* | 1/12 | 1/12 |
+| 36.8 | 0.030 | 0.31 | 6.47 | 5.84 | 5.84 | 12/12 | 3/12 |
+| 36.8 | 0.055 | 0.30 | 6.34 | 6.08 | 6.08 | 12/12 | 6/12 |
+| 61.8 | 0.050 | 0.30 | 65.09* | 6.02 | 6.02 | 12/12 | 8/12 |
+| 61.8 | 0.005 | 0.35 | 91.66* | 79.77* | 79.77* | 1/12 | 1/12 |
+| 61.8 | 0.030 | 0.31 | 6.47 | 5.84 | 5.84 | 12/12 | 3/12 |
+| 61.8 | 0.055 | 0.30 | 6.34 | 6.08 | 6.08 | 12/12 | 8/12 |
+
+Push numbers use a different window and survive threshold (<30 deg) than the
+2026-09-10 tables, so they are comparable within this table only.
+
+**What is robust to the uncertainty.** Standing balance passes at all 16 points.
+8-step receding-horizon walking passes at every torque value for sole
+0.03-0.055 -- it fails only at the stiffest sole. **What flips.** Everything
+else: lipm10 (7/16), rec16 (10/16), both push batteries.
+
+**Finding 1 -- the stiff end of the sole range kills the whole controller.**
+At tc=0.005 every torque value falls on walking (77-80 deg) and pushes collapse
+to 1-3 of 12. This is the same effect the 2026-09-10 sole entry measured, now
+seen across the physically plausible range rather than at one hand-picked
+point. If the real pad is closer to rubber than gel, the validated disturbance
+behaviour does not transfer, and compliance would have to come from somewhere
+other than a thin pad. Measuring the real pad (Test F) is therefore the
+highest-value physical test BY DATA, not only by the earlier intuition.
+
+**Finding 2 -- torque is not the unknown that matters.** Every datasheet-derived
+peak (16.9-61.8 N.m) is ABOVE the committed 11.2, so by the estimates the
+drivetrain is not short. The honest corollary is a derived requirement: the
+gait needs roughly 8.4-11.2 N.m (60:1 walks, 20:1 does not), so the drivetrain
+closes if the motor delivers about 18% (against the high corner) to 66%
+(against the low corner) of its datasheet stall torque at the joint. Driver
+current limit and thermal derating decide that, which points the rig at Test C
+(continuous/usable torque) rather than at stall torque (Test A).
+
+**Finding 3 -- the controller tuning is coupled to the torque cap, and more
+torque is not safe.** At the committed sole, raising peak torque from 11.2 to
+16.9 breaks lipm10 (6.82 -> 47.35) and rec16 (6.69 -> 78.65), and 36.8/61.8
+break lipm10 (65.09). At the mid sole, push survival at 10 N falls from 8/12
+to 3/12 as torque rises from 16.9 to 36.8. Strictly more actuator authority
+should not make a robot worse; it does here, because every gain in this stack
+was fitted at the 11.2 cap and the saturation was part of what was tuned. This
+is the knife-edge behaviour already documented, now measured on a physical axis
+rather than a gain axis. It also means a better motor choice cannot simply be
+dropped in without a re-tune.
+
+**Caveats.** The sweep measures robustness of the CURRENT tuning, which was
+fitted at the nominals; a failure away from nominal means "this tuning does not
+survive that", not "no controller could". It does not locate the truth within a
+range, only whether locating it matters. no_load_speed_rpm is unswept because
+simulation does not enforce it. Nominal values were NOT changed to range
+midpoints: the torque midpoint is 3.3x the committed value and datasheet stall
+is not usable peak, so adopting it would change validated behaviour on an
+unmeasured assumption.
+
+**Also found, not acted on: a hygiene defect in the model.** `ankle_roll_geom`
+(a 20 mm sphere at the ankle pivot) overlaps `shin_geom` by exactly its radius
+and the pair is not in the generator's exclude list, so each leg carries a
+20 mm-deep contact with ~2.2 kN of internal force. Excluding the pair changes
+no standing joint torque (the force acts along the leg axis through the
+pivot), so it is benign for torque analysis. It is the same class of defect
+`generate_mjcf.py` already excludes for the pelvis and torso stack. Left alone:
+changing the contact set would move every baseline, and nothing measured here
+depends on it.

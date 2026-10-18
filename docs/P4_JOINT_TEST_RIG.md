@@ -208,10 +208,30 @@ If only some tests get done, this is the priority:
 
 1. **Test F (sole)** — cheapest, and the parameter shown to dominate disturbance behaviour.
 2. **Test H (load cell)** — trivially cheap, and Tests A and F both depend on trusting a harvested cell.
-3. **Test A (torque–speed)** — sizes everything; resolves three placeholders at once.
-4. **Test C (thermal)** — determines whether the envelope is real or instantaneous.
+3. **Test C (thermal / usable torque)** — see the sweep result below; this, not stall torque, decides whether the drivetrain closes.
+4. **Test A (torque–speed)** — still needed for the droop curve and to verify the belt ratio, but no longer the one that decides the design.
 5. **Test G (IMU)** — unblocks honest estimator tuning; needs no fixture.
 6. **Tests D, E** — refine the control model once the envelope is known.
+
+### What the sensitivity sweep changed
+
+This order is now backed by a measurement rather than intuition. Each ranged
+placeholder carries low/high bounds in `design/*.yaml` (`estimate_ranges`), and
+`tools/sweep_estimates.py` runs the P3 battery across them (results in
+`tools/CLAUDE.md`, 2026-10-18). Two conclusions move the plan:
+
+- **Test F is confirmed first, and by a wide margin.** Across the physically
+  plausible sole range, the stiff end (a hard rubber pad) makes every walking
+  and push result collapse regardless of motor torque. The estimate that most
+  needs replacing is the one that decides whether the controller works at all.
+- **Test C overtakes Test A.** Every datasheet-derived peak torque (16.9–61.8
+  N·m) exceeds the committed 11.2, so by the estimates the drivetrain is not
+  short; the open question is how much of datasheet stall the driver and
+  thermals actually allow. The gait needs roughly 18–66% of it. A thermal duty
+  cycle answers that; a stall sweep does not.
+
+Parameters the sweep showed to be robust need no rig time to be trusted for
+standing and short walks. Only the ones it showed to flip justify the build.
 
 ## Prior art
 

@@ -40,7 +40,10 @@ new work:
   unpushed.**
 - Several authoritative values are still PLACEHOLDERs (motor stall torque,
   drivetrain efficiency, belt ratio, sole compliance, link masses, IMU noise).
-  Conclusions resting on them carry that uncertainty.
+  Conclusions resting on them carry that uncertainty. Each now carries a
+  plausible `low`/`high` in `estimate_ranges:` in its design file;
+  `tools/sweep_estimates.py` shows which conclusions survive the whole range
+  (see `tools/CLAUDE.md`, 2026-10-18).
 
 ---
 
@@ -155,6 +158,7 @@ unless the user explicitly initiates a design revision.
 | Regenerate URDF | `python3 tools/generate_urdf.py` |
 | Verify URDF dimensions | `python3 tools/verify_urdf_dimensions.py` |
 | Regenerate MuJoCo scene | `python3 tools/generate_mjcf.py` |
+| Sensitivity sweep over ranged placeholders (~7 min, needs mujoco) | `python3 tools/sweep_estimates.py` |
 | MuJoCo load test | `python3 tools/sim_load_test.py` |
 | P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
 | P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |
