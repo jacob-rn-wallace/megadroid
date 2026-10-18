@@ -186,3 +186,21 @@ torso:
 # Lower-leg internal geometry may change for FULL-system variants,
 # but knee interface geometry and structural dimensions above must
 # remain compatible unless SPEC.md is explicitly revised.
+
+estimate_ranges:
+  # See design/actuation.yaml estimate_ranges for the convention.
+  foot_stack.sole.contact_timeconst_s:
+    low: 0.005
+    high: 0.055
+    basis: >
+      Mapped through measured static foot sag, not guessed. In this MuJoCo model
+      the sole timeconst sets how far the foot sinks under body weight:
+      0.005 -> 0.10 mm, 0.02 -> 0.24 mm, 0.05 -> 0.53 mm, 0.07 -> 0.70 mm
+      (sag ~ 0.05 + 9.5 x timeconst, mm). Physical pad sag per foot at ~47 N on
+      a 150x80 mm sole is F*t/(E*A): hard rubber (60A, E~3 MPa, 5 mm) ~0.007 mm;
+      soft EVA foam (E~0.2 MPa, 10 mm) ~0.2 mm; very soft gel (E~0.07 MPa,
+      10 mm) ~0.55 mm. Low (0.005) is the stiffest the contact model can
+      represent -- a real rubber pad is stiffer still and behaves as rigid
+      here. High (0.055) is a soft gel. The current 0.05 therefore sits at the
+      SOFT end of physically plausible pads. Order-of-magnitude estimate only:
+      it ignores edge-loading while rocking and pad damping (hysteresis).

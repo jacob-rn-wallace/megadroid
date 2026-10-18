@@ -134,3 +134,43 @@ modeling_limitations:
     Belt stretch and gear backlash are not modeled. design/sensors.yaml's
     joint-mounted encoder policy exists specifically because these are
     expected to be significant.
+
+estimate_ranges:
+  # RANGED PLACEHOLDERS. Convention (2026-10-18): where a value above is an
+  # unmeasured estimate, the plausible low/high bounds live here with their
+  # basis. The scalar above stays the NOMINAL used by every tool; midpoints
+  # are derived by tools/sweep_estimates.py, never stored (one source of truth).
+  # The point is not to pick a better single number -- results in this project
+  # are knife-edge sensitive, so a lone midpoint says little about the rest of
+  # the range. The sweep tool runs the P3 battery across these bounds to
+  # separate conclusions that are ROBUST to the uncertainty from the ones that
+  # FLIP inside it. Only the latter justify physical measurement (P4 rig).
+  # A range is an estimate, not a measurement: replace it when the rig delivers.
+  motor.stall_torque_nm:
+    low: 0.31
+    high: 0.84
+    basis: >
+      Vendor stall torque at 24V across found 775-class variants: 0.31 N-m
+      (NFP-RC-775SHP, 3166 g-cm, 3800 rpm), 0.72 N-m (RS775SM-4445-F, 8300 rpm,
+      24.5 A stall), 0.84 N-m (119.43 oz-in, 12600 rpm, 59 A stall). The current
+      nominal (0.20) sits BELOW this whole range, i.e. it is an implicit derate.
+      Datasheet stall is not usable peak: 25-60 A stall current exceeds what the
+      motor driver or the shared DC/DC (BOM) can deliver on 13 joints at once,
+      and is thermally instantaneous. Usable fraction is a separate unknown.
+  motor.no_load_speed_rpm:
+    low: 3800
+    high: 12600
+    basis: >
+      Same variants as stall_torque_nm (3800 / 8300 / 12600 rpm). The nominal
+      (15000) sits ABOVE the range. NOT enforced in simulation, so sweeping it
+      has no effect on any P3 result until a velocity-dependent actuator model
+      exists (see modeling_limitations.flat_torque_cap). Stall torque and
+      no-load speed are paired per motor model, not independent.
+  drivetrain.efficiency:
+    low: 0.68
+    high: 0.92
+    basis: >
+      Low = 0.72 (hobby 42mm two-stage planetary gearmotor, vendor-listed) x 0.95
+      (synchronous belt floor). High = 0.94 (two stage-pair planetary, 0.97 each)
+      x 0.98 (HTD typical). Belt figures are general synchronous-drive values
+      (95-99%), not a datasheet for this belt.
