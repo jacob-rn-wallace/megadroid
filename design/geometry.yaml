@@ -204,3 +204,9 @@ estimate_ranges:
       here. High (0.055) is a soft gel. The current 0.05 therefore sits at the
       SOFT end of physically plausible pads. Order-of-magnitude estimate only:
       it ignores edge-loading while rocking and pad damping (hysteresis).
+      CORRECTION 2026-10-19 (tools/sweep_sole.py): the comparison above holds
+      thickness and contact area fixed, but pad stiffness is E*A_contact/t, so
+      a stiff material reaches the sim's workable window with a studded, ribbed
+      or lattice pad -- the window is a stiffness (roughly 55-135 kN/m effective
+      per foot, 0.35-0.85 mm sag at ~47 N), not a material. The current 0.05
+      sits inside it, not at an edge. See tools/CLAUDE.md, 2026-10-19.
