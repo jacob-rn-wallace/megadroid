@@ -166,6 +166,42 @@ single measurement available: sweeping it in simulation moved 10 N push survival
 from 0/12 to 9/12 timings, and the current value is an unmeasured placeholder
 chosen on physical plausibility rather than data.
 
+**Target window and candidate pads (2026-10-19).** `tools/sweep_sole.py` swept
+contact timeconst (0.01-0.08 s) against damping ratio (0.5-4) at the committed
+torque and converted each point to the robot's measured effective stiffness per
+foot. Standing, 8-step and 16-step walking, and survival of at least half of
+both push batteries held at 9 of 32 grid points, spanning about **55-135 kN/m
+per foot (0.35-0.85 mm sag at ~47 N)**. Above ~200 kN/m the walks fall; below
+~30 kN/m standing sag grows and pushes are lost. Damping is not tightly
+constrained inside the window, and neighbouring grid points flip, so the edges
+are soft. This is where the *current tuning* works, not where any controller
+would.
+
+The window is a stiffness, not a material. Pad stiffness is E x A_contact / t,
+so thickness and contact area are free knobs. Estimates for the sim's 150 x 80 mm
+foot (A = 0.012 m^2), from datasheet moduli, none measured:
+
+| Pad | Estimate | In window? |
+|---|---|---|
+| Sorbothane 30 (Shore 00), 10 mm | Static E about 60-70 kPa (10-20% secant) gives ~75-85 kN/m. Dynamic E at 5 Hz is 4x higher (36-48 psi) and would give ~300-400 kN/m. About 160 g per foot at 10 mm | Static yes, dynamic no |
+| Sorbothane 50, 20 mm | Static E about 190-220 kPa gives ~110-130 kN/m. About 330 g per foot | Static yes; too heavy |
+| Closed-cell EVA, Evazote VA35, 25 mm | E about 200 kPa (secant at 25% strain; the low-strain tangent is probably higher) gives ~100 kN/m. About 10 g | Yes, uncertain by about 2x |
+| Silicone gel (Shore 00-30 class), 10 mm | E about 70-170 kPa from a secondary source gives ~85-200 kN/m | Partly |
+| 60A rubber, full-area, 5 mm | E about 3 MPa gives ~7,000 kN/m | No, ~50x stiff |
+| 60A rubber, 8-16 studs of 5 x 5 mm, 10 mm tall | A_contact = 200-400 mm^2 gives ~60-120 kN/m | Yes |
+
+Solid elastomers are far too stiff at any sensible thickness; the options are
+soft gels, thick low-density foam, or a rigid-material pad broken into studs,
+ribs or a lattice. The sim's box-on-plane contact is four corner springs, which
+a four-corner or studded pad resembles more closely than a continuous slab.
+
+Not captured: the real pad's nonlinearity, creep and compression set (10% for
+Sorbothane 30), shear and rocking stiffness, and damping (Sorbothane's tan
+delta is 0.28-0.8). The sim's damping ratio is a solver parameter and is not
+mapped to tan delta. Test F should therefore measure force-displacement at both
+slow and walking-rate loading, since a pad that is in the window statically can
+leave it dynamically.
+
 ### Test G — IMU noise and bias *(no rig needed)*
 Log the actual IMU stationary for ~1 hour; compute Allan variance or simply bias
 drift and noise density.
@@ -221,9 +257,11 @@ placeholder carries low/high bounds in `design/*.yaml` (`estimate_ranges`), and
 `tools/CLAUDE.md`, 2026-10-18). Two conclusions move the plan:
 
 - **Test F is confirmed first, and by a wide margin.** Across the physically
-  plausible sole range, the stiff end (a hard rubber pad) makes every walking
-  and push result collapse regardless of motor torque. The estimate that most
-  needs replacing is the one that decides whether the controller works at all.
+  plausible sole range, the stiff end makes every walking and push result
+  collapse regardless of motor torque. The estimate that most needs replacing
+  is the one that decides whether the controller works at all. (The finer
+  2026-10-19 sweep, under Test F, restates this as a stiffness window of about
+  55-135 kN/m per foot; a stiff material can meet it as a studded pad.)
 - **Test C overtakes Test A.** Every datasheet-derived peak torque (16.9–61.8
   N·m) exceeds the committed 11.2, so by the estimates the drivetrain is not
   short; the open question is how much of datasheet stall the driver and

@@ -2866,3 +2866,40 @@ pivot), so it is benign for torque analysis. It is the same class of defect
 `generate_mjcf.py` already excludes for the pelvis and torso stack. Left alone:
 changing the contact set would move every baseline, and nothing measured here
 depends on it.
+
+
+### 2026-10-19 -- Sole stiffness x damping sweep: the workable window is about 55-135 kN/m per foot
+
+`tools/sweep_sole.py` (new; ~15 min on 4 cores) sweeps `contact_timeconst_s`
+(0.01-0.08) x `contact_dampratio` (0.5, 1, 2, 4) at the committed 11.2 N.m cap and
+reports, per point, standing, lipm10, recede 8/16 and the 5/10 N push batteries
+(12 timings, n=12) plus the robot's measured sag and effective stiffness.
+`sweep_estimates._model_for` gained an optional `dampratio`.
+
+**Result.** 9 of 32 points stand, walk 8 and 16 steps, and survive at least half
+of both pushes. They span 55.8-136 kN/m per foot (0.35-0.85 mm sag). The nominal
+(0.05, 1.0 = 88 kN/m) is inside the window, not at an edge. Above ~200 kN/m
+walks fall; below ~30 kN/m (damping 4, timeconst >= 0.05) pushes drop to 0-5 of
+12 and standing sag reaches 2-4 mm. Neighbouring points flip (damping 1.0:
+timeconst 0.06 passes rec16 at 76 kN/m, 0.07 falls at 67 kN/m), so the edges are
+not sharp. lipm10 falls at many points including inside the window (its known
+defect, see 2026-09-10) and is not part of the window criterion.
+
+**Stiffness depends on damping.** MuJoCo's contact stiffness goes as
+1/(timeconst x dampratio)^2, so the grid is not two independent axes. The window
+is therefore stated as stiffness, which is what a physical pad has.
+
+**Measurement note.** Sag is read from the full robot held in its nominal pose,
+not a free-standing box under the same load: the box sagged 1.8-2.3x less (0.30
+vs 0.53 mm at the nominal sole) because the real feet do not carry load evenly
+or sit flat.
+
+**Correction to 2026-10-18.** That entry and `geometry.yaml` called the nominal
+sole "the soft end of plausible pads". That compared materials at a fixed 5-10
+mm thickness and full area. Stiffness is E x A_contact / t, so a stiff material
+reaches the window with studs or a lattice. Corrected in `geometry.yaml`.
+
+**Caveat.** Same as the 2026-10-18 sweep: this is robustness of the current
+tuning, which was fitted at the nominal sole. The materials mapping is in
+`docs/P4_JOINT_TEST_RIG.md` under Test F.
+

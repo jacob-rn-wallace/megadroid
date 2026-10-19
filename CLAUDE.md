@@ -159,6 +159,7 @@ unless the user explicitly initiates a design revision.
 | Verify URDF dimensions | `python3 tools/verify_urdf_dimensions.py` |
 | Regenerate MuJoCo scene | `python3 tools/generate_mjcf.py` |
 | Sensitivity sweep over ranged placeholders (~7 min, needs mujoco) | `python3 tools/sweep_estimates.py` |
+| Sole stiffness x damping sweep (~15 min, needs mujoco) | `python3 tools/sweep_sole.py` |
 | MuJoCo load test | `python3 tools/sim_load_test.py` |
 | P3 static pose validation (fixed base) | `python3 tools/sim_static_pose.py` |
 | P3 ZMP balance validation (floating base) | `python3 tools/sim_zmp_balance.py` |

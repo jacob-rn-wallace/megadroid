@@ -101,12 +101,14 @@ def build_points(design):
     return torque, sole
 
 
-def _model_for(design, peak_torque, timeconst):
+def _model_for(design, peak_torque, timeconst, dampratio=None):
     import mujoco
     gm = sys.modules["generate_mjcf"]
     d = copy.deepcopy(design)
     d["actuation"]["output"]["peak_joint_torque_nm"] = float(peak_torque)
     d["geometry"]["foot_stack"]["sole"]["contact_timeconst_s"] = float(timeconst)
+    if dampratio is not None:
+        d["geometry"]["foot_stack"]["sole"]["contact_dampratio"] = float(dampratio)
     root = gm.create_mjcf(d["joints"], d["geometry"], d["kinematics"],
                           d["mass"], d["actuation"], d["sensors"])
     xml = gm.prettify(root)
