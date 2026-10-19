@@ -361,7 +361,8 @@ Surveyed 2026-10-19 for open or published foot designs. No CAD is available for
 either, and the open humanoids (Asimov, Berkeley Humanoid Lite) publish only
 bare plates or toe-jointed feet with no sole or foot-sensor detail. The two
 published designs below are worth reading for their numbers. Both papers are in
-`reference-material/humanoid-robotics/` (gitignored).
+`reference-material/humanoid-robotics/` (gitignored), as is the BIP foot paper
+described below.
 
 | | BIP2000 (Espiau & Sardain, ICRA 2000) | DARFT-1 (Lee & Joe, IJCAS 2023) |
 |---|---|---|
@@ -376,6 +377,25 @@ the `foot_stack` order and the axial-only load path in `design/geometry.yaml`,
 with the compliant pad beneath the plate. It senses only vertical force and
 centre of pressure, so it is a subset of the 6-DOF spec in `design/sensors.yaml`,
 not a replacement for it. DARFT-1's value is its stiffness and travel numbers.
+
+**BIP foot detail (Sardain & Bessonnet, IEEE SMC-A 2004, "Zero Moment Point --
+Measurements From a Human Walker Wearing Robot Feet as Shoes").** This
+companion paper describes the BIP foot hardware and tests it on a 96 kg human
+wearing it as a shoe. The foot is about 290 x 180 mm with the front edge at the
+metatarsi (short, wide, long heel, like Honda P2), 1.8 kg here against 2.5 kg
+in the 2000 paper (unexplained), with rubber fixed under a rigid sole plate;
+thickness and hardness are not given. Sensing is three 14 mm traction-
+compression cells between the sole and the upper foot: one behind the ankle at
+the heel and two forward. That gives normal force and two moments; friction was
+estimated from strain gauges on the ankle actuator rods, not the foot cells.
+Result: heel strike is impactless, but at foot-flat the centre of pressure jumps
+from behind the ankle to ahead of it (about 3.2 m/s average) and total force
+peaks at 1800 N (over 180% of body weight) against about 130% in normal shoes.
+The authors' fixes are a softer sole material and a shorter, rounded heel, and
+they note a robot can control placement with ankle torque in both directions.
+This is a human test of a rigid foot, not a robot walking result. The sim's
+plain 150 x 80 mm box cannot show heel-shape effects, and the sole-level
+three-cell layout differs from the F/T slot in `design/sensors.yaml`.
 
 **What does not.** DARFT-1 solves sensor shock on uneven terrain at 50 kg. This
 robot's walking scope is flat floor at low speed with a far lighter foot load.
