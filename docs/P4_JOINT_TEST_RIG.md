@@ -317,6 +317,42 @@ stiffness half; damping still needs the drop test, which is a mass, a guide
 rail and a load cell — cheap enough not to need a donor design. Then build
 Test A as a static reaction-arm fixture, which serves B, C, D and E unchanged.
 
+### Foot prior art: BIP2000 and DARFT-1
+
+Surveyed 2026-10-19 for open or published foot designs. No CAD is available for
+either, and the open humanoids (Asimov, Berkeley Humanoid Lite) publish only
+bare plates or toe-jointed feet with no sole or foot-sensor detail. The two
+published designs below are worth reading for their numbers. Both papers are in
+`reference-material/humanoid-robotics/` (gitignored).
+
+| | BIP2000 (Espiau & Sardain, ICRA 2000) | DARFT-1 (Lee & Joe, IJCAS 2023) |
+|---|---|---|
+| Foot | 290 mm long, 80 mm high, 2.5 kg; rigid sole plate | 160 x 240 mm base, 100 mm high, 2.2 kg; two stacked spring arches |
+| Sensing | 3 strain-gauge cells between sole plate and ankle plate: vertical force and XY centre of pressure; 2500 N range, 10 N resolution; 2-axis inclinometer on the foot | Uses the robot's existing F/T sensor; the foot exists to protect it |
+| Compliance | None as tested. Two passive metatarsal joints are in the kinematics list but section 5 lists them as future work | 8 springs per arch, about 60 kN/m (longitudinal) and 100 kN/m (transverse), 15 mm travel per arch, about 8 mm static deflection at 50 kg on one foot |
+| Robot | 70-400 N.m joints, 40 kg payload | 50 kg, 1.43 m DRC-HUBO+ variant |
+| Evidence | Basic planar walking; no foot-specific results | Peak vertical force 599.7 to 540 N (front obstacle) and 612.4 to 551 N (side obstacle); forward ZMP error about 0.14 to 0.03 m; sideways ZMP error about 0.16 to 0.13 m. Three trials, robot fixed in roll and pitch, 15 mm obstacle |
+
+**What transfers.** BIP's layout (rigid plate, sensor layer, ankle plate) matches
+the `foot_stack` order and the axial-only load path in `design/geometry.yaml`,
+with the compliant pad beneath the plate. It senses only vertical force and
+centre of pressure, so it is a subset of the 6-DOF spec in `design/sensors.yaml`,
+not a replacement for it. DARFT-1's value is its stiffness and travel numbers.
+
+**What does not.** DARFT-1 solves sensor shock on uneven terrain at 50 kg. This
+robot's walking scope is flat floor at low speed with a far lighter foot load.
+Scaled by robot mass (design/mass.yaml total against 50 kg), its longitudinal
+arch would be about 11.5 kN/m, a foot that sags about 8 mm in single support and
+weighs about 0.42 kg. That is far softer than anything the placeholder sweep
+covers (its soft end sags well under 1 mm) and the MuJoCo contact timeconst
+cannot represent it; modelling it would need a spring joint. These are rough
+scalings, not simulation results. DARFT-1's own introduction also reports that a
+soft HRP-4 sole reduced walking stability and needed a deformation estimator,
+which bears on how soft Test F should be allowed to land.
+
+**Use.** Treat BIP's layout as the baseline. Revisit DARFT-1 only if bench work
+on the harvested load cells (Test H) shows they need overload protection.
+
 ## Cost
 
 Roughly $65 in flight parts plus bench instrumentation, and the instrumentation
