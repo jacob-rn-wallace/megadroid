@@ -64,6 +64,12 @@ design_basis:
     cap and must carry axial load only, so it needs a pivot at each end (two machined
     thin-neck flexures per rod). Rod ends (ball joints) are avoided: friction and play
     show up as hysteresis in a sensor.
+  envelope_decision: >
+    2026-10-21: the 88.85 mm across-flats hexagon in sensors.yaml is the requirement. The builder's
+    CAD caps (94.8-99.6 mm) were a rough concept and are not the limit.
+  fabrication_access: >
+    2026-10-21: builder has lathe and CNC access, so turned flexure rods and angled wedge blocks
+    are in scope (the ball-joint alternative is not needed on fabrication grounds).
   cap_thickness_mm: 10           # each end cap: M6 mounting and stiffness
   cell_standoff_mm: 3            # spacer under the fixed end so the free end can deflect
   hex_wall_margin_mm: 0.5        # parts keep this far inside the envelope. The builder's concept has the
