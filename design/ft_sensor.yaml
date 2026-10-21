@@ -66,8 +66,10 @@ design_basis:
     show up as hysteresis in a sensor.
   cap_thickness_mm: 10           # each end cap: M6 mounting and stiffness
   cell_standoff_mm: 3            # spacer under the fixed end so the free end can deflect
-  hex_wall_margin_mm: 3          # inside the hexagon: cap edge distance and any cover
-  min_clearance_mm: 1.5          # between non-mating parts
+  hex_wall_margin_mm: 0.5        # parts keep this far inside the envelope. The builder's concept has the
+                                 # cells AS the outer surface, so no wall margin is assumed (was 3, wrong)
+  min_clearance_mm: 0.5          # between non-mating parts. The concept has ~0.7 mm between the two
+                                 # cells of a pair, so 1.5 rejected the builder's own design
   rod_section_mm: 6              # M6 rod; necks are thinner but the envelope is this
   design_load_factor: 2.5        # design wrench = sim peak x this (heel-strike, fall margin)
   noise_cell_equivalent_n: 0.59  # from noise_floor_uv above, per cell
