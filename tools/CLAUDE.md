@@ -2934,3 +2934,14 @@ and up to 0.4 kg per sensor stood, walked 8/16 steps and survived most pushes; 1
 touched and 115 mm collided (an artefact, not a width effect). Sensor masses are estimates
 (~0.3-0.5 kg, assumed aluminium fill), not CAD masses. At 175 mm the gap limit is gone, so
 re-run it before relying on any width.
+
+### 2026-10-21 -- Foot F/T loads logged from the sim (`tools/log_ft_loads.py`)
+
+Wraps `mj_rnePostConstraint` in `run_walk_recede` to record each foot's `ft_force`/`ft_torque`
+without touching the controller. 16 nominal steps plus lateral/sagittal 5 and 10 N pushes at 6
+timings (19 of 24 survived; falls are excluded). Per foot, at the ankle: peak Fz 175 N (p99 112),
+shear peak ~50 N (p99 ~27), Mx/My peak 6.9/10.0 N.m (p99 4.5/7.0), Mz peak 5.0 N.m (p99 2.6).
+Against the layout study's assumed peaks (Fz 300, shear 150, Mx/My 15, Mz 3) everything is lower
+EXCEPT Mz, which was under-assumed. Scored on these wrenches, the worst cell sits at 25-41% of a
+75 kg rating (rating unverified). Peaks are a floor: the contact model is smoother than a real
+heel strike and the gait is slow. Values recorded in `design/ft_sensor.yaml`.

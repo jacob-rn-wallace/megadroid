@@ -29,8 +29,15 @@ WHAT IT DOES NOT DO
     relative between layouts, not absolute.
 
     python3 hardware/ft_sensor/layout_study.py
+    python3 hardware/ft_sensor/layout_study.py --wrenches ft_loads.npz
+
+With --wrenches (from tools/log_ft_loads.py: columns Fx Fy Fz Mx My Mz, N and N.m, at the
+ankle) each layout is also scored on the recorded simulation loads. The sensor centre
+sits below the ankle, so moments are shifted to it by the lever arm; the shift's sign
+is ambiguous without the site convention, so BOTH signs are scored and the worse shown.
 """
 
+import argparse
 import itertools
 import math
 from pathlib import Path
@@ -127,6 +134,24 @@ def metrics(A):
                 signal_mv=frac * FS_MV, cell_noise_n=cell_noise_n, wrench_res=wrench_res)
 
 
+SENSOR_BELOW_ANKLE_M = H_SENSOR / 2.0 + 0.010   # sensor centre below the ankle (sweep_foot.py's convention)
+
+
+def score_series(A, W):
+    """Worst-case and 99th-percentile cell force, as a fraction of rating, over the
+    recorded wrenches W (n x 6, at the ankle), shifted to the sensor centre."""
+    pinv = np.linalg.pinv(A)
+    out = []
+    for sign in (+1.0, -1.0):
+        Ws = W.copy()
+        h = SENSOR_BELOW_ANKLE_M
+        Ws[:, 3] += sign * (-h * W[:, 1])      # Mx += -h*Fy
+        Ws[:, 4] += sign * (h * W[:, 0])       # My += +h*Fx
+        f = np.abs(Ws @ pinv.T)                # n x cells
+        out.append((f.max() / RATED_N, np.percentile(f.max(axis=1), 99) / RATED_N))
+    return max(o[0] for o in out), max(o[1] for o in out)
+
+
 def best_stewart():
     """Coarse sweep over the Stewart geometry, scored by condition number."""
     best = None
@@ -141,8 +166,11 @@ def best_stewart():
     return best
 
 
-def row(name, A, extra=""):
+def row(name, A, extra="", W=None):
     m = metrics(A)
+    if W is not None and m["rank"] == 6:
+        pk, p99 = score_series(A, W)
+        extra = f"SIM worst {100 * pk:.1f}% p99 {100 * p99:.1f}% of rating  " + extra
     n = A.shape[1]
     cond = f"{m['cond']:.1f}" if np.isfinite(m["cond"]) else "rank<6"
     wr = m["wrench_res"]
@@ -152,6 +180,10 @@ def row(name, A, extra=""):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--wrenches", help="npz from tools/log_ft_loads.py")
+    args = ap.parse_args()
+    W = np.load(args.wrenches)["wrenches"] if args.wrenches else None
     print(f"cell rating {RATED_N:.0f} N ({FT['load_cell']['rating']['rated_load_kg']} kg, UNVERIFIED), "
           f"full-scale {FS_MV:.2f} mV, noise {NOISE_UV} uV p-p -> "
           f"{NOISE_UV * 1e-3 / FS_MV * RATED_N:.2f} N per cell")
@@ -163,13 +195,13 @@ def main():
           f"{'Fz/Fx res N':>11}  {'Mx/Mz res N.m':>13}")
     print("-" * 110)
 
-    row("3 vertical + 3 tangential", three_plus_three(R_MAX), f"r={R_MAX * 1000:.0f} mm")
-    row("  (same, r = 30 mm)", three_plus_three(0.030), "r=30 mm")
+    row("3 vertical + 3 tangential", three_plus_three(R_MAX), f"r={R_MAX * 1000:.0f} mm", W)
+    row("  (same, r = 30 mm)", three_plus_three(0.030), "r=30 mm", W)
     row("4 vertical (BIP-style)", four_vertical(R_MAX), "Fz, Mx, My only")
-    row("4 vertical + 4 tangential", four_plus_four(R_MAX), "8 channels, redundant")
+    row("4 vertical + 4 tangential", four_plus_four(R_MAX), "8 channels, redundant", W)
 
     m, params, A = best_stewart()
-    row("Stewart, best of sweep", A, str(params))
+    row("Stewart, best of sweep", A, str(params), W)
     # The builder's rough sketch is not parameterised here; add it once its
     # strut angles are read off the CAD.
 
