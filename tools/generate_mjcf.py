@@ -127,7 +127,7 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data, actuation_data, sens
     thigh_len = geo["thigh_length_mm"] / 1000.0
     shin_len  = geo["shin_length_mm"]  / 1000.0
     ankle_off = geo["ankle_to_sole_offset_mm"] / 1000.0
-    hip_y     = geo_data["leg_structure"]["twin_rail"]["inner_face_spacing_mm"] / 2000.0
+    hip_y     = geo_data["pelvis"]["hip_spacing_mm"] / 2000.0
 
     # Pelvis starts at full-extension leg height; settles under gravity.
     pelvis_z = thigh_len + shin_len + ankle_off

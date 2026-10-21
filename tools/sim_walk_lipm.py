@@ -242,7 +242,16 @@ L1 = 0.3     # thigh length, m (design/geometry.yaml: thigh_length_mm=300)
 L2 = 0.3     # shin length, m (design/geometry.yaml: shin_length_mm=300)
 FOOT_FWD = 0.05    # foot body offset forward of ankle, m (generate_mjcf.py, hardcoded there too)
 FOOT_DOWN = 0.08   # foot body offset below ankle, m (design/geometry.yaml: ankle_to_sole_offset_mm=80)
-HIP_Y = 0.05       # hip lateral half-spacing, m (design/geometry.yaml: twin_rail spacing/2)
+def _hip_half_spacing_m():
+    """Read from design/geometry.yaml so a spacing revision cannot leave this stale
+    (it was a hardcoded 0.05 copy of the old twin-rail-derived value)."""
+    import yaml
+    from pathlib import Path
+    geo = yaml.safe_load((Path(__file__).resolve().parents[1] / "design" / "geometry.yaml").read_text())
+    return geo["pelvis"]["hip_spacing_mm"] / 2000.0
+
+
+HIP_Y = _hip_half_spacing_m()   # hip lateral half-spacing, m (design/geometry.yaml: pelvis.hip_spacing_mm / 2)
 G = 9.81
 
 # Reachability limit. NOT 0.95*(L1+L2) as originally planned — verified
@@ -1594,7 +1603,13 @@ def main():
         _selftest_stage4()
         _selftest_stage5(model)
         _selftest_stage5c(model)
-        _selftest_stage6(model)
+        # Stage 6 (the end-to-end fixed-horizon drive) is RETIRED from the selftest
+        # 2026-10-21: sim_walk_recede.py supersedes it (16 clean steps vs 10, survives
+        # pushes, and walked unretuned at the 175 mm stance where this fell at every
+        # step count). Stages 0-5c stay because sim_walk_recede imports this file's
+        # IK, planner and admittance code. `--steps N` still runs run_walk, and
+        # _selftest_stage6 is kept, un-called, as the record of the last validated
+        # range (n=10 at the 100 mm stance).
         print()
         print("All implemented self-tests passed.")
         return

@@ -225,8 +225,8 @@ def create_urdf(joints_data, geometry_data, kinematics_data, mass_data):
     shin_len   = geo["shin_length_mm"]   / 1000.0
     ankle_off  = geo["ankle_to_sole_offset_mm"] / 1000.0
 
-    # Hip lateral offset: half the twin-rail inner face spacing
-    hip_y_offset = geometry_data["leg_structure"]["twin_rail"]["inner_face_spacing_mm"] / 2000.0
+    # Hip lateral offset: half the hip-to-hip spacing
+    hip_y_offset = geometry_data["pelvis"]["hip_spacing_mm"] / 2000.0
 
     # ── Pelvis ────────────────────────────────────────────────────────────────
     pelvis_geom = ET.Element("box", size="0.20 0.30 0.15")

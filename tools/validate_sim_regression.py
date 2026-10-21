@@ -68,7 +68,7 @@ CHECKS = [
     (["tools/sim_load_test.py"], "model loads"),
     (["tools/sim_static_pose.py"], "static pose (fixed base)"),
     (["tools/sim_zmp_balance.py"], "ZMP balance (floating base)"),
-    (["tools/sim_walk_lipm.py", "--selftest"], "LIPM/DCM walking selftest"),
+    (["tools/sim_walk_lipm.py", "--selftest"], "LIPM/DCM shared-machinery selftest (stages 0-5c; its end-to-end walk is retired)"),
     (["tools/sim_walk_recede.py", "--selftest"], "receding-horizon walking selftest"),
 ]
 
