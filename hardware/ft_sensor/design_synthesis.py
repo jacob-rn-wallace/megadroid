@@ -67,6 +67,7 @@ PAD_LEN = FT["sizing_basis"]["fixed_end_contact_length_mm"]   # pad footprint al
                                                               # under the cell's end half, to its centre
 KEEPOUT = FT["stop_basis"]["keepout_radius_mm"]               # central column kept clear for the overload stop
 ROD_MIN = 12.0            # shortest rod span (cell face to far cap): sizing.py says ~15-18 mm, see --rod-min
+BOSS_W = 10.0             # far-end boss, mm square: holds the rod's 8 mm AF hex shoulder (9.24 across corners)
 EMBED = 6.0               # how far pads/bosses may sit inside the cap material
 
 SIM = FT["sim_measured_loads"]["peak"]
@@ -195,12 +196,19 @@ def members(p, case):
                 face2 = h2 + u * CT / 2
                 if u[2] < 0.2:
                     return None
-                Lr = (GAP - face2[2]) / u[2]
-                if Lr < ROD_MIN:
+                Lr = (GAP - face2[2]) / u[2]                    # cell face to the far cap plane, along the rod axis
+                # The far end seats on a boss: a block with a face square to the rod, cut off by the cap plane.
+                # Its face must clear the cap plane at the rim, which sets its depth along the axis. That depth
+                # is not free rod, so the rod (shoulder, neck, body, neck, shoulder) is what is left.
+                bw = BOSS_W
+                drop = bw / 2 * (abs(cvec[2]) + abs(w[2])) / max(np.linalg.norm(cvec), 1e-9)
+                depth = drop / u[2] + 0.3
+                Lfree = Lr - depth
+                if Lfree < ROD_MIN:
                     return None
                 end = face2 + u * Lr
-                rod = Box(f"rod{idx}", face2 + u * Lr / 2, [cvec, w, u], [ROD / 2, ROD / 2, Lr / 2], "rod")
-                boss = Box(f"boss{idx}", end - u * 4.0, [cvec, w, u], [6.0, 6.0, 4.0], "pad")
+                rod = Box(f"rod{idx}", face2 + u * Lfree / 2, [cvec, w, u], [ROD / 2, ROD / 2, Lfree / 2], "rod")
+                boss = Box(f"boss{idx}", end - u * depth / 2, [cvec, w, u], [bw / 2, bw / 2, depth / 2], "pad")
                 boxes += [pad1, rod, boss]
                 mating |= {(cell.name, pad1.name), (cell.name, rod.name), (rod.name, boss.name)}
                 line = np.concatenate([u, np.cross((h2 - ORIGIN), u)])
