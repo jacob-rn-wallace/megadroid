@@ -225,6 +225,40 @@ each.
 torque at a practical lever length, or off-axis sensitivity is high enough that
 a six-cell wrench solution would be poorly conditioned.
 
+**H2 and H3: does the cell still measure when it is bolted the way the sensor bolts it?**
+(Added 2026-10-21, from reading the builder's Stewart concept, `hardware/ft_sensor/cad/`.)
+That concept bolts each cell to a cap at *both* ends, with the bolt axis tilted 45° from
+vertical and no rods. H1 above uses the cantilever mounting, so it does not answer this.
+The worry is a load-path one. A bending-beam cell is soft along its bolt axis and stiff
+along its length, and the cell is only a good sensor if the load passes *through* that soft
+direction. If six cells share the load through their stiff directions in parallel, only a
+small fraction passes through the sensing path. A crude three-spring model of the concept
+(estimated stiffnesses, clamped-end rotational stiffness ignored, so optimistic) put the
+signal at about 7% of an ideal strut arrangement for a solid-block cell and 2% for a
+thinned-web one. That is a model, not a measurement; H2 and H3 replace it.
+
+- **H2, guided sensitivity.** Bolt one cell at both ends to two rigid blocks, with the blocks
+  free to slide only along the bolt axis (a linear slide, or a stack of known masses hung
+  from the lower block with the upper block fixed). Apply the same loads as H1. *Yields:*
+  guided sensitivity as a fraction of the cantilever sensitivity from H1, and the guided
+  stiffness. A guided beam has zero bending moment mid-span, so the figure may be about half.
+- **H3, the two-cell V test.** Bolt two cells between two stiff plates in the concept's own
+  geometry, bolt axes at +45° and -45° in a vertical plane, long axes at 45° the other way,
+  holes 30 mm apart. Fix the upper plate and hang known masses from the lower one. Ideal
+  strut action gives each cell F/(2 cos 45°) = 0.707 F along its bolt axis. *Yields:* the
+  measured fraction f = (reading per cell) / (0.707 F). Repeat with the load applied sideways
+  to see the off-axis behaviour.
+
+*Decision rule.* Resolution scales as 1/f. At f = 1 the layout study's worst moment
+resolution is about 0.03 N.m against a 0.05 N.m target (CoP to about 2 mm at 47 N), so the
+design tolerates f down to about 0.6. Below roughly 0.2 the cells need to be put in series
+with rods that carry axial load only, with a pivot at each end (turned thin-neck flexures),
+so that the cell is the only compliant path in its sensing direction. Between 0.2 and 0.6
+the answer depends on the real noise floor, which this test also measures: re-run
+`hardware/ft_sensor/layout_study.py` with the measured f and noise.
+
+*Would change the design if:* f is below about 0.6.
+
 **Note the signal-chain cost, which is where the real expense moved.** Twelve
 channels across two feet need amplification and multi-channel 24-bit
 acquisition. The commodity HX711 samples far too slowly for a walking control
