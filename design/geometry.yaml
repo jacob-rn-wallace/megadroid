@@ -51,6 +51,21 @@ leg_structure:
       Matches Hubo-style twin-rail spacing to provide high bending stiffness,
       clear load paths, and compatibility with box-bulkhead construction.
 
+pelvis:
+  hip_spacing_mm: 175           # STRUCTURAL — centre-to-centre distance between the
+                                 # left and right hip roll joints (so the nominal foot
+                                 # spacing). REVISION 2026-10-21: this was previously
+                                 # taken as twin_rail.inner_face_spacing_mm (100 mm) by
+                                 # an early generator shortcut ("half the twin-rail
+                                 # inner face spacing"), which conflated the rail gap
+                                 # inside ONE leg with the distance BETWEEN legs. Set
+                                 # to ~Hubo's hip spacing (hip yaw joints at +/-88.5 mm
+                                 # in the RobotLocomotion/Hubo hubo.urdf, ~177 mm; its
+                                 # thigh and shank are 280 mm vs 300 mm here). Leaves
+                                 # ~86 mm between two 88.85 mm hexagonal F/T sensors.
+                                 # Hubo's figure comes from a third-party model of an
+                                 # unconfirmed variant: an estimate, not a measurement.
+
 joints:
   shafting:
     standard_diameter_mm: 12
