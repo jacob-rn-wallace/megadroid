@@ -63,12 +63,12 @@ ROD = BASIS["rod_section_mm"]
 TARGET = BASIS["targets"]
 ORIGIN = np.array([0.0, 0.0, GAP / 2.0])
 PAD_LEN = 12.7            # pad footprint along the cell length (around the bolt)
-ROD_MIN = 12.0            # shortest usable rod: two pivots plus thread engagement
+ROD_MIN = 12.0            # shortest rod span (cell face to far cap): sizing.py says ~15-18 mm, see --rod-min
 EMBED = 6.0               # how far pads/bosses may sit inside the cap material
 
 SIM = FT["sim_measured_loads"]["peak"]
 SENSOR_BELOW_ANKLE = HEIGHT / 2000.0 + 0.010
-W_DESIGN = BASIS["design_load_factor"] * np.array([
+W_DESIGN = BASIS["range_load_factor"] * np.array([
     SIM["fx_n"], SIM["fy_n"], SIM["fz_n"],
     SIM["mx_nm"] + SENSOR_BELOW_ANKLE * SIM["fy_n"],
     SIM["my_nm"] + SENSOR_BELOW_ANKLE * SIM["fx_n"], SIM["mz_nm"]])
@@ -80,6 +80,15 @@ STIFFNESS = {"solid block": (263.0, 50.0, 21.0), "thinned web": (263.0, 30.0, 5.
 APOTHEM = 44.425
 CIRCLE_R = None          # when set, the envelope is a cylinder of this radius instead of the hexagon
 NORMALS = [np.array([math.cos(math.radians(30 + 60 * k)), math.sin(math.radians(30 + 60 * k))]) for k in range(6)]
+
+
+def configure(cap_thickness, rod_min, rated_kg):
+    """Cap thickness sets the gap between the caps; rated_kg is the cell variant."""
+    global GAP, ORIGIN, ROD_MIN, RATED_N
+    GAP = HEIGHT - 2 * cap_thickness
+    ORIGIN = np.array([0.0, 0.0, GAP / 2.0])
+    ROD_MIN = rod_min
+    RATED_N = rated_kg * 9.81
 
 
 def set_envelope(across_flats, circle_radius=None):
@@ -334,10 +343,15 @@ def main():
                     help="parts keep this far inside the envelope (default: design_basis in ft_sensor.yaml)")
     ap.add_argument("--clearance", type=float, default=CLEAR,
                     help="minimum gap between non-mating parts (default: design_basis in ft_sensor.yaml)")
+    ap.add_argument("--cap-thickness", type=float, default=BASIS["cap_thickness_mm"])
+    ap.add_argument("--rod-min", type=float, default=ROD_MIN, help="shortest rod span, mm (sizing.py)")
+    ap.add_argument("--rated-kg", type=float, default=FT["load_cell"]["rating"]["rated_load_kg"],
+                    help="cell variant; the MLC714N listings offer 75, 150 and 250 kg (unverified)")
     ap.add_argument("--circle", action="store_true",
                     help="use the circumscribing cylinder (sensors.yaml diameter_mm) as the envelope, not the hexagon")
     args = ap.parse_args()
     MARGIN, CLEAR = args.margin, args.clearance
+    configure(args.cap_thickness, args.rod_min, args.rated_kg)
     set_envelope(args.across_flats, FORM["diameter_mm"] / 2.0 if args.circle else None)
     rng = np.random.default_rng(args.seed)
     stiff_for_search = STIFFNESS["thinned web"]
@@ -350,8 +364,8 @@ def main():
         return None if e is None else (e["score"], p, e, ms)
 
     env = f"cylinder {FORM['diameter_mm']} mm" if args.circle else f"hexagon {args.across_flats} mm across flats"
-    print(f"case {args.case}: {env}, gap {GAP:.2f} mm, margin {MARGIN}, clearance {CLEAR}")
-    print("design wrench (sim peak x %.1f): " % BASIS["design_load_factor"]
+    print(f"case {args.case}: {env}, caps {args.cap_thickness} mm, rod span >= {ROD_MIN} mm, cell {args.rated_kg:g} kg, gap {GAP:.2f} mm, margin {MARGIN}, clearance {CLEAR}")
+    print("design wrench (sim peak x %.1f): " % BASIS["range_load_factor"]
           + ", ".join(f"{n} {v:.1f}" for n, v in zip(("Fx", "Fy", "Fz", "Mx", "My", "Mz"), W_DESIGN)))
     BIG = 1e6
 

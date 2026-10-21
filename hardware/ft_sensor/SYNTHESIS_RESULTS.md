@@ -46,3 +46,66 @@ the rods; that is not modelled.
 Cap bodies, bolt and flexure sizing, stress, CAD. The hexagon result depends on the 88.85 mm
 figure, which your own CAD caps exceed (94.8-99.6 mm); which number is the requirement is
 unanswered.
+
+---
+
+# Update: sizing, thinner caps, and a layout that fits the spec hexagon (2026-10-21)
+
+`sizing.py` (closed-form bolts, flexure necks, pads; hand calculation, not FEA) changed two
+assumptions, and with them the answer.
+
+1. **The rod must be longer than the 12 mm I allowed.** At 0.05 mm of assembly misalignment the neck
+   that survives needs a rod span of about 15-18 mm (7075 neck d 2-4 mm x l 3.5-7 mm). Short rods are very
+   sensitive to misalignment: at 0.2 mm no neck passes at any size.
+2. **Load cases were muddled.** The stacked 2.5x design load and 2x abuse factor made a 75 kg cell look
+   hopeless. Now: the cell must stay inside its rating at 1.5x the simulated peak (sensing range); the
+   rods, bolts and caps must not yield at 3x (a fall), with overload stops to keep the cell safe.
+
+With rods at an 18 mm span, the gap between the caps has to grow, so the caps must be thinner (6 mm,
+gap 45.5 mm, instead of 10 mm). Then it works, and with the 75 kg cell.
+
+## Candidate: 75 kg cell, 88.85 mm hexagon, 6 mm caps (rods case)
+Three independent searches converge on it (score 0.86, below 1.0 = every target met):
+
+| | |
+|---|---|
+| Cell-centre radius | 34.2 mm |
+| Pair half-angle | 30.7 deg (pairs centred 120 deg apart, cluster rotation 35 deg) |
+| Bolt-axis tilt from vertical | 57.1 deg (mostly tangential: azimuth -91.5 deg from the radial) |
+| Cell centre height | 20.1 mm above the bottom cap's inner face (gap 45.5 mm) |
+| Cell length | along the slope |
+| Rod span | 18-19.5 mm (cell face to far cap) |
+| Condition number | 2.5-2.6 |
+| Worst cell at the sensing-range load | 74-79% of rating |
+| Resolution p-p | Mx/My 0.022-0.024 N.m, Mz 0.042 N.m, Fz 0.77 N, shear 0.86 N |
+
+Packing is extremely tight: cell-to-cell clearance 0.50 mm, cell-to-wall 0.72 mm. Any real tolerance
+eats into that.
+
+On the 107 mm cylinder the same thing works with more room (tilt 54.7 deg, radius 38.2 mm,
+cond 2.6, worst cell 70%). The 150 kg cell gives no advantage (53% of rating, but twice the noise).
+
+## Sizing results for the candidate (7075-T6, M6 A2-70)
+- **Member force**, worst of six: 544 N at the sensing-range load (74% of rating); 363 N at the simulated
+  peak; 1088 N at the 3x abuse load (148% of rating, so the cell needs overload stops).
+- **Flexure rod** (turned, two thin necks): 7075 neck d 2.2 mm x l 3.5 mm gives a minimum rod span of
+  13 mm (axial 143 MPa, misalignment bending 58 MPa, alternating 106 MPa, buckling capacity 2.4 kN, neck
+  axial stiffness 78 MN/m each). 6061 needs d 2.8 x l 7.0 (span 20 mm). 17-4PH steel passes at d 2.0 x l 2.5
+  but with 203 MPa misalignment bending, so it is tolerance-sensitive.
+- **M6 bolts:** preload 5.4 kN (60% of proof), 297 MPa; thread strip capacity 25 kN against 0.5 kN.
+- **Pad-to-cap bolts** at the abuse load: 2.1 kN each against 5.4 kN preload.
+- **Pad bending:** 46 MPa against 335 MPa allowable.
+- **Fixed-end joint:** holds at the sensing-range load (4.6 kN preload needed against 5.4 kN) but opens above about
+  636 N of member force. That is below the 736 N rating and below the 1088 N abuse load.
+
+## What is NOT settled
+- **The cell's fixed-end joint** is the weakest link and rests on an UNVERIFIED contact length (21 mm). The
+  stops must hold the cell below ~600 N, not at its 150% overload. Higher-grade bolts (12.9) would raise the
+  limit. How the cell is meant to be mounted, and what it is rated for under that mount, is a Test H question.
+- **Overload stops** are required (abuse load is 148% of rating) and are not designed.
+- **Cap plate and pad machining.** 6 mm caps are not checked for plate bending under the pad loads. Thread
+  engagement of 9 mm is not possible in a 6 mm plate (use through bolts and nuts, or inserts). Six tilted pads
+  integral with a cap would be exactly the complex machining you want to avoid; bolted wedge blocks on flat
+  plates are the alternative.
+- **Rods are tolerance-critical.** The necks pass at 0.05 mm misalignment and not at 0.2 mm.
+- **Cell stiffness, rating and noise** are unmeasured (Test H, H2, H3).
