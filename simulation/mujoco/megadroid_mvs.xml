@@ -14,10 +14,10 @@
     <geom name="ground" type="plane" size="3 3 0.1" pos="0 0 0" rgba="0.75 0.75 0.65 1" friction="0.8 0.02 0.01"/>
     <body name="pelvis" pos="0 0 0.6800">
       <freejoint name="root"/>
-      <inertial mass="1.5" pos="0.000000 0.000000 0.000000" diaginertia="0.00301250 0.00781250 0.00520000"/>
-      <geom name="pelvis_geom" type="box" size="0.10 0.0200 0.075" pos="0 0 0" rgba="0.5 0.5 0.5 1"/>
+      <inertial mass="1.5" pos="0.000000 0.000000 0.000000" diaginertia="0.00419062 0.00781250 0.00637813"/>
+      <geom name="pelvis_geom" type="box" size="0.10 0.0525 0.075" pos="0 0 0" rgba="0.5 0.5 0.5 1"/>
       <site name="imu_site" pos="0 0 0" size="0.005"/>
-      <body name="left_hip_roll_link" pos="0 0.0500 0">
+      <body name="left_hip_roll_link" pos="0 0.0875 0">
         <joint name="left_hip_roll" type="hinge" axis="1 0 0" range="-0.523599 0.523599"/>
         <inertial mass="0.3" pos="0.000000 0.000000 0.000000" diaginertia="0.00010800 0.00010800 0.00010800"/>
         <geom name="left_hip_roll_geom" type="sphere" size="0.03" rgba="0.8 0.4 0.1 1"/>
@@ -49,7 +49,7 @@
           </body>
         </body>
       </body>
-      <body name="right_hip_roll_link" pos="0 -0.0500 0">
+      <body name="right_hip_roll_link" pos="0 -0.0875 0">
         <joint name="right_hip_roll" type="hinge" axis="1 0 0" range="-0.523599 0.523599"/>
         <inertial mass="0.3" pos="0.000000 0.000000 0.000000" diaginertia="0.00010800 0.00010800 0.00010800"/>
         <geom name="right_hip_roll_geom" type="sphere" size="0.03" rgba="0.8 0.4 0.1 1"/>

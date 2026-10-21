@@ -104,7 +104,7 @@
   <joint name="left_hip_roll_joint" type="revolute">
     <parent link="pelvis"/>
     <child link="left_hip_roll_link"/>
-    <origin xyz="0 0.05 0" rpy="0 0 0"/>
+    <origin xyz="0 0.0875 0" rpy="0 0 0"/>
     <axis xyz="1 0 0"/>
     <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="11.2" velocity="19.6"/>
   </joint>
@@ -240,7 +240,7 @@
   <joint name="right_hip_roll_joint" type="revolute">
     <parent link="pelvis"/>
     <child link="right_hip_roll_link"/>
-    <origin xyz="0 -0.05 0" rpy="0 0 0"/>
+    <origin xyz="0 -0.0875 0" rpy="0 0 0"/>
     <axis xyz="1 0 0"/>
     <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="11.2" velocity="19.6"/>
   </joint>
