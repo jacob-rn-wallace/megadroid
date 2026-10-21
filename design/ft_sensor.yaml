@@ -40,3 +40,16 @@ study_assumptions:
     mz_nm: 3
   nominal_stand_fz_n: 47         # per foot at 9.6 kg (tools/CLAUDE.md)
   noise_floor_uv: 2.0            # ASSUMED bridge-referred noise (peak to peak, ~ADS1256-class)
+
+sim_measured_loads:
+  # tools/log_ft_loads.py, 2026-10-21: sim_walk_recede, 16 nominal steps plus lateral and
+  # sagittal pelvis pushes at 5 and 10 N (6 timings each, surviving runs only: 19 of 24).
+  # Per foot, both feet pooled, absolute values, at the ANKLE (the sensor site), at the
+  # committed 11.2 N.m cap, 175 mm hip spacing, 9.6 kg, compliant sole.
+  # A floor on real loads: the contact model is smoother than a real heel strike, and
+  # the controller only walks at ~0.4-0.5 km/h.
+  peak:  {fx_n: 49.9, fy_n: 46.7, fz_n: 174.6, mx_nm: 6.9, my_nm: 10.0, mz_nm: 5.0}
+  p99:   {fx_n: 27.2, fy_n: 23.1, fz_n: 112.2, mx_nm: 4.5, my_nm: 7.0, mz_nm: 2.6}
+  vs_assumed_peak: >
+    Every channel is below the study's assumed peak except Mz, which was assumed 3 N.m and
+    measured 5.0. Fz peak is 58% of the assumed 300 N, shear about a third of 150 N.
