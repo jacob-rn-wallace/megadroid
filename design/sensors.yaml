@@ -67,9 +67,18 @@ inertial_sensing:
 end_of_limb_sensing:
   ft_sensor:
     form_factor:
-      shape: "cylindrical"
-      diameter_mm: 107          # STRUCTURAL — mechanical envelope constraint
-      height_mm: 56              # STRUCTURAL — mechanical envelope constraint
+      shape: "hexagonal prism"
+      diameter_mm: 107          # STRUCTURAL — circumscribing envelope diameter (the
+                                 # hexagon must fit inside this cylinder)
+      across_flats_mm: 88.85    # STRUCTURAL — hexagon width, flat to flat (CAD, 2026-10-21)
+      height_mm: 57.544         # STRUCTURAL — overall height (CAD, 2026-10-21)
+      revision_note: >
+        REVISED 2026-10-21 from a 107 mm x 56 mm cylinder to a hexagonal prism
+        (88.85 mm across flats, so ~102.6 mm across corners, inside the 107 mm
+        envelope) 57.544 mm tall, from the builder's CAD concept. Internal layout
+        of the cells is still under study -- see design/ft_sensor.yaml and
+        hardware/ft_sensor/. The sensor's own design lives there; this block is
+        only the interface the rest of the robot sees.
     mounting_location: distal_face_of_lower_leg_module
     mechanical_constraint: "hard"
     cost_accounting: "excluded"

@@ -1,0 +1,42 @@
+# Megadroid F/T sensor -- internal design parameters and sources.
+# The robot-facing interface (envelope, mounting, load path) is in design/sensors.yaml.
+# This file holds what the sensor's own design study needs. Kept separate so
+# hardware/ft_sensor/ can be split into its own repository later.
+# Status: STUDY INPUTS. Nothing here is a chosen design yet.
+
+load_cell:
+  part: "harvested Wii Fit Balance Board bar cell; MLC714N is the drop-in replacement"
+  dimensions_mm:                 # measured by the builder, 2026-10-21 (rough CAD model)
+    length: 42.25
+    width: 13.25
+    thickness: 8.5
+  mounting:
+    thread: "M6"
+    hole_spacing_mm: 30          # centre to centre, symmetric about the cell centre
+    hole_axis: "through the 8.5 mm thickness"   # PLACEHOLDER reading of the builder's model
+  sensitive_axis: >
+    Bending beam: reads force perpendicular to the 42.25 x 13.25 face, one end
+    fixed and the other loaded. Axial and off-axis loads must not reach the cell.
+  rating:
+    rated_load_kg: 75            # UNVERIFIED -- reseller listings (Alibaba) offer 75/150/250 kg
+                                 # variants; 75 matches the Wii board's published 150 kg
+                                 # sensing / ~300 kg structural limits
+    rated_output_mv_per_v: 0.5   # UNVERIFIED -- reseller listing
+    bridge_ohm: 1000             # UNVERIFIED -- reseller listing
+    safe_overload_fraction: 1.5  # UNVERIFIED
+    ultimate_overload_fraction: 2.0   # UNVERIFIED
+    excitation_v: 5              # listed range 5-10 V
+  verification: "Test H (docs/P4_JOINT_TEST_RIG.md) -- bench-characterise one cell before any layout is trusted"
+
+study_assumptions:
+  # The builder's rough sketch used six cells in a Stewart-type arrangement
+  # between two end caps. These loads are the study's ASSUMPTIONS, not measurements.
+  peak_wrench:
+    fz_n: 300
+    fx_n: 150
+    fy_n: 150
+    mx_nm: 15
+    my_nm: 15
+    mz_nm: 3
+  nominal_stand_fz_n: 47         # per foot at 9.6 kg (tools/CLAUDE.md)
+  noise_floor_uv: 2.0            # ASSUMED bridge-referred noise (peak to peak, ~ADS1256-class)
