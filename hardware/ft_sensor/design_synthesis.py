@@ -323,6 +323,7 @@ def perturb(p, rng, s):
 
 
 def main():
+    global MARGIN, CLEAR
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", choices=("direct", "rods"), required=True)
     ap.add_argument("--samples", type=int, default=12, help="random starts per (length mode, sign) combination")
@@ -336,7 +337,6 @@ def main():
     ap.add_argument("--circle", action="store_true",
                     help="use the circumscribing cylinder (sensors.yaml diameter_mm) as the envelope, not the hexagon")
     args = ap.parse_args()
-    global MARGIN, CLEAR
     MARGIN, CLEAR = args.margin, args.clearance
     set_envelope(args.across_flats, FORM["diameter_mm"] / 2.0 if args.circle else None)
     rng = np.random.default_rng(args.seed)
