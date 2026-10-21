@@ -109,3 +109,57 @@ cond 2.6, worst cell 70%). The 150 kg cell gives no advantage (53% of rating, bu
   plates are the alternative.
 - **Rods are tolerance-critical.** The necks pass at 0.05 mm misalignment and not at 0.2 mm.
 - **Cell stiffness, rating and noise** are unmeasured (Test H, H2, H3).
+
+---
+
+# Update: joint, stops and structure (2026-10-21)
+
+## The fixed-end joint decides the margin
+How long the clamp footprint under the cell's fixed end is, and how hard the bolt clamps it, set the load
+at which that joint opens (M = F x 30 mm reacted by contact pressure over the pad).
+| | contact length | bolt | joint opens above |
+|---|---|---|---|
+| first model | 21.1 mm (the cell's whole fixed half) | A2-70 | ~636 N |
+| 12.9 bolts | 21.1 mm | 12.9 (11.7 kN preload) | ~1370 N, **but** a 21 mm pad collides with its neighbours and leaves the hexagon: no layout found |
+| **adopted** | 12.7 mm | **12.9** | **~826 N** |
+
+So the bolts are alloy steel 12.9 (not stainless A2-70), the pad is 12.7 mm, and the joint opens at 2.3x the
+simulated peak. All unverified until Test H shows how the cell is meant to be mounted.
+
+## Loads against what holds (candidate layout, worst of six members)
+| x simulated peak | member force | % of 75 kg rating | joint (826 N) | cell |
+|---|---|---|---|---|
+| 1.0 | 363 N | 49% | holds | fine |
+| 1.5 (sensing range) | 544 N | 74% | holds | fine |
+| 2.0 | 725 N | 99% | holds | fine |
+| 2.3 | 834 N | 113% | opens | within the 150% safe overload |
+| 3.0 (abuse) | 1088 N | 148% | opens | within the 150% safe overload (1104 N) |
+| 4.0 | 1451 N | 197% | opens | beyond safe overload |
+| 5.0 | 1813 N | 246% | opens | beyond ultimate overload |
+
+## Overload stops: a central pin-in-bore is not practical
+A central pin and bore (lathe and drill only) was the plan. Sized from the platform stiffness (cell bending stiffness
+5-21 MN/m, estimated), the clearances that keep every member under 750 N under any combination of loads are:
+radial 4-14 um, axial 12-38 um, key-slot twist about 2 um at a 10 mm radius. That cannot be machined or set.
+This is a result of the stiffness, not of the stop design: the sensor barely moves before the cells reach their limit.
+
+What this means: no stop is needed for the first prototype for loads up to about 3x the simulated peak, because
+the cell's own safe overload (150%) covers them. For a harder fall (4-5x), use member-level stops: a shim-set shoulder
+under each cell's free end, with a gap equal to the stop force divided by the cell stiffness (about 35-150 um).
+Whether to build them depends on Test H (cell stiffness, joint behaviour).
+
+## Structure (candidate, 6 mm plates, wedge blocks)
+- **Wedge blocks:** 12.7 x 13.2 mm footprint, about 10 mm long along the bolt axis. Twelve in all (six under the cells,
+  six at the rod ends); two designs, each its mirror. Cut from stock at the tilt angle; tapped hole perpendicular to the
+  sloped face.
+- **Block to plate:** two M6 12.9 flat-head bolts through the plate. Tension 1.3 kN each at the abuse load against 11.7 kN preload;
+  shear 913 N against friction capacity 3.5 kN.
+- **Plate:** 6 mm 7075, flat, drilled and countersunk only. Local point stiffness about 38 MN/m (simply supported, 44 mm
+  radius), only 1.8-7.5x stiffer than the cell: thicken locally, or use 8 mm plates if the gap allows (it costs rod length).
+  Global bending at 5x the simulated peak moment: 139 MPa against a 335 MPa allowable.
+- **Centre:** a 12 mm radius column is left clear (cables, mounting); the layout respects it.
+
+## Still open
+Cell rating, stiffness and mounting (Test H); rod machining tolerance (0.05 mm assumed); the rod stud and washer
+details; the cap interface to the ankle gimbal and the foot plate; no FEA; and whether you have lathe access for the
+turned rods (the alternative, off-the-shelf ball joints, has play).

@@ -62,7 +62,9 @@ CLEAR = BASIS["min_clearance_mm"]
 ROD = BASIS["rod_section_mm"]
 TARGET = BASIS["targets"]
 ORIGIN = np.array([0.0, 0.0, GAP / 2.0])
-PAD_LEN = 12.7            # pad footprint along the cell length (around the bolt)
+PAD_LEN = FT["sizing_basis"]["fixed_end_contact_length_mm"]   # pad footprint along the cell length: the clamp
+                                                              # under the cell's end half, to its centre
+KEEPOUT = FT["stop_basis"]["keepout_radius_mm"]               # central column kept clear for the overload stop
 ROD_MIN = 12.0            # shortest rod span (cell face to far cap): sizing.py says ~15-18 mm, see --rod-min
 EMBED = 6.0               # how far pads/bosses may sit inside the cap material
 
@@ -165,7 +167,10 @@ def members(p, case):
             h1, h2 = centre - HOLE * cvec, centre + HOLE * cvec        # e1 -> bottom cap, e2 -> top cap / rod
             boxes, mating = [cell], set()
 
-            def pad(name, hole, d, z_target):
+            def pad(name, hole, d, z_target, end_sign):
+                # the pad covers the cell's end half (end -> centre), not just the bolt
+                shift = end_sign * (CL / 2 - PAD_LEN / 2) * cvec
+                hole = hole + shift - end_sign * HOLE * cvec
                 face = hole + d * CT / 2
                 dz = d[2]
                 if abs(dz) < 0.2:
@@ -175,9 +180,9 @@ def members(p, case):
                     return None
                 b = Box(name, face + d * L / 2, [cvec, w, u], [PAD_LEN / 2, CW / 2, L / 2], "pad")
                 return b
-            pad1 = pad(f"pad1_{idx}", h1, -u, 0.0)
+            pad1 = pad(f"pad1_{idx}", h1, -u, 0.0, -1)
             if case == "direct":
-                pad2 = pad(f"pad2_{idx}", h2, u, GAP)
+                pad2 = pad(f"pad2_{idx}", h2, u, GAP, +1)
                 if pad1 is None or pad2 is None:
                     return None
                 boxes += [pad1, pad2]
@@ -210,6 +215,8 @@ def feasible(ms):
                 if not inside(b, -EMBED, GAP + EMBED):
                     return False
             elif not inside(b):
+                return False
+            if keepout_excess(b) > 0:
                 return False
     mating = set().union(*[m["mating"] for m in ms])
     allboxes = [b for m in ms for b in m["boxes"]]
@@ -244,6 +251,13 @@ def overlap_depth(a, b, margin):
     return best
 
 
+def keepout_excess(box):
+    """How far a part intrudes into the central column (mm); sampled at corners, edge and face midpoints."""
+    pts = [box.c + box.R @ (box.h * np.array(s)) for s in itertools.product((-1, 0, 1), repeat=3)]
+    rmin = min(math.hypot(q[0], q[1]) for q in pts)
+    return max(0.0, KEEPOUT - rmin)
+
+
 def excess(box, zlo, zhi):
     """How far outside the envelope (mm); 0 if inside."""
     pts = box.corners()
@@ -258,7 +272,7 @@ def violation(ms):
     for mem in ms[:2]:
         for b in mem["boxes"]:
             lo, hi = (-EMBED, GAP + EMBED) if b.kind in ("pad", "rod") else (0.0, GAP)
-            v += excess(b, lo, hi)
+            v += excess(b, lo, hi) + keepout_excess(b)
     mating = set().union(*[m["mating"] for m in ms])
     allboxes = [b for m in ms for b in m["boxes"]]
     for a in [b for m in ms[:2] for b in m["boxes"]]:

@@ -133,6 +133,104 @@ def report(p, label):
     print(f"  pad bending {pad_bending(f_design):.0f} MPa (7075 allowable {PAD_MAT['yield_mpa'] / SF:.0f} MPa)")
 
 
+STOP = FT["stop_basis"]
+
+
+def member_stiffness(k_cell, neck):
+    """Series stiffness of cell + two necks + rod body, N/mm. k_cell in N/mm (1 MN/m = 1000 N/mm)."""
+    E = ROD_MAT["youngs_mpa"]
+    k_neck = E * math.pi * neck["d"] ** 2 / 4 / neck["l"]
+    k_body = E * math.pi * ds.ROD ** 2 / 4 / SB["rod_body_mm"]
+    return 1.0 / (1.0 / k_cell + 2.0 / k_neck + 1.0 / k_body)
+
+
+def stop_design(ms, neck, k_cell_n_per_mm):
+    """Central pin-in-bore stop. Returns the cap displacement at which the worst member reaches
+    the stop force, per wrench axis, so the clearances can be set. Forces/moments in N, N.mm."""
+    A = np.array([m["line"] for m in ms]).T          # 6x6
+    km = member_stiffness(k_cell_n_per_mm, neck)
+    K = km * A @ A.T
+    out = {}
+    for j, name in enumerate(("Fx", "Fy", "Fz", "Mx", "My", "Mz")):
+        e = np.zeros(6)
+        e[j] = 1.0
+        d = np.linalg.solve(K, e)                    # displacement per unit wrench
+        f = km * A.T @ d                             # member forces per unit wrench
+        W = STOP["stop_member_force_n"] / np.abs(f).max()
+        out[name] = (W, d * W)                       # wrench at the stop, displacement at the stop
+    return km, out
+
+
+def pad_block_bolts(F, u_z, h_c):
+    """Two M6 flat-head bolts hold a wedge block to its flat plate. F: member force; the line of
+    action makes u_z with the plate normal and sits h_c above the plate. Tension per bolt."""
+    Fn, Ft = F * abs(u_z), F * math.sqrt(1 - u_z ** 2)
+    s = SB["fixed_end_contact_length_mm"] - 6.0                 # bolt spacing
+    return Fn / 2 + Ft * h_c / s, Ft
+
+
+def plate_point_stiffness(t, radius):
+    """Centre point stiffness of a simply supported circular plate, N/mm."""
+    E, nu = ROD_MAT["youngs_mpa"], 0.33
+    D = E * t ** 3 / (12 * (1 - nu ** 2))
+    return 16 * math.pi * D / radius ** 2
+
+
+def report_stops_and_structure(v, label):
+    ms = ds.members(v, "rods")
+    A = np.array([m["line"] for m in ms]).T
+    Fs = float((np.abs(np.linalg.pinv(A)) @ (ds.W_DESIGN_MM / RANGE_F)).max())
+    neck = size_neck(float((np.abs(np.linalg.pinv(A)) @ ds.W_DESIGN_MM).max()), Fs,
+                     min(2 * b.h[2] for m in ms for b in m["boxes"] if b.kind == "rod"))
+    print(f"\n=== {label}: stops and structure")
+    print(f"  neck used: d {neck['d']} mm x l {neck['l']} mm (7075)")
+    print(f"  stop engages when any member reaches {STOP['stop_member_force_n']} N "
+          f"({100 * STOP['stop_member_force_n'] / ds.RATED_N:.0f}% of the cell rating)")
+    print("  stop clearances (a box inscribed in the safe region, scaled from the displacement the abuse load causes,")
+    print("  so that no member exceeds the stop force under ANY combination); depends on the unmeasured cell stiffness:")
+    W_ab = ds.W_DESIGN_MM / RANGE_F * ABUSE_F
+    chosen = None
+    for kc in (5.0, 10.0, 21.0):                                 # MN/m
+        km = member_stiffness(kc * 1000.0, neck)
+        A = np.array([m["line"] for m in ms]).T
+        K = km * A @ A.T
+        Kinv = np.linalg.inv(K)
+        w = np.array([abs(Kinv[j, j]) * abs(W_ab[j]) for j in range(6)])      # displacement per axis at its abuse value
+        sc = STOP["stop_member_force_n"] / (km * (np.abs(A).T @ w)).max()
+        c = sc * w
+        print(f"    k_cell {kc:>4.0f} MN/m (member {km / 1000:.1f}): x/y {c[0] * 1000:.0f}/{c[1] * 1000:.0f} um, z {c[2] * 1000:.0f} um, "
+              f"tilt {c[3] * 1e3:.1f}/{c[4] * 1e3:.1f} mrad, twist {c[5] * 1e3:.1f} mrad "
+              f"(scale {sc:.2f} of the abuse displacement)")
+        if kc == 10.0:
+            chosen = c
+    land = 35.0
+    c_r = min(chosen[0], chosen[1], min(chosen[3], chosen[4]) * land / 2)
+    print(f"  suggested stop (k_cell = 10 MN/m; re-set from Test H2/H3): pin lands {land:.0f} mm apart (the pin spans the cap gap), "
+          f"radial clearance {c_r * 1000:.0f} um (this also gives a tilt stop of {2 * c_r / land * 1e3:.1f} mrad), "
+          f"axial clearance {chosen[2] * 1000:.0f} um, key slot {chosen[5] * 10 * 1000:.0f} um at a 10 mm key radius")
+    # abuse loads on the stop (5x simulated peak, shear and moment)
+    Fabuse, Mabuse = 5 * max(SIM["fx_n"], SIM["fy_n"]), 5 * max(SIM["mx_nm"], SIM["my_nm"]) * 1000
+    land = STOP["pin_diameter_mm"]
+    p_force = Mabuse / 20.0                                      # land spacing 20 mm
+    print(f"  pin at 5x simulated peak: shear {Fabuse:.0f} N, tilt couple {p_force:.0f} N on a land "
+          f"{land} x 6 mm -> bearing {p_force / (land * 6):.0f} MPa (steel)")
+    # wedge blocks
+    pad = next(b for b in ms[0]["boxes"] if b.name.startswith("pad1"))
+    uz = float(ms[0]["u"][2])
+    hc = float(ms[0]["h1"][2])
+    Fab = Fs * ABUSE_F
+    Tb, Ft = pad_block_bolts(Fab, uz, hc)
+    pre = BOLT["preload_fraction_of_proof"] * BOLT["proof_mpa"] * BOLT["stress_area_mm2"]
+    print(f"  wedge block: {pad.h[0] * 2:.1f} x {pad.h[1] * 2:.1f} mm footprint, {pad.h[2] * 2:.1f} mm long along the bolt axis; "
+          f"two M6 flat-head bolts through the 6 mm plate, tension {Tb / 1000:.1f} kN each at the abuse load "
+          f"against {pre / 1000:.1f} kN preload; shear {Ft:.0f} N against friction capacity {2 * pre * 0.15 / 1000:.1f} kN")
+    kp = plate_point_stiffness((ds.HEIGHT - ds.GAP) / 2, 44.0)
+    print(f"  6 mm plate local stiffness {kp / 1000:.0f} MN/m (simply supported, 44 mm radius); against the cell's 5-21 MN/m, "
+          f"the plate is only {kp / 1000 / 21:.1f}-{kp / 1000 / 5:.1f}x stiffer than the cell")
+    sg = 6 * Mabuse / (60 * 6.0 ** 2)
+    print(f"  plate global bending at 5x simulated peak moment: {sg:.0f} MPa (7075 allowable {PAD_MAT['yield_mpa'] / SF:.0f} MPa)")
+
+
 def pad_bolts(F):
     """Two M6 bolts fixing a pad to its cap, spaced along the cell's length: the moment F x 30 mm
     reacts as a couple, so each bolt sees F x 30 / spacing on top of F / 2."""
@@ -157,3 +255,9 @@ if __name__ == "__main__":
         pb, pre = pad_bolts(Fs * ABUSE_F)
         print(f"  pad-to-cap bolts at the abuse load: {pb / 1000:.1f} kN each against {pre / 1000:.1f} kN preload "
               f"-> {'OK' if pb <= pre else 'EXCEEDS preload (joint can open)'}")
+
+    # stops and structure for the layout that fits the 88.85 mm hexagon (75 kg cell, 6 mm caps)
+    ds.configure(6.0, 18.0, 75.0)
+    RATED_N = ds.RATED_N
+    hexv = dict(r=34.2, delta=30.7, c0=35.4, alpha=57.1, psi=-91.5, lenmode=0, sc=1.0, zc=20.1)
+    report_stops_and_structure(hexv, "75 kg cell, 88.85 mm hexagon, 6 mm caps")
