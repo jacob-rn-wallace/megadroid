@@ -101,13 +101,28 @@ sizing_basis:
   parts:
     rod: 7075-T6                 # turned rod with two thin-neck flexures (needs a lathe)
     cap_and_pads: 7075-T6
-  bolt: {size: M6, grade: A2-70, stress_area_mm2: 20.1, proof_mpa: 450, preload_fraction_of_proof: 0.6}
+  bolt: {size: M6, grade: 12.9, stress_area_mm2: 20.1, proof_mpa: 970, preload_fraction_of_proof: 0.6}
+                                 # 12.9 alloy steel, not A2-70 (proof 450): with A2-70 the cell's fixed-end joint opens at
+                                 # ~636 N of member force, below the 736 N rating; 12.9 lifts that to ~1380 N
   thread_engagement_mm: 9        # into aluminium; 1.5 d
   safety_factor_design: 1.5      # on yield at the sensing-range load (sim peak x range_load_factor)
   misalignment_mm: 0.05          # lateral offset between the two rod ends (machined hole positions, adjustable
                                  # stops). 0.2 mm made every neck fail: the rod is short, so it is very sensitive
   shoulder_mm: 3.0               # rod shoulder against the cell face, plus washer
   rod_body_mm: 3.0               # unreduced rod between the two necks
-  fixed_end_contact_length_mm: 21.1   # clamp footprint under the cell's fixed half (UNVERIFIED: how the
-                                      # cell is meant to be mounted decides whether the joint can resist
-                                      # its moment F x 30 mm)
+  fixed_end_contact_length_mm: 12.7   # clamp footprint under the cell's fixed end (the pad). 21.1 (the whole fixed half)
+                                      # would hold the joint to ~1370 N but collides with neighbouring pads and leaves the
+                                      # envelope; at 12.7 mm the joint opens above ~826 N of member force (12.9 bolts), so
+                                      # the stop is set at 750 N. UNVERIFIED: how the cell is meant to be mounted and what
+                                      # its rating assumes (Test H)
+
+stop_basis:
+  # Result 2026-10-21 (hardware/ft_sensor/SYNTHESIS_RESULTS.md): a central pin-in-bore stop is NOT practical.
+  # The cell and rods are so stiff (member ~4-13 MN/m) that the safe cap displacement before a cell reaches
+  # the stop force is a few microns radially and ~2 um of key-slot twist. No stop is designed for v1: the cell's
+  # 150% safe overload (1104 N) covers up to ~3x the simulated peak. If Test H shows the fixed-end joint or the
+  # cell needs protection beyond that, use member-level shim-set stops (gap = stop force / cell stiffness,
+  # roughly 35-150 um), not a global pin.
+  keepout_radius_mm: 12          # clear column through the middle (cables, mounting); the layout keeps to it
+  stop_member_force_n: 750       # reference force for any future member-level stop (102% of the 75 kg rating;
+                                 # the fixed-end joint opens above ~826 N, the sensing-range load is ~544 N)
