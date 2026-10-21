@@ -132,3 +132,29 @@ stop_basis:
   keepout_radius_mm: 12          # clear column through the middle (cables, mounting); the layout keeps to it
   stop_member_force_n: 750       # reference force for any future member-level stop (102% of the 75 kg rating;
                                  # the fixed-end joint opens above ~826 N, the sensing-range load is ~544 N)
+
+build_candidate:
+  # The layout and part dimensions the CAD model (hardware/ft_sensor/cad_build.py) is built from.
+  # Layout: design_synthesis.py --case rods --symmetry inv --cap-thickness 3 --rod-min 21 --seed 3 (hexagon, 75 kg cell).
+  # NOT sized by FEA and NOT built. The cell rating, stiffness and mounting are unmeasured (Test H, H2, H3, R).
+  status: "model only; supersedes the 6 mm-cap inversion candidate, whose far-end boss was counted as rod length"
+  symmetry: inversion                     # a half turn about a horizontal axis loses one wrench axis (rank 5)
+  layout: {r: 34.4, delta: 51.2, c0: 37.0, alpha: 54.5, psi: 74.0, lenmode: 0, sc: 1.0, zc: 19.7}
+  cap_thickness_mm: 3.0
+  min_free_rod_mm: 21.0                   # cell face to boss face: end block 6.5 + two 4.5 necks + body + hex 3 + shim
+  rated_kg: 75
+  boss: {width_mm: 10.0, relief_mm: 1.0}  # relief: depth beyond the bare minimum, so a thin spanner reaches the rod hex
+  rod:
+    material: 7075-T6
+    hex_af_mm: 8.0                        # wrench flats sit between neck and stud so tightening torque never passes a neck
+    shoulder_mm: 3.0                      # hex at the boss end
+    a_end_mm: 6.5                         # hex block at the cell end, carries a blind M6 thread
+    a_thread_depth_mm: 6.0
+    neck_d_mm: 2.4                        # fatigue from assembly misalignment (0.05 mm) governs and scales as d/l:
+    neck_l_mm: 4.5                        # 2.1 x 3.5 has no margin (107 vs 106 MPa), 2.4 x 4.5 has 16%
+    neck_fillet_mm: 0.3
+    body_d_mm: 6.0
+    stud: {thread: M6x1, into_boss_mm: 8.0}   # boss end only; the cell end is a female thread
+  shim_nominal_mm: 0.25                   # selected 0 to 0.5 mm at assembly to zero the unloaded cell
+  cell_hole_ream_mm: {fixed: 6.1, free: 7.0}   # the cell's two M6 threaded holes are reamed; the free-end hole is oversize (0.5 mm
+                                               # each way) so the two cap halves need not close to better than that
