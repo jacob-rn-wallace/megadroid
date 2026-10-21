@@ -53,3 +53,36 @@ sim_measured_loads:
   vs_assumed_peak: >
     Every channel is below the study's assumed peak except Mz, which was assumed 3 N.m and
     measured 5.0. Fz peak is 58% of the assumed 300 N, shear about a third of 150 N.
+
+design_basis:
+  # First-principles choices for the layout synthesis (hardware/ft_sensor/design_synthesis.py).
+  # ALL ASSUMPTIONS to be confirmed or replaced -- none is measured.
+  member_principle: >
+    Six two-force members. Each is a bending-beam cell in series with a rod. The cell's
+    sensitive axis is its bolt axis (through its 8.5 mm thickness): one M6 bolt fixes it to
+    a cap, the other (30 mm away) takes the load. The rod joins that free bolt to the other
+    cap and must carry axial load only, so it needs a pivot at each end (two machined
+    thin-neck flexures per rod). Rod ends (ball joints) are avoided: friction and play
+    show up as hysteresis in a sensor.
+  cap_thickness_mm: 10           # each end cap: M6 mounting and stiffness
+  cell_standoff_mm: 3            # spacer under the fixed end so the free end can deflect
+  hex_wall_margin_mm: 3          # inside the hexagon: cap edge distance and any cover
+  min_clearance_mm: 1.5          # between non-mating parts
+  rod_section_mm: 6              # M6 rod; necks are thinner but the envelope is this
+  design_load_factor: 2.5        # design wrench = sim peak x this (heel-strike, fall margin)
+  noise_cell_equivalent_n: 0.59  # from noise_floor_uv above, per cell
+  targets:                       # what the controllers and the sizing need
+    resolution_mx_my_nm: 0.05    # ~2 mm CoP at 47 N is ~0.1 N.m; this is half of that
+    resolution_mz_nm: 0.1
+    resolution_fz_n: 1.0
+    resolution_shear_n: 1.0
+    worst_cell_fraction_of_rating: 0.9
+
+open_question:
+  # Raised 2026-10-21 reading the builder's Stewart concept (hardware/ft_sensor/cad/).
+  load_path_fraction: >
+    The concept bolts each cell to a cap at both ends with no rods, so the cell's stiff
+    directions carry load in parallel with its sensing direction. A three-spring model
+    (ESTIMATED stiffnesses) gave 2-7% of the signal of an ideal strut layout. Unmeasured:
+    docs/P4_JOINT_TEST_RIG.md Test H2/H3 measure it. Below f ~ 0.6 the layout study's
+    resolution targets are not met; below ~ 0.2 the cells need series rods with pivots.
