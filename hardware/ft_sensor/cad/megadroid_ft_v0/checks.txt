@@ -1,0 +1,84 @@
+layout: 6 members, gap 51.544 mm, caps 3.0 mm, sensor height 57.544 mm
+
+TAPPED HOLE DEPTHS (deepest with a 1 mm wall to the cap's outer face, same for all six): fixed-end 7.5 mm, boss 7.0 mm
+  boss-end stud 6.5 mm long -> thread engagement 6.5 mm (1.08 x d); cell bolt M6x16 -> engagement 5.9 mm (0.98 x d)
+  NOTE: engagement under 1 x d in 7075; fine for the load (strip capacity is many kN) but check by pull test
+
+HOLE CHECK (volume removed from the cap / volume of the drill; less means the drill left the solid; wall >= 1 mm)
+  bottom cap fixed hole, member 0: removed 212.1 of 212.1 mm3, wall to the outer face 1.22 mm  ok
+  bottom cap boss hole, member 1: removed 197.9 of 197.9 mm3, wall to the outer face 1.14 mm  ok
+  bottom cap fixed hole, member 2: removed 212.1 of 212.1 mm3, wall to the outer face 1.22 mm  ok
+  bottom cap boss hole, member 3: removed 197.9 of 197.9 mm3, wall to the outer face 1.14 mm  ok
+  bottom cap fixed hole, member 4: removed 212.1 of 212.1 mm3, wall to the outer face 1.22 mm  ok
+  bottom cap boss hole, member 5: removed 197.9 of 197.9 mm3, wall to the outer face 1.14 mm  ok
+  top cap boss hole, member 0: removed 197.9 of 197.9 mm3, wall to the outer face 1.14 mm  ok
+  top cap fixed hole, member 1: removed 212.1 of 212.1 mm3, wall to the outer face 1.22 mm  ok
+  top cap boss hole, member 2: removed 197.9 of 197.9 mm3, wall to the outer face 1.14 mm  ok
+  top cap fixed hole, member 3: removed 212.1 of 212.1 mm3, wall to the outer face 1.22 mm  ok
+  top cap boss hole, member 4: removed 197.9 of 197.9 mm3, wall to the outer face 1.14 mm  ok
+  top cap fixed hole, member 5: removed 212.1 of 212.1 mm3, wall to the outer face 1.22 mm  ok
+
+rod: free length cell face to boss face 21.548 mm; rod 21.298 mm shoulder to shoulder, body 2.80 mm
+cap volumes: bottom 26.15 cm3, top 26.15 cm3
+
+ENVELOPE (part volume outside the hexagon inset by the wall margin; caps are the envelope itself)
+  worst non-cap overshoot 0.000 mm3  (all inside)
+
+INTERFERENCE (overlap volume, mm3; contacts that share a face show ~0)
+  0 overlapping pairs -- none
+
+CLEARANCE (mm). Contacts the design intends (cell on its wedge, rod on its boss, hardware in its holes) are
+not listed; everything else is: member against other members, and each member's loose parts against the
+wedges and bosses that are not its own and against the plain cap faces.
+   0.034  cell_1 - cap top face
+   0.034  cell_3 - cap top face
+   0.034  cell_4 - cap bottom face
+   0.034  cell_5 - cap top face
+   0.034  cell_0 - cap bottom face
+   0.034  cell_2 - cap bottom face
+   4.897  cell_2 - bolt_5
+   4.897  cell_3 - bolt_4
+   4.897  cell_0 - bolt_3
+   4.897  cell_1 - bolt_2
+   4.897  cell_5 - bolt_0
+   4.897  cell_4 - bolt_1
+   5.072  washer_fixed_3 - cap top face
+   5.072  washer_fixed_4 - cap bottom face
+  (110 pairs measured; smallest 0.034 mm)
+
+TOOL ACCESS (a probe of the tool's footprint must not touch anything but its own fastener)
+  12 of 12 hex-key probes clear
+  spanner, 17 mm jaw + 9 mm x 30 mm handle: free approach directions per hex (of 12): min 0, max 7; NO approach for [(0, 'boss-end hex'), (1, 'boss-end hex'), (2, 'boss-end hex'), (3, 'boss-end hex'), (4, 'boss-end hex'), (5, 'boss-end hex')]
+     rod 0 boss-end hex: clear at [] deg
+     rod 0 cell-end hex: clear at [90, 120, 240, 270, 300, 330] deg
+     rod 1 boss-end hex: clear at [] deg
+     rod 1 cell-end hex: clear at [30, 60, 90, 120, 240, 270] deg
+  spanner, 12 mm jaw + 9 mm x 30 mm handle: free approach directions per hex (of 12): min 4, max 7
+     rod 0 boss-end hex: clear at [0, 30, 90, 300, 330] deg
+     rod 0 cell-end hex: clear at [90, 120, 240, 270, 300, 330] deg
+     rod 1 boss-end hex: clear at [0, 30, 60, 270, 330] deg
+     rod 1 cell-end hex: clear at [30, 60, 90, 120, 240, 270] deg
+
+OWN-MEMBER CLEARANCE (cell and free-end screw head to the cap that does not carry them)
+  member 0 (cell on bottom): cell to far cap 12.18 mm, free-end screw head to its own cap 17.07 mm
+  member 1 (cell on top): cell to far cap 12.18 mm, free-end screw head to its own cap 17.07 mm
+  member 2 (cell on bottom): cell to far cap 12.18 mm, free-end screw head to its own cap 17.07 mm
+  member 3 (cell on top): cell to far cap 12.18 mm, free-end screw head to its own cap 17.07 mm
+  member 4 (cell on bottom): cell to far cap 12.18 mm, free-end screw head to its own cap 17.07 mm
+  member 5 (cell on top): cell to far cap 12.18 mm, free-end screw head to its own cap 17.07 mm
+
+ASSEMBLY PATHS (overlap volume in mm3 along the motion; 0 = free). Rigid six-rod loop: the two halves must close
+in one straight move, then the six free-end screws go in from underneath.
+  1. each cap on the bench: screw its three rods into its bosses, put the shims on, bolt its three cells to its wedges
+  2. close the halves along z
+  3. screw each cell to its rod end from the underside
+  bench order 'rods first': free
+  bench order 'cells first': free
+  each cap can be built up on the bench: yes
+  closing along z from 20 mm apart: free (every part of the top half clears the bottom half to the final seat)
+  free-end screws: all free
+
+MASS estimate: caps 73 + 73 g, six cells 68 g, six rods 11 g, hardware 80 g, total 306 g
+cap_bottom stock envelope: x -51.3..51.3, y -44.4..44.4, z -3.0..10.4 mm (height 13.4 mm)
+cap_top stock envelope: x -51.3..51.3, y -44.4..44.4, z 41.2..54.5 mm (height 13.4 mm)
+mesh -> /tmp/claude-1000/-home-jake-megadroid/36e8061e-529a-44c7-a605-9e4446cf9d89/scratchpad/mesh.json: 33424 triangles

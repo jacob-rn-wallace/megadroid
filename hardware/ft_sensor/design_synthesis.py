@@ -67,7 +67,16 @@ PAD_LEN = FT["sizing_basis"]["fixed_end_contact_length_mm"]   # pad footprint al
                                                               # under the cell's end half, to its centre
 KEEPOUT = FT["stop_basis"]["keepout_radius_mm"]               # central column kept clear for the overload stop
 ROD_MIN = 12.0            # shortest rod span (cell face to far cap): sizing.py says ~15-18 mm, see --rod-min
-BOSS_W = 10.0             # far-end boss, mm square: holds the rod's 8 mm AF hex shoulder (9.24 across corners)
+A_END = FT["build_candidate"]["rod"]["a_end_mm"]           # rod's cell-end hex block
+SHOULDER = FT["build_candidate"]["rod"]["shoulder_mm"]   # rod's boss-end hex
+SHIM = FT["build_candidate"]["shim_nominal_mm"]
+HEXW = FT["build_candidate"]["rod"]["hex_af_mm"] / math.cos(math.radians(30))   # hex across corners; boxed as a square of this side
+HEAD_FIXED = 1.6 + 6.0    # washer + M6 socket head, fixed-end bolt
+HEAD_FREE = 3.9           # M6 low-head screw under the cell's free end
+HEAD_W = 10.0
+KEY_ACCESS = 18.0         # hex key / short bit past each screw head, a 7 mm wide probe, must stay clear of other members
+BOSS_RELIEF = FT["build_candidate"]["boss"]["relief_mm"]         # extra boss depth beyond the bare minimum: room for a spanner on the rod's hex (cad_build.py checks)
+BOSS_W = FT["build_candidate"]["boss"]["width_mm"]             # far-end boss, mm square: holds the rod's 8 mm AF hex shoulder (9.24 across corners)
 EMBED = 6.0               # how far pads/bosses may sit inside the cap material
 
 SIM = FT["sim_measured_loads"]["peak"]
@@ -115,6 +124,8 @@ class Box:
 def separated(a, b, margin):
     ha, hb = a.h + margin / 2, b.h + margin / 2
     t = b.c - a.c
+    if t @ t > (np.linalg.norm(ha) + np.linalg.norm(hb)) ** 2:     # bounding spheres apart: exact early out
+        return True
     axes = [a.R[:, i] for i in range(3)] + [b.R[:, i] for i in range(3)]
     axes += [np.cross(a.R[:, i], b.R[:, j]) for i in range(3) for j in range(3)]
     for ax in axes:
@@ -202,14 +213,29 @@ def members(p, case):
                 # is not free rod, so the rod (shoulder, neck, body, neck, shoulder) is what is left.
                 bw = BOSS_W
                 drop = bw / 2 * (abs(cvec[2]) + abs(w[2])) / max(np.linalg.norm(cvec), 1e-9)
-                depth = drop / u[2] + 0.3
+                depth = drop / u[2] + BOSS_RELIEF
                 Lfree = Lr - depth
                 if Lfree < ROD_MIN:
                     return None
                 end = face2 + u * Lr
-                rod = Box(f"rod{idx}", face2 + u * Lfree / 2, [cvec, w, u], [ROD / 2, ROD / 2, Lfree / 2], "rod")
-                boss = Box(f"boss{idx}", end - u * depth / 2, [cvec, w, u], [bw / 2, bw / 2, depth / 2], "pad")
-                boxes += [pad1, rod, boss]
+                face_r = face2 + u * SHIM                          # rod's cell-end face, past the shim
+                Lrod = Lfree - SHIM
+                Lmid = Lrod - A_END - SHOULDER
+                if Lmid < 1.0:
+                    return None
+                ax = [cvec, w, u]
+                rodA = Box(f"rodA{idx}", face_r + u * A_END / 2, ax, [HEXW / 2, HEXW / 2, A_END / 2], "rod")
+                rod = Box(f"rod{idx}", face_r + u * (A_END + Lmid / 2), ax, [ROD / 2, ROD / 2, Lmid / 2], "rod")
+                rodB = Box(f"rodB{idx}", face_r + u * (Lrod - SHOULDER / 2), ax, [HEXW / 2, HEXW / 2, SHOULDER / 2], "rod")
+                boss = Box(f"boss{idx}", end - u * depth / 2, ax, [bw / 2, bw / 2, depth / 2], "pad")
+                # screw heads and the room a key needs: fixed-end bolt head on the cell's +u side at h1, free-end screw head
+                # on its -u side at h2
+                hf = HEAD_FIXED
+                bolt = Box(f"bolth{idx}", h1 + u * (CT / 2 + hf / 2), ax, [HEAD_W / 2, HEAD_W / 2, hf / 2], "hw")
+                key1 = Box(f"key1_{idx}", h1 + u * (CT / 2 + hf + KEY_ACCESS / 2), ax, [3.5, 3.5, KEY_ACCESS / 2], "tool")
+                scr = Box(f"scrh{idx}", h2 - u * (CT / 2 + HEAD_FREE / 2), ax, [HEAD_W / 2, HEAD_W / 2, HEAD_FREE / 2], "hw")
+                key2 = Box(f"key2_{idx}", h2 - u * (CT / 2 + HEAD_FREE + KEY_ACCESS / 2), ax, [3.5, 3.5, KEY_ACCESS / 2], "tool")
+                boxes += [pad1, rodA, rod, rodB, boss, bolt, key1, scr, key2]
                 mating |= {(cell.name, pad1.name), (cell.name, rod.name), (rod.name, boss.name)}
                 line = np.concatenate([u, np.cross((h2 - ORIGIN), u)])
             out.append(dict(id=idx, boxes=boxes, mating=mating, centre=centre, t=u, l=cvec, w=w,
@@ -262,6 +288,8 @@ def members_inv(p, case):
 def feasible(ms):
     for mem in ms[:REPS]:                                     # symmetry: the first cluster stands for all
         for b in mem["boxes"]:
+            if b.kind == "tool":
+                continue
             if b.kind in ("pad", "rod"):
                 if not inside(b, -EMBED, GAP + EMBED):
                     return False
@@ -278,7 +306,9 @@ def feasible(ms):
                 continue
             if a.name.endswith(b.name[-1]) and a.name[-1] == b.name[-1]:
                 continue                                       # same member: mating or intentionally close
-            if not separated(a, b, CLEAR):
+            if a.kind == "tool" and b.kind == "tool":
+                continue
+            if not separated(a, b, 0.0 if "tool" in (a.kind, b.kind) else CLEAR):
                 return False
     return True
 
@@ -287,6 +317,8 @@ def overlap_depth(a, b, margin):
     """0 if separated; else the smallest penetration over the separating axes (mm)."""
     ha, hb = a.h + margin / 2, b.h + margin / 2
     t = b.c - a.c
+    if t @ t > (np.linalg.norm(ha) + np.linalg.norm(hb)) ** 2:     # bounding spheres apart: exact early out
+        return 0.0
     axes = [a.R[:, i] for i in range(3)] + [b.R[:, i] for i in range(3)]
     axes += [np.cross(a.R[:, i], b.R[:, j]) for i in range(3) for j in range(3)]
     best = float("inf")
@@ -322,6 +354,8 @@ def violation(ms):
     v = 0.0
     for mem in ms[:REPS]:
         for b in mem["boxes"]:
+            if b.kind == "tool":
+                continue
             lo, hi = (-EMBED, GAP + EMBED) if b.kind in ("pad", "rod") else (0.0, GAP)
             v += excess(b, lo, hi) + keepout_excess(b)
     mating = set().union(*[m["mating"] for m in ms])
@@ -330,7 +364,9 @@ def violation(ms):
         for b in allboxes:
             if a is b or (a.name, b.name) in mating or (b.name, a.name) in mating or a.name[-1] == b.name[-1]:
                 continue
-            v += overlap_depth(a, b, CLEAR)
+            if a.kind == "tool" and b.kind == "tool":
+                continue
+            v += overlap_depth(a, b, 0.0 if "tool" in (a.kind, b.kind) else CLEAR)
     return v
 
 
@@ -466,11 +502,12 @@ def main():
                     p, c, info = q, cq, iq
                 if it % 100 == 99:
                     step *= 0.7
+            print(f"  climb done: {'feasible' if info is not None else 'infeasible'}", flush=True)
             if info is not None:
                 nfeas += 1
                 if best is None or c < best[0]:
                     best = (c, p, info[0], info[1])
-    print(f"{nfeas} of {4 * args.samples} hill-climbs reached a feasible placement")
+    print(f"{nfeas} of {4 * args.samples} hill-climbs reached a feasible placement", flush=True)
     if best is None:
         print("no feasible placement found")
         return
@@ -482,7 +519,7 @@ def main():
           f"Mx {e['res'][3]:.3f}  My {e['res'][4]:.3f}  Mz {e['res'][5]:.3f} N.m")
     if args.case == "rods":
         print(f"  worst cell at the design wrench: {100 * e['frac']:.0f}% of rating; cond {e['cond']:.1f}")
-        print("  rod lengths (mm): " + ", ".join(f"{(b.h[2] * 2):.1f}" for mm in ms for b in mm['boxes'] if b.kind == 'rod'))
+        print("  rod lengths (mm): " + ", ".join(f"{(b.h[2] * 2):.1f}" for mm in ms for b in mm['boxes'] if b.name.startswith('rod') and b.name[3:].isdigit()))
     else:
         for name, st in STIFFNESS.items():
             r2 = score_direct(ms, st)

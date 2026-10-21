@@ -104,14 +104,14 @@ def pad_bending(F):
     return 6 * M / (w * a * a)
 
 
-def report(p, label):
-    ds.set_envelope(88.85, ds.FORM["diameter_mm"] / 2.0)
-    ms = ds.members(p, "rods")
+def report(p, label, builder=None, circle=True):
+    ds.set_envelope(88.85, ds.FORM["diameter_mm"] / 2.0 if circle else None)
+    ms = (builder or ds.members)(p, "rods")
     A = np.array([m["line"] for m in ms]).T
     Fd = np.abs(np.linalg.pinv(A)) @ ds.W_DESIGN_MM
     Fs = np.abs(np.linalg.pinv(A)) @ (ds.W_DESIGN_MM / RANGE_F)
     f_design, f_sim = float(Fd.max()), float(Fs.max())
-    rod_len = min(2 * b.h[2] for m in ms for b in m["boxes"] if b.kind == "rod")
+    rod_len = min(sum(2 * b.h[2] for b in m["boxes"] if b.name.startswith("rod")) for m in ms)
     print(f"\n=== {label}")
     print(f"  member force, worst of six: sensing-range load {f_design:.0f} N ({100 * f_design / RATED_N:.0f}% of the "
           f"{RATED_N / 9.81:.0f} kg rating), simulated peak {f_sim:.0f} N, abuse {f_sim * ABUSE_F:.0f} N "
@@ -125,7 +125,7 @@ def report(p, label):
               f"misalignment bending {n['s_bend']:.0f} MPa, alternating {n['s_alt']:.0f} MPa, buckling {n['pcr'] / 1000:.1f} kN; "
               f"neck axial stiffness {n['kax'] / 1000:.0f} MN/m each")
     b = bolt_checks(f_design)
-    print(f"  M6 A2-70 bolt: preload {b['preload'] / 1000:.1f} kN, stress {b['bolt_stress']:.0f} MPa (proof {BOLT['proof_mpa']}); "
+    print(f"  M6 {BOLT["grade"]} bolt: preload {b['preload'] / 1000:.1f} kN, stress {b['bolt_stress']:.0f} MPa (proof {BOLT['proof_mpa']}); "
           f"thread strip capacity {b['strip'] / 1000:.0f} kN against {f_design / 1000:.1f} kN")
     print(f"  fixed-end joint: preload needed to keep it closed {b['sep_required'] / 1000:.1f} kN against {b['preload'] / 1000:.1f} kN available "
           f"-> {'HOLDS' if b['sep_required'] <= b['preload'] else 'OPENS'} at the design wrench "
@@ -240,24 +240,15 @@ def pad_bolts(F):
 
 
 if __name__ == "__main__":
-    # best rods layouts from design_synthesis.py with 6 mm caps and an 18 mm rod span
-    runs = {
-        "75 kg cell": (75.0, dict(r=38.2, delta=29.5, c0=-3.9, alpha=54.7, psi=249.5, lenmode=0, sc=1.0, zc=19.9)),
-        "150 kg cell": (150.0, dict(r=32.6, delta=36.4, c0=-11.0, alpha=54.7, psi=224.8, lenmode=0, sc=1.0, zc=20.3)),
-    }
-    for k, (kg, v) in runs.items():
-        ds.configure(6.0, 18.0, kg)
-        RATED_N = ds.RATED_N
-        report(v, f"{k}, 6 mm caps, rod span >= 18 mm")
-        ms = ds.members(v, "rods")
-        A = np.array([m["line"] for m in ms]).T
-        Fs = float((np.abs(np.linalg.pinv(A)) @ (ds.W_DESIGN_MM / RANGE_F)).max())
-        pb, pre = pad_bolts(Fs * ABUSE_F)
-        print(f"  pad-to-cap bolts at the abuse load: {pb / 1000:.1f} kN each against {pre / 1000:.1f} kN preload "
-              f"-> {'OK' if pb <= pre else 'EXCEEDS preload (joint can open)'}")
-
-    # stops and structure for the layout that fits the 88.85 mm hexagon (75 kg cell, 6 mm caps)
-    ds.configure(6.0, 18.0, 75.0)
+    # the layout the CAD model is built from (design/ft_sensor.yaml, build_candidate)
+    bc = FT["build_candidate"]
+    ds.configure(bc["cap_thickness_mm"], bc["min_free_rod_mm"], float(bc["rated_kg"]))
     RATED_N = ds.RATED_N
-    hexv = dict(r=34.2, delta=30.7, c0=35.4, alpha=57.1, psi=-91.5, lenmode=0, sc=1.0, zc=20.1)
-    report_stops_and_structure(hexv, "75 kg cell, 88.85 mm hexagon, 6 mm caps")
+    ds.REPS = 1
+    report(bc["layout"], f"build candidate: {bc['rated_kg']} kg cell, {bc['cap_thickness_mm']} mm caps, free rod >= {bc['min_free_rod_mm']} mm",
+           builder=ds.members_inv, circle=False)
+    ms = ds.members_inv(bc["layout"], "rods")
+    A = np.array([m["line"] for m in ms]).T
+    Fs = float((np.abs(np.linalg.pinv(A)) @ (ds.W_DESIGN_MM / RANGE_F)).max())
+    print(f"  neck chosen for the CAD model: d {bc['rod']['neck_d_mm']} x l {bc['rod']['neck_l_mm']} mm "
+          f"({bc['rod']['material']}); abuse member force {Fs * ABUSE_F:.0f} N")

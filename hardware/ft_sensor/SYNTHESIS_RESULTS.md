@@ -210,3 +210,23 @@ kind (7075 neck d 2.1 x l 3.5 mm; M6 12.9 bolts).
 Not yet re-run for this layout: the stop and wedge-block structure sizing. Not checked: how identical plates mate
 with mirrored wedge-block lean (a wedge block is its own mirror image, so six cell blocks and six rod blocks
 are each one part).
+
+## Correction and detailing (2026-10-21): the CAD model, and what it changed
+
+Building the layout as solid CAD (`cad_build.py`, `BUILD_GUIDE.md`) found problems that the box model in
+`design_synthesis.py` could not see. **The inversion candidate published above (r 28.7, 6 mm caps, free rod 18.8 mm) is
+superseded.**
+
+| Found | Consequence |
+|---|---|
+| The far-end boss (about 8 mm deep along the rod at 54.7 deg) was counted as rod length | free rod was 10.8 mm, not 18.8; sizing needs at least 13 mm. Fixed in the search |
+| The rod was modelled as a 6 mm bar; the real ends are 9.24 mm hex blocks | rods touched neighbouring wedges. The search now models hex ends, screw heads and key-access volumes |
+| The two caps are **not** the same part flipped (symmetric difference 25 % of volume) | they are mirror images: two machined parts. Earlier text saying "identical plates" was wrong |
+| A neck of 2.1 x 3.5 mm has no fatigue margin (107 against 106 MPa), and fatigue scales as d/l | neck is 2.4 x 4.5 mm (22 % margin) |
+| A rod with studs through both ends cannot be assembled into a rigid six-rod loop | cell end is a threaded hole in the rod, with a screw from the underside; the halves close along z |
+| 3 mm caps leave 1.1 to 1.2 mm of wall under the tilted tapped holes | holes are 7.5 mm (fixed end) and 7.0 mm (boss) deep; thread engagement about 1 x d |
+
+Current layout (`design/ft_sensor.yaml`, `build_candidate`): 3 mm caps, free rod 21.5 mm (cell face to boss face),
+bolt axis 54.5 deg from the cap normal, r 34.4 mm. Rank 6, condition number 2.1, worst cell 71 % of rating at the
+sensing-range load, resolution Mx/My 0.020 N.m, Fz 0.84 N. A 4 mm cap layout also exists but needs a 38 mm rod and
+loads the worst cell to 82 %.
