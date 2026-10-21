@@ -31,7 +31,12 @@ def v3(a):
 
 
 def box(b):
-    return dict(c=v3(b.c), ax=[v3(b.R[:, i]) for i in range(3)], h=[round(float(x), 3) for x in b.h])
+    # Inversion negates a box's axes, which leaves a reflection (det -1) that a 3D engine cannot
+    # turn into a rotation. A box is symmetric, so flipping one axis draws the same box.
+    R = b.R.copy()
+    if np.linalg.det(R) < 0:
+        R[:, 2] = -R[:, 2]
+    return dict(c=v3(b.c), ax=[v3(R[:, i]) for i in range(3)], h=[round(float(x), 3) for x in b.h])
 
 
 def main(out):
