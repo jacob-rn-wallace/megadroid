@@ -8,7 +8,7 @@ authority: authoritative
 
 **Status:** Authoritative  
 **Scope:** Minimum Viable System (MVS)  
-**Last rehydrated:** 2026-09-11
+**Last rehydrated:** 2026-10-21
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -147,7 +147,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - Rationale: pelvis orientation and centre-of-mass velocity are required feedback states for every model-based balance method this design targets, and are not observable from joint encoders and foot force/torque alone
 ### 7.4 End-of-Limb Force/Torque Sensing
 - Each foot includes a **6-DOF force/torque sensor**
-- Form factor: cylindrical, 107mm diameter × 56mm height
+- Form factor: hexagonal prism, 88.85mm across flats (inside a 107mm circumscribing diameter) × 57.544mm height
 - Mounting: distal_face_of_lower_leg_module
 - Sensor geometry is treated as a hard mechanical constraint
 - F/T sensors are **excluded from MVS cost accounting**

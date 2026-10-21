@@ -8,7 +8,7 @@ authority: derived
 
 **Status:** Authoritative (MVS)  
 **Scope:** Mechanical implementation details for the Minimum Viable System  
-**Last rehydrated:** 2026-09-11
+**Last rehydrated:** 2026-10-21
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -192,7 +192,7 @@ Each foot has one **6-DOF force/torque sensor** that measures ground reaction fo
 **Mounting and integration:**
 - Sensor is mounted directly to the distal termination bulkhead of the lower-leg module
 - Located immediately proximal to the foot/end-effector, distal to both ankle pitch and ankle roll
-- Form factor: cylindrical, 107mm diameter × 56mm height (defined in `design/sensors.yaml`)
+- Form factor: hexagonal prism, 88.85mm across flats (inside a 107mm circumscribing diameter) × 57.544mm height (defined in `design/sensors.yaml`)
 - Mechanical constraint: treated as hard structural envelope
 
 **Load path requirements:**
