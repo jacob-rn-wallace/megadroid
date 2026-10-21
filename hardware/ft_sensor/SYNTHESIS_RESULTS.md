@@ -163,3 +163,50 @@ Whether to build them depends on Test H (cell stiffness, joint behaviour).
 Cell rating, stiffness and mounting (Test H); rod machining tolerance (0.05 mm assumed); the rod stud and washer
 details; the cap interface to the ankle gimbal and the foot plate; no FEA; and whether you have lathe access for the
 turned rods (the alternative, off-the-shelf ball joints, has play).
+
+---
+
+# Update: a layout that looks the same either end up (2026-10-21)
+
+The question: can the sensor be symmetric about a horizontal axis, three cells flipped so their rods run
+the other way, so that it looks the same whichever end is up?
+
+## Exact half-turn symmetry costs a measurement axis
+A layout that a half turn about a horizontal axis maps onto itself always has rank 5: it cannot measure all six
+force and torque components. Checked numerically on random layouts (200 each, three axes) and on the
+three-fold + half-turn layout (rank 5 every time). The reason is representation counting: under a half turn the
+six strut forces split into three symmetric and three antisymmetric combinations, but the six wrench components
+split into two symmetric and four antisymmetric, so one antisymmetric component has no strut to read it.
+No tuning of angles or positions can change that. The search agreed: the geometrically valid half-turn layouts
+it found were all rank 5.
+
+## Inversion symmetry keeps rank 6
+Inversion through the centre (the point mirror: every cell has a partner on the opposite plate, on the far side of
+the ring) keeps rank 6 and matches the "three cells flipped" picture: the cells alternate between plates around
+the ring. Turned over, the sensor looks like its own mirror image, not an exact copy; that is the closest symmetry
+that still measures all six axes. Both plates are the same flat part.
+
+`design_synthesis.py --symmetry inv` finds it easily: 20-22 of 40 searches feasible (the mirrored-pair layout
+managed 5-7), on both the hexagon and the cylinder, all meeting every target.
+
+## Candidate: inversion layout, 88.85 mm hexagon, 75 kg cell, 6 mm caps
+| | |
+|---|---|
+| Bolt-axis tilt from vertical | 54.7 deg (the cube-corner angle: every search landed on it) |
+| Cell-centre radius | 28.7 mm |
+| Cells | three on each plate, alternating around the ring |
+| Cell heights | 20.0 mm above the bottom plate (bottom cells), 25.5 mm (top cells) |
+| Rod span | 18.8 mm |
+| Condition number | 1.6 (rank 6) |
+| Worst cell at the sensing-range load | 62% of rating (458 N) |
+| Resolution p-p | Mx/My 0.027 N.m, Mz 0.028 N.m, Fz 0.83 N, shear 0.83 N |
+| Clearances | cell to wall 4.6 mm, tightest pair of parts 2.2 mm (0.5 mm in the mirrored-pair layout) |
+| Nearest part to the axis | 17.1 mm (keep-out 12 mm) |
+
+At 3x the simulated peak the worst member sees 916 N (124% of rating, inside the 150% safe overload). The fixed-end
+joint opens above about 825 N, 2.7x the simulated peak. Rod, bolt and pad sizing results are unchanged in
+kind (7075 neck d 2.1 x l 3.5 mm; M6 12.9 bolts).
+
+Not yet re-run for this layout: the stop and wedge-block structure sizing. Not checked: how identical plates mate
+with mirrored wedge-block lean (a wedge block is its own mirror image, so six cell blocks and six rod blocks
+are each one part).

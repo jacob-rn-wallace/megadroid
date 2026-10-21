@@ -62,6 +62,7 @@ CLEAR = BASIS["min_clearance_mm"]
 ROD = BASIS["rod_section_mm"]
 TARGET = BASIS["targets"]
 ORIGIN = np.array([0.0, 0.0, GAP / 2.0])
+REPS = 2                  # members checked against all others: 2 for the mirrored-pair layout, 1 for the C2 layout
 PAD_LEN = FT["sizing_basis"]["fixed_end_contact_length_mm"]   # pad footprint along the cell length: the clamp
                                                               # under the cell's end half, to its centre
 KEEPOUT = FT["stop_basis"]["keepout_radius_mm"]               # central column kept clear for the overload stop
@@ -208,8 +209,50 @@ def members(p, case):
     return out
 
 
+members_pairs = members          # the mirrored-pair builder, kept under its own name
+
+
+def members_c2(p, case, inversion=False):
+    """Layout with a 2-fold symmetry about a horizontal axis (the x axis, through mid-gap): three members
+    with the cell on the bottom plate, rotated 120 deg apart, and their images with the cell on the top plate
+    and the rod running down. Turn the sensor over and it looks the same; the two plates are identical parts.
+    Uses the base builder with the pair half-angle forced to zero and keeps every second member."""
+    base = members_pairs(dict(p, delta=0.0), case)
+    if base is None:
+        return None
+    # the half turn about x maps (x, y, z) -> (x, -y, GAP - z); the inversion through the centre maps
+    # (x, y, z) -> (-x, -y, GAP - z), which twists the image 180 deg about the vertical as well
+    D = np.diag([-1.0, -1.0, -1.0]) if inversion else np.diag([1.0, -1.0, -1.0])
+
+    def c2(pt):
+        return np.array([-pt[0], -pt[1], GAP - pt[2]]) if inversion else np.array([pt[0], -pt[1], GAP - pt[2]])
+
+    def rename(name, new_idx):
+        return name[:-1] + str(new_idx)
+
+    out = []
+    for k, m in enumerate([base[0], base[2], base[4]]):
+        idx_a, idx_b = 2 * k, 2 * k + 1
+        boxes_a = [Box(rename(b.name, idx_a), b.c, [b.R[:, i] for i in range(3)], b.h, b.kind) for b in m["boxes"]]
+        boxes_b = [Box(rename(b.name, idx_b), c2(b.c), [D @ b.R[:, i] for i in range(3)], b.h, b.kind) for b in m["boxes"]]
+        mate_a = {(rename(a, idx_a), rename(b, idx_a)) for a, b in m["mating"]}
+        mate_b = {(rename(a, idx_b), rename(b, idx_b)) for a, b in m["mating"]}
+        a = dict(m, id=idx_a, boxes=boxes_a, mating=mate_a)
+        h1, h2, u = c2(m["h1"]), c2(m["h2"]), D @ m["u"]
+        b = dict(id=idx_b, boxes=boxes_b, mating=mate_b, centre=c2(m["centre"]), t=D @ m["t"], l=D @ m["l"],
+                 w=D @ m["w"], h1=h1, h2=h2, line=np.concatenate([u, np.cross(h2 - ORIGIN, u)]), u=u, flipped=True)
+        out += [a, b]
+    return out
+
+
+def members_inv(p, case):
+    """Inversion-symmetric layout (the C3 + inversion group): three cells on each plate, alternating around
+    the ring at 60 deg spacing. Unlike a half turn about a horizontal axis, this keeps all six wrench axes."""
+    return members_c2(p, case, inversion=True)
+
+
 def feasible(ms):
-    for mem in ms[:2]:                                        # symmetry: cluster 0 stands for all
+    for mem in ms[:REPS]:                                     # symmetry: the first cluster stands for all
         for b in mem["boxes"]:
             if b.kind in ("pad", "rod"):
                 if not inside(b, -EMBED, GAP + EMBED):
@@ -220,7 +263,7 @@ def feasible(ms):
                 return False
     mating = set().union(*[m["mating"] for m in ms])
     allboxes = [b for m in ms for b in m["boxes"]]
-    mine = [b for m in ms[:2] for b in m["boxes"]]
+    mine = [b for m in ms[:REPS] for b in m["boxes"]]
     for a in mine:
         for b in allboxes:
             if a is b or (a.name, b.name) in mating or (b.name, a.name) in mating:
@@ -269,13 +312,13 @@ def excess(box, zlo, zhi):
 
 def violation(ms):
     v = 0.0
-    for mem in ms[:2]:
+    for mem in ms[:REPS]:
         for b in mem["boxes"]:
             lo, hi = (-EMBED, GAP + EMBED) if b.kind in ("pad", "rod") else (0.0, GAP)
             v += excess(b, lo, hi) + keepout_excess(b)
     mating = set().union(*[m["mating"] for m in ms])
     allboxes = [b for m in ms for b in m["boxes"]]
-    for a in [b for m in ms[:2] for b in m["boxes"]]:
+    for a in [b for m in ms[:REPS] for b in m["boxes"]]:
         for b in allboxes:
             if a is b or (a.name, b.name) in mating or (b.name, a.name) in mating or a.name[-1] == b.name[-1]:
                 continue
@@ -346,7 +389,7 @@ def perturb(p, rng, s):
 
 
 def main():
-    global MARGIN, CLEAR
+    global MARGIN, CLEAR, REPS, members
     ap = argparse.ArgumentParser()
     ap.add_argument("--case", choices=("direct", "rods"), required=True)
     ap.add_argument("--samples", type=int, default=12, help="random starts per (length mode, sign) combination")
@@ -361,11 +404,18 @@ def main():
     ap.add_argument("--rod-min", type=float, default=ROD_MIN, help="shortest rod span, mm (sizing.py)")
     ap.add_argument("--rated-kg", type=float, default=FT["load_cell"]["rating"]["rated_load_kg"],
                     help="cell variant; the MLC714N listings offer 75, 150 and 250 kg (unverified)")
+    ap.add_argument("--symmetry", choices=("pairs", "c2", "inv"), default="pairs",
+                    help="pairs: three mirrored pairs, all cells on the bottom plate (the original layout); "
+                         "c2: invariant under a half turn about a horizontal axis (rank 5: loses a wrench axis); "
+                         "inv: invariant under inversion through the centre, three cells on each plate")
     ap.add_argument("--circle", action="store_true",
                     help="use the circumscribing cylinder (sensors.yaml diameter_mm) as the envelope, not the hexagon")
     args = ap.parse_args()
     MARGIN, CLEAR = args.margin, args.clearance
     configure(args.cap_thickness, args.rod_min, args.rated_kg)
+    if args.symmetry in ("c2", "inv"):
+        REPS = 1
+        members = members_c2 if args.symmetry == "c2" else members_inv
     set_envelope(args.across_flats, FORM["diameter_mm"] / 2.0 if args.circle else None)
     rng = np.random.default_rng(args.seed)
     stiff_for_search = STIFFNESS["thinned web"]
