@@ -2903,3 +2903,34 @@ reaches the window with studs or a lattice. Corrected in `geometry.yaml`.
 tuning, which was fitted at the nominal sole. The materials mapping is in
 `docs/P4_JOINT_TEST_RIG.md` under Test F.
 
+
+### 2026-10-21 -- Hip spacing 100 -> 175 mm; sim_walk_lipm's end-to-end walk retired; foot width x sensor mass sweep
+
+**Hip spacing was a shortcut, not a decision.** `generate_urdf.py` (P2) took the hip
+half-spacing as half of `twin_rail.inner_face_spacing_mm`, which describes the rail gap
+INSIDE one leg, and `generate_mjcf.py` copied it. `sim_walk_lipm.py` carried a third
+hardcoded `HIP_Y = 0.05`. `docs/P2_VALIDATION.md` separately says "~0.300 m". The new
+`design/geometry.yaml` `pelvis.hip_spacing_mm` is 175, from the RobotLocomotion/Hubo
+`hubo.urdf` (hip yaw joints at +/-88.5 mm, ~177 mm; its thigh and shank are 280 mm vs 300
+here). Third-party model of an unconfirmed variant: an estimate. All three consumers now
+read the YAML. **Every stance-width figure in earlier entries ("~100mm stance", HIP_Y=0.05)
+describes the old geometry.**
+
+**Effect on P3 (no retuning):** model load, static pose and ZMP balance pass.
+`sim_walk_recede` walks n=4/8/12 at 7.36 deg flat (was 6.69) and its selftest passes.
+`sim_walk_lipm` falls at every step count tried (n=4/6/8/10, 91-94 deg); its gains were
+fitted at 100 mm.
+
+**sim_walk_lipm's end-to-end walk is retired from its selftest and the gate.** The
+receding-horizon walker has the longer clean range (16 vs 10 steps), is the one that
+survives pushes, and kept walking at the new stance. Stages 0-5c stay (recede imports the
+IK, planner and admittance code); `_selftest_stage6` is kept un-called as the record of the
+last validated range (n=10 at 100 mm). The `--steps 15` quick-reference figure was already
+stale and is now moot. `lipm10` in the sweep tools is a known-defective column.
+
+**`tools/sweep_foot.py` (new):** foot width x per-foot sensor mass, built in memory, with a
+foot-to-foot gap column. It was run at the OLD 100 mm spacing: 85-95 mm feet (gap 15-5 mm)
+and up to 0.4 kg per sensor stood, walked 8/16 steps and survived most pushes; 100 mm
+touched and 115 mm collided (an artefact, not a width effect). Sensor masses are estimates
+(~0.3-0.5 kg, assumed aluminium fill), not CAD masses. At 175 mm the gap limit is gone, so
+re-run it before relying on any width.

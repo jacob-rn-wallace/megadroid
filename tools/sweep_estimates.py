@@ -129,18 +129,14 @@ def _safe(fn, default=None):
         return {"error": f"{type(exc).__name__}: {exc}"} if default is None else default
 
 
-def evaluate(args):
-    """Worker: build one model and measure everything. Top-level so it pickles."""
-    tlabel, torque, slabel, tc, n_timings = args
-    import mujoco  # noqa: F401  (imported in the worker, not the parent)
+def measure_model(model, n_timings):
+    """Run the P3 battery on a built model. Returns the measurement dict only,
+    so callers that build the model differently (sweep_foot.py) can share it."""
     import sim_walk_lipm as lw
     import sim_walk_recede as sr
     import sim_zmp_balance as sb
 
-    gm, design = _load()
-    model = _model_for(design, torque, tc)
-    out = {"torque_label": tlabel, "peak_torque_nm": torque,
-           "sole_label": slabel, "timeconst_s": tc}
+    out = {}
 
     def standing():
         root_z, tx, ty = sb.solve_nominal_geometry(model)
@@ -173,6 +169,19 @@ def evaluate(args):
             except Exception:
                 errors += 1
         out[f"push{int(f)}N"] = {"survived": survived, "of": n_timings, "errors": errors}
+    return out
+
+
+def evaluate(args):
+    """Worker: build one model and measure everything. Top-level so it pickles."""
+    tlabel, torque, slabel, tc, n_timings = args
+    import mujoco  # noqa: F401  (imported in the worker, not the parent)
+
+    gm, design = _load()
+    model = _model_for(design, torque, tc)
+    out = {"torque_label": tlabel, "peak_torque_nm": torque,
+           "sole_label": slabel, "timeconst_s": tc}
+    out.update(measure_model(model, n_timings))
     return out
 
 
