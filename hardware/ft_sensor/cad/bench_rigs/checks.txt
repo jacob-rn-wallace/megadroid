@@ -1,0 +1,79 @@
+rod free length (cell face to boss face, shim included): 21.55 mm
+
+=== H: cantilever, on-axis  (rig_H_cantilever.step)
+    no overlapping pairs
+  SEATING (distance between parts that must touch; 0 = seated)
+    cell - block_a1: 0.000 mm
+    cell - eyebolt: 0.000 mm
+    block_a1 - top_plate: 0.000 mm
+    cell_screw - cell: 0.000 mm
+  15 further pairs touch (threads, bearings, plates on columns); not listed
+  TIGHT GAPS (0.02 to 1 mm between parts not listed as seated)
+    block_a1 - cell_screw: 0.200 mm
+    envelope x -60..90, y -60..60, z -172..18 mm; load point z -44
+
+=== H: cantilever, off-axis (load across the cell's width)  (rig_H_offaxis.step)
+    no overlapping pairs
+  SEATING (distance between parts that must touch; 0 = seated)
+    cell - block_a3: 0.000 mm
+    cell - eyebolt: 0.000 mm
+    block_a3 - top_plate: 0.000 mm
+    cell_screw - cell: 0.000 mm
+  13 further pairs touch (threads, bearings, plates on columns); not listed
+  TIGHT GAPS (0.02 to 1 mm between parts not listed as seated)
+    none
+    envelope x -60..90, y -60..60, z -172..18 mm; load point z -25
+
+=== H2: guided end  (rig_H2_guided.step)
+    no overlapping pairs
+  SEATING (distance between parts that must touch; 0 = seated)
+    cell - block_a1: 0.000 mm
+    cell - carriage_h2: 0.000 mm
+    stud - cell: 0.000 mm
+    eye_nut - carriage_h2: 0.000 mm
+    stud - eye_nut: 0.000 mm
+  26 further pairs touch (threads, bearings, plates on columns); not listed
+  TIGHT GAPS (0.02 to 1 mm between parts not listed as seated)
+    block_a1 - cell_screw: 0.200 mm
+    carriage_h2 - stud: 0.200 mm
+    carriage bottom is 92 mm above the bottom plate; the load point is 61 mm above it, so the hanger passes through the plate's Ø40 hole
+    envelope x -60..90, y -60..60, z -172..18 mm; load point z -99
+
+=== H3: two-cell inverted V  (rig_H3_vee.step)
+    no overlapping pairs
+  SEATING (distance between parts that must touch; 0 = seated)
+    cell_pos - h3_upper_plate: 0.000 mm
+    cell_pos - h3_lower_plate: 0.000 mm
+    cell_neg - h3_upper_plate: 0.000 mm
+    cell_neg - h3_lower_plate: 0.000 mm
+    eyebolt - h3_lower_plate: 0.000 mm
+  25 further pairs touch (threads, bearings, plates on columns); not listed
+  TIGHT GAPS (0.02 to 1 mm between parts not listed as seated)
+    none
+    wedge hole (upper plate, 26.0 mm deep, 1 mm wall): OK (1.000)
+    wedge hole (upper plate, 26.0 mm deep, 1 mm wall): OK (1.000)
+    wedge hole (lower plate, 26.0 mm deep, 1 mm wall): OK (1.000)
+    wedge hole (lower plate, 26.0 mm deep, 1 mm wall): OK (1.000)
+    envelope x -62..90, y -60..60, z -172..18 mm; load point z -102
+    screw_up_pos: M6x40, head underside 26.0 mm from the cell face
+    screw_lo_pos: M6x40, head underside 26.0 mm from the cell face
+    screw_up_neg: M6x40, head underside 26.0 mm from the cell face
+    screw_lo_neg: M6x40, head underside 26.0 mm from the cell face
+
+=== R: single sensor member  (rig_R_strut.step)
+    no overlapping pairs
+  SEATING (distance between parts that must touch; 0 = seated)
+    cell - block_a2: 0.000 mm
+    cell - shim: 0.000 mm
+    shim - rod: 0.000 mm
+    rod - carriage_r: 0.000 mm
+    eyebolt - carriage_r: 0.000 mm
+    cell_bolt - block_a2: 0.000 mm
+    free_screw - rod: 0.000 mm
+  25 further pairs touch (threads, bearings, plates on columns); not listed
+  TIGHT GAPS (0.02 to 1 mm between parts not listed as seated)
+    cell - cell_bolt: 0.050 mm
+    shim - free_screw: 0.200 mm
+    cell - rod: 0.250 mm
+    carriage bottom is 70 mm above the bottom plate; the load point is 49 mm above it, so the hanger passes through the plate's Ø40 hole
+    envelope x -60..90, y -60..60, z -172..18 mm; load point z -111

@@ -1,0 +1,85 @@
+rig,part,material_or_spec,note
+H,top_plate,"6061/7075 plate, 12 mm","Ø8 sockets for shafts, M8 for columns, Ø8 dial stem"
+H,column_0,steel Ø12,M8 stud at each end
+H,column_1,steel Ø12,M8 stud at each end
+H,column_2,steel Ø12,M8 stud at each end
+H,column_3,steel Ø12,M8 stud at each end
+H,bottom_plate,"6061 plate, 12 mm",
+H,block_a1,6061 block 30 x 30 x 15,
+H,attach_screw_n,M6x20 SHCS 12.9,
+H,attach_screw_p,M6x20 SHCS 12.9,
+H,cell,"harvested cell, native threaded holes",
+H,cell_screw,M6x35 SHCS 12.9,"head on the top plate, through plate and block into the cell's thread"
+H,eyebolt,"M6 eyebolt DIN 580, nominal",
+H_off,top_plate,"6061/7075 plate, 12 mm","Ø8 sockets for shafts, M8 for columns, Ø8 dial stem"
+H_off,column_0,steel Ø12,M8 stud at each end
+H_off,column_1,steel Ø12,M8 stud at each end
+H_off,column_2,steel Ø12,M8 stud at each end
+H_off,column_3,steel Ø12,M8 stud at each end
+H_off,bottom_plate,"6061 plate, 12 mm",
+H_off,block_a3,6061 block 30 x 30 x 50,
+H_off,attach_screw_n,M6x20 SHCS 12.9,
+H_off,attach_screw_p,M6x20 SHCS 12.9,
+H_off,cell,"harvested cell, native threaded holes",
+H_off,cell_screw,M6x40 SHCS 12.9,"from the back face, into the cell's thread"
+H_off,eyebolt,"M6 eyebolt DIN 580, nominal",load line is about 13 mm outboard of the cell: see the rig note
+H2,top_plate,"6061/7075 plate, 12 mm","Ø8 sockets for shafts, M8 for columns, Ø8 dial stem"
+H2,column_0,steel Ø12,M8 stud at each end
+H2,column_1,steel Ø12,M8 stud at each end
+H2,column_2,steel Ø12,M8 stud at each end
+H2,column_3,steel Ø12,M8 stud at each end
+H2,bottom_plate,"6061 plate, 12 mm",
+H2,block_a1,6061 block 30 x 30 x 15,
+H2,attach_screw_n,M6x20 SHCS 12.9,
+H2,attach_screw_p,M6x20 SHCS 12.9,
+H2,cell,"harvested cell, native threaded holes",
+H2,cell_screw,M6x35 SHCS 12.9,"head on the top plate, through plate and block into the cell's thread"
+H2,carriage_h2,6061 block,two Ø15 bores for the bushings; tab for the dial target
+H2,shaft_0,ground shaft Ø8 h6 x 176,
+H2,bushing_0,LM8LUU Ø8/15/45,
+H2,shaft_1,ground shaft Ø8 h6 x 176,
+H2,bushing_1,LM8LUU Ø8/15/45,
+H2,dial_post,"Ø10 steel post, M6 stud",
+H2,stud,M6x65 all-thread,"into the cell's thread at the top, through the carriage"
+H2,eye_nut,"M6 eye nut DIN 582, nominal",
+H3,top_plate,"6061/7075 plate, 12 mm","Ø8 sockets for shafts, M8 for columns, Ø8 dial stem"
+H3,column_0,steel Ø12,M8 stud at each end
+H3,column_1,steel Ø12,M8 stud at each end
+H3,column_2,steel Ø12,M8 stud at each end
+H3,column_3,steel Ø12,M8 stud at each end
+H3,bottom_plate,"6061 plate, 12 mm",
+H3,h3_upper_plate,6061 plate 15 mm with two integral wedges,5-axis or 3+2: pads square to the bolt axes
+H3,h3_lower_plate,6061 plate 15 mm with two integral wedges,
+H3,plate_screw_0,M6x20 SHCS 12.9,
+H3,plate_screw_1,M6x20 SHCS 12.9,
+H3,plate_screw_2,M6x20 SHCS 12.9,
+H3,plate_screw_3,M6x20 SHCS 12.9,
+H3,eyebolt,"M6 eyebolt DIN 580, nominal",
+H3,cell_pos,"harvested cell, native threaded holes",
+H3,screw_up_pos,M6x40 SHCS 12.9,5.5 mm past the cell
+H3,screw_lo_pos,M6x40 SHCS 12.9,5.5 mm past the cell
+H3,cell_neg,"harvested cell, native threaded holes",
+H3,screw_up_neg,M6x40 SHCS 12.9,5.5 mm past the cell
+H3,screw_lo_neg,M6x40 SHCS 12.9,5.5 mm past the cell
+R,top_plate,"6061/7075 plate, 12 mm","Ø8 sockets for shafts, M8 for columns, Ø8 dial stem"
+R,column_0,steel Ø12,M8 stud at each end
+R,column_1,steel Ø12,M8 stud at each end
+R,column_2,steel Ø12,M8 stud at each end
+R,column_3,steel Ø12,M8 stud at each end
+R,bottom_plate,"6061 plate, 12 mm",
+R,block_a2,6061 block 30 x 30 x 15,"M6 blind 7.5 mm: the fixed-end thread, as in the sensor wedge"
+R,attach_screw_n,M6x20 SHCS 12.9,
+R,attach_screw_p,M6x20 SHCS 12.9,
+R,cell,"harvested cell, reamed 6.1 / 7.0",
+R,washer,6.4 x 12 x 1.6 hardened,
+R,cell_bolt,M6x16 SHCS 12.9,"from below into the block, 5.9 mm engaged: same as the sensor"
+R,shim,0.25 stainless,
+R,rod,7075-T6 turned,"the rod of the sensor, unchanged"
+R,free_screw,M6x14 low-head SHCS,"from the cell's upper side into the rod end, as in the sensor"
+R,carriage_r,6061 block,top: blind M6 for the rod stud; bottom: blind M6 for the eyebolt
+R,shaft_0,ground shaft Ø8 h6 x 176,
+R,bushing_0,LM8LUU Ø8/15/45,
+R,shaft_1,ground shaft Ø8 h6 x 176,
+R,bushing_1,LM8LUU Ø8/15/45,
+R,dial_post,"Ø10 steel post, M6 stud",
+R,eyebolt,"M6 eyebolt DIN 580, nominal",

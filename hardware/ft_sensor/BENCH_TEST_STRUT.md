@@ -4,24 +4,25 @@ Purpose: check the riskiest assumptions of the inversion-symmetric layout on ONE
 machining six. Run Tests H, H2 and H3 first (`docs/P4_JOINT_TEST_RIG.md`); their result decides
 whether the rod is needed at all.
 
-Numbers below come from `SYNTHESIS_RESULTS.md` (hand calculation, 7075-T6, 12.9 M6 bolts, 75 kg cell
-UNVERIFIED). Replace them with the rated values from Test H once known.
+Numbers below come from `SYNTHESIS_RESULTS.md` and the build candidate in `design/ft_sensor.yaml` (hand calculation,
+7075-T6, 12.9 M6 bolts, 75 kg cell UNVERIFIED). Replace them with the rated values from Test H once known. The rig is
+`cad/bench_rigs/rig_R_strut.step`; see `BENCH_RIGS.md`.
 
 ## What one member is
 
-Cell (42.25 x 13.25 x 8.5 mm) fixed at one M6 hole to a wedge block, the other M6 hole carrying a turned
-rod. The rod runs about 18.8 mm to a boss on the opposite plate. The line of force is the rod axis, tilted
-54.7 deg from the sensor axis. For the bench, replace the plates with one rigid base and one rigid load plate
-at the same spacing and angle.
+Cell (42.25 x 13.25 x 8.5 mm, holes reamed 6.1 / 7.0) bolted at one hole to a block, the other hole carrying the
+sensor's turned rod through a 0.25 mm shim and the cell-end screw. The rod runs 21.55 mm (shim included) to a boss on
+a guided carriage. In the rig the member is turned so its rod axis is vertical and the weights hang on that axis; the
+54.5 deg tilt of the sensor is not reproduced.
 
 ## Parts to make
 
 | Part | Process | Critical features |
 |---|---|---|
-| Rod, 7075-T6 | lathe | Two necks, d 2.1 x l 3.5 mm. Neck diameter +-0.02 mm, necks coaxial with the body to 0.02 mm, shoulders square. Make 6 (spares and a diameter series: 1.9, 2.1, 2.3 mm). |
-| Cell wedge block | CNC | Cell face at the tilt angle, tapped hole square to that face. Hole position +-0.05 mm. |
-| Rod boss | CNC | Bore for the rod stud at the tilt angle, same tolerance. |
-| Base and load plate | CNC | Flat and parallel to 0.02 mm. Stiff: thicker than the final 6 mm caps is fine for the bench. |
+| Rod, 7075-T6 | lathe | The sensor's rod (`rod.step`): two necks, d 2.4 x l 4.5 mm. Neck diameter +-0.02 mm, necks coaxial with the body to 0.02 mm, shoulders square. Make 6 (spares and a diameter series: 2.2, 2.4, 2.6 mm). |
+| Block A2 | CNC | Blind M6 thread, 7.5 deep, square to the cell face. Hole position +-0.05 mm. |
+| Carriage | CNC | Rod boss face (blind M6, 7 deep) square to the bushing bores. |
+| Top plate, bottom plate | CNC | Flat and parallel to 0.02 mm; the shaft sockets must be coaxial with the bores (+-0.02 mm). |
 
 ## Measurements
 

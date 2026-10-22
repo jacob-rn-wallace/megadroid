@@ -16,6 +16,7 @@ and with the cell's rating and stiffness unmeasured. Start with `BUILD_GUIDE.md`
 - `design_synthesis.py`, `sizing.py` -- layout search and closed-form sizing. `SYNTHESIS_RESULTS.md` is the
   record, including what was found wrong along the way.
 - `cad_build.py` -- builds the solid model and runs the checks. `BUILD_GUIDE.md` -- parts, machining, assembly.
+- `bench_rigs_build.py`, `BENCH_RIGS.md`, `cad/bench_rigs/` -- CAD of the bench rigs for Tests H, H2, H3 and R.
 - `BENCH_TEST_STRUT.md` -- the single-strut bench test (Test R); run it, and Tests H, H2, H3 in
   `docs/P4_JOINT_TEST_RIG.md`, before building all six members.
 
