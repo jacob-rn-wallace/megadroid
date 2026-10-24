@@ -1,0 +1,29 @@
+section,item,spec,qty_one_sensor_plus_rigs,suggested_spares,extra_per_further_sensor,used_for,note
+raw stock,6061-T6 flat bar,12 x 125 mm (1/2 x 5 in),305 mm,0,0,top plate + bottom plate,2 x (150 x 120 x 12) cut from one length; skim 12.7 to 12 if inch stock
+raw stock,6061-T6 flat bar,60 x 50 mm,470 mm,0,0,"2 carriages, 2 H3 plates, blocks A1 A2 A3","cut list in BOM_SENSOR_AND_RIGS.md; 32 % of the volume ends up in parts"
+raw stock,7075-T6 plate,15 x 105 x 182 mm (one blank),1,1,1,"cap bottom + cap top","two hexes side by side across a shared flat; the spare covers a scrapped cap"
+raw stock,7075-T6 round bar,diameter 10 mm,460 mm,0,240 mm,"12 rods + 2 dial posts","sensor rods (6 + 6 per further sensor + 1 spare), Test R rods (2.2 / 2.4 / 2.6 neck series) and spares"
+raw stock,steel round bar cold-drawn,diameter 12 mm (12L14 or 1018),760 mm,0,0,4 columns,"each 160 mm + two 10 mm M8 studs = 180 mm"
+raw stock,ground shaft h6,diameter 8 mm x 176 mm,2,0,0,H2 + R guide shafts,order cut to length (or one 380 mm rod and an abrasive cut-off)
+raw stock,stainless shim sheet 0.25 mm,14 x 160 mm strip,1,0,1,"sensor + R shims (discs 12 OD, 6.4 hole)",
+raw stock,stainless shim sheet 0.05 / 0.10 / 0.50 mm,14 x 80 mm strip of each,3,0,3,zeroing the cells,
+harvested,Wii Fit balance board load cells,42.25 x 13.25 x 8.5 mm 75 kg,8,4,6,"6 sensor + 2 for the H tests (the same two serve H H-off-axis H2 H3; then one is reamed for R)","2 boards is the minimum, 3 boards covers one failed reaming; for 2 sensors + rigs buy 4 boards"
+fastener,SHCS M6 x 16 class 12.9,cell bolt,7,3,6,"6 sensor + R",
+fastener,hardened washer ISO 7092 6.4 x 12 x 1.6,under the cell bolt head,7,3,6,"6 sensor + R",
+fastener,low-head SHCS M6 x 14 (DIN 6912) 10.9 or 12.9,free-end screw,7,3,6,"6 sensor + R","standard DIN 7984 is 8.8; source a higher grade if you can"
+fastener,SHCS M6 x 20 class 12.9,attach blocks and H3 plates to the top plate,4,2,0,"H H-off H2 R use 2; H3 uses 4",
+fastener,SHCS M6 x 35 class 12.9,cell screw through block A1,1,1,0,"H H2",
+fastener,SHCS M6 x 40 class 12.9,cell screws,4,2,0,"H-off uses 1; H3 uses 4",
+fastener,M6 x 65 stud class 10.9 or 12.9,H2 stud,1,1,0,H2,"cut from M6 all-thread"
+fastener,set screw M4 x 6 cup point,shaft sockets and dial stem clamp,5,1,0,"tower","implied by the plate notes (set screw, clamp screw); the tapped holes are not in the CAD"
+bought part,eyebolt DIN 580 M6,"check the working load of the exact part",1,1,0,"H H-off H3 R (one at a time)","the 75 kg cell rating can exceed a small eyebolt's rating"
+bought part,eye nut DIN 582 M6,,1,0,0,H2,
+bought part,linear bushing LM8LUU 8 / 15 / 45,,2,0,0,H2 + R carriage,
+bought part,dial indicator 0.001 mm with 8 mm stem,,1,0,0,H2 R,
+bought part,hanger and weight set,sized to the cell rating,1,0,0,all rigs,not drawn in the CAD
+consumable,thread locker medium (243),,1,0,0,rod studs and cell bolts,
+tool,reamer 6.1 mm and 7.0 mm,,1,0,0,cells,
+tool,bottoming taps M6 and M8,,1,0,0,"caps, blocks, plates",
+tool,thin 8 mm AF spanner ground to a 12 mm jaw,,1,0,0,sensor assembly,"grind a thin 8 mm wrench; see BUILD_GUIDE.md"
+tool,torque wrench or screwdriver 2 to 10 N.m,,1,0,0,sensor assembly,"torques in BUILD_GUIDE.md"
+tool,hex keys 5 mm and 4 mm,,1,0,0,all,
