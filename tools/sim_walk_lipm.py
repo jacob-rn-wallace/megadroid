@@ -137,7 +137,8 @@ low-mass passive ankle_roll pivot was added, then to today's 0.5355m when
 ankle_roll became a fully motorized joint -- design/mass.yaml -- adding a
 second motor+gearbox mass low in the kinematic chain each time it moved
 lower. Recomputed 2026-09-08; see tools/CLAUDE.md for why ankle_roll is
-temporarily actuated.)
+temporarily actuated.  It moved UP, to 0.5486m, on 2026-10-27 when
+hip_yaw added ~1 kg near the hip: legs 5 -> 6 DOF.)
 
 VALIDATED STATE (Stage 6/7, ankle_roll now actuated -- see run_walk's own
 docstring and tools/CLAUDE.md's dated entries for the full 2026-09-08
@@ -672,16 +673,21 @@ def swing_foot_target(t, liftoff_xy, touchdown_xy, step_height, t_start, t_end):
 def _selftest_stage0(model):
     z_c, offset = solve_whole_body_com_height(model)
     Tc = math.sqrt(z_c / G)
-    print(f"[stage 0] z_c={z_c:.5f} m (expect ~0.5355)  Tc={Tc:.4f} s (expect ~0.2336)"
+    print(f"[stage 0] z_c={z_c:.5f} m (expect ~0.5486)  Tc={Tc:.4f} s (expect ~0.2365)"
           f"  pelvis_com_offset_xy={offset}")
+    # Recomputed 2026-10-27 after hip_yaw was added (legs 5 -> 6 DOF, +1.0 kg
+    # in design/mass.yaml): z_c 0.5355 -> 0.5486m, Tc 0.2336 -> 0.2365s. The mass
+    # rose near the hip, so the whole-body CoM rose with it. This is a
+    # measured consequence of a documented design change, not a tuned value:
+    # the walking gains it shifts were re-swept in sim_walk_recede.py.
     # Verified constants recomputed 2026-09-08 after ankle_roll became a
     # fully motorized joint (design/joints.yaml, temporary -- see
     # tools/CLAUDE.md) and picked up a second motor+gearbox mass
     # (design/mass.yaml). Was z_c=0.5658/Tc=0.2402 with ankle_roll as a
     # light passive pivot, and z_c=0.5713/Tc=0.241 before ankle_roll existed
     # at all -- see module docstring.
-    assert abs(z_c - 0.5355) < 0.001, "z_c does not match verified whole-body CoM height"
-    assert abs(Tc - 0.2336) < 0.002, "Tc does not match verified value"
+    assert abs(z_c - 0.5486) < 0.001, "z_c does not match verified whole-body CoM height"
+    assert abs(Tc - 0.2365) < 0.002, "Tc does not match verified value"
     print("[stage 0] OK")
 
 
@@ -1516,7 +1522,10 @@ def run_walk(model, n_steps=5, render_path=None, render_every=10, verbose=True, 
             data.ctrl[act_index[f"act_{side}_knee_pitch"]] = knee
             data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = ankle
 
-        for jn in ("torso_pitch", "torso_roll", "torso_yaw"):
+        # hip_yaw (added 2026-10-27, legs 5 -> 6 DOF) is held at 0: these gaits
+        # plan in the sagittal/frontal planes and do not use it yet.
+        for jn in ("torso_pitch", "torso_roll", "torso_yaw",
+                   "left_hip_yaw", "right_hip_yaw"):
             data.ctrl[act_index[f"act_{jn}"]] = 0.0
 
         mujoco.mj_step(model, data)

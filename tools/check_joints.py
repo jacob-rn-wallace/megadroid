@@ -4,7 +4,16 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 JOINTS_FILE = REPO_ROOT / "design" / "joints.yaml"
-EXPECTED_MVS_DOF = 11
+
+
+def _expected_dof():
+    # Read the declared total from joints.yaml rather than hardcoding it here
+    # (this was a stale literal, 11, long after the design reached 13).
+    with open(JOINTS_FILE, "r") as f:
+        return yaml.safe_load(f)["meta"]["mvs_dof_total"]
+
+
+EXPECTED_MVS_DOF = _expected_dof()
 
 
 def main():

@@ -189,18 +189,20 @@ def create_urdf(joints_data, geometry_data, kinematics_data, mass_data):
 
     Kinematic chain per leg:
       pelvis
-        └─ {side}_hip_roll_joint (revolute, X-axis)
-             └─ {side}_hip_roll_link
-                  └─ {side}_hip_pitch_joint (revolute, Y-axis)
-                       └─ {side}_thigh
-                            └─ {side}_knee_pitch_joint (revolute, Y-axis)
-                                 └─ {side}_shin
-                                      └─ {side}_ankle_pitch_joint (revolute, Y-axis) [MVS]
-                                           └─ {side}_ankle
-                                                └─ {side}_ankle_roll_joint (revolute, X-axis, passive) [MVS]
-                                                     └─ {side}_ankle_roll
-                                                          └─ {side}_foot_joint (fixed)
-                                                               └─ {side}_foot
+        └─ {side}_hip_yaw_joint (revolute, Z-axis)
+             └─ {side}_hip_yaw_link
+                  └─ {side}_hip_roll_joint (revolute, X-axis)
+                       └─ {side}_hip_roll_link
+                            └─ {side}_hip_pitch_joint (revolute, Y-axis)
+                                 └─ {side}_thigh
+                                      └─ {side}_knee_pitch_joint (revolute, Y-axis)
+                                           └─ {side}_shin
+                                                └─ {side}_ankle_pitch_joint (revolute, Y-axis) [MVS]
+                                                     └─ {side}_ankle
+                                                          └─ {side}_ankle_roll_joint (revolute, X-axis, actuated) [MVS]
+                                                               └─ {side}_ankle_roll
+                                                                    └─ {side}_foot_joint (fixed)
+                                                                         └─ {side}_foot
 
     Torso chain:
       pelvis
@@ -300,6 +302,23 @@ def create_urdf(joints_data, geometry_data, kinematics_data, mass_data):
         p = side.lower()
         y = y_sign * hip_y_offset
 
+        hip_yaw_geom = ET.Element("sphere", radius="0.03")
+        hy_link = add_link(robot, f"{p}_hip_yaw_link",
+                           visual_origin_xyz=(0, 0, 0),
+                           visual_origin_rpy=(0, 0, 0),
+                           geometry=hip_yaw_geom,
+                           color_rgba=(0.8, 0.4, 0.1, 1.0),
+                           material_name="orange")
+        i3 = sphere_inertia(masses["hip_yaw_link"], 0.03)
+        add_inertial(hy_link, masses["hip_yaw_link"], (0, 0, 0), *i3)
+
+        lower, upper = get_limits(joints_data, "hip_yaw")
+        add_revolute_joint(robot, f"{p}_hip_yaw_joint",
+                           parent="pelvis", child=f"{p}_hip_yaw_link",
+                           origin_xyz=(0, y, 0), origin_rpy=(0, 0, 0),
+                           axis_xyz=get_joint_axis(kinematics_data, "hip_yaw"),
+                           lower_rad=lower, upper_rad=upper)
+
         hip_roll_geom = ET.Element("sphere", radius="0.03")
         hr_link = add_link(robot, f"{p}_hip_roll_link",
                            visual_origin_xyz=(0, 0, 0),
@@ -312,8 +331,8 @@ def create_urdf(joints_data, geometry_data, kinematics_data, mass_data):
 
         lower, upper = get_limits(joints_data, "hip_roll")
         add_revolute_joint(robot, f"{p}_hip_roll_joint",
-                           parent="pelvis", child=f"{p}_hip_roll_link",
-                           origin_xyz=(0, y, 0), origin_rpy=(0, 0, 0),
+                           parent=f"{p}_hip_yaw_link", child=f"{p}_hip_roll_link",
+                           origin_xyz=(0, 0, 0), origin_rpy=(0, 0, 0),
                            axis_xyz=get_joint_axis(kinematics_data, "hip_roll"),
                            lower_rad=lower, upper_rad=upper)
 

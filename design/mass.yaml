@@ -4,7 +4,7 @@
 # Do not duplicate these values in markdown documents.
 
 meta:
-  total_estimate_kg: 9.6
+  total_estimate_kg: 10.6
   basis: >
     775 DC motor assembly ~200g each (motor + gearbox + mounting hardware).
     Structural framing: 300mm twin-rail segments with bulkheads, ~150-250g each.
@@ -13,10 +13,20 @@ meta:
     the 2026-09-09 decision) and uses the same motor assembly estimate as
     ankle_pitch, not the smaller passive-hardware figure this file used
     before ankle_roll was first actuated.
+    Hip yaw (2026-10-27 design revision, legs go 5 -> 6 DOF): one more motor
+    assembly per leg (~200g, same estimate) plus a pivot link (~300g, the
+    hip_roll_link estimate). In the chain hip_yaw -> hip_roll -> hip_pitch
+    the pelvis now carries the two hip YAW motors where it carried the two
+    hip roll motors, and the hip roll motor moves onto the yaw-rotating link,
+    so pelvis is unchanged and hip_yaw_link carries motor + link. Net +1.0 kg
+    (9.6 -> 10.6).
   status: "nominal — pending verification during P6 physical build"
 
 bodies:
-  pelvis: 1.5             # structural pelvis frame + 2× hip roll motor assemblies
+  pelvis: 1.5             # structural pelvis frame + 2× hip YAW motor assemblies (the
+                          # hip roll motors moved onto hip_yaw_link, 2026-10-27)
+  hip_yaw_link: 0.5       # per side; hip roll motor assembly (0.2) + pivot link (0.3).
+                          # Rotates with hip_yaw. Added 2026-10-27 (5 -> 6 DOF legs).
   hip_roll_link: 0.3      # per side; minimal pivot link, no motor here
   thigh: 0.9              # per side; hip pitch motor + gearbox + 300mm twin-rail frame
   shin: 0.7               # per side; knee pitch motor + gearbox + 300mm twin-rail frame

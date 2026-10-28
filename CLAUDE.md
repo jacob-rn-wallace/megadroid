@@ -112,8 +112,11 @@ rendered docs didn't even source it from YAML; both were fixed together.)
 
 ### Key Design Constants (do not change without an explicit design revision)
 
-- **MVS DOF:** 13 actuated joints, all 13 deliberately kept actuated for the
-  time being (2026-09-09 decision — see `tools/CLAUDE.md`). `ankle_roll` in
+- **MVS DOF:** 15 actuated joints, all 15 deliberately kept actuated for the
+  time being (2026-09-09 decision — see `tools/CLAUDE.md`). Legs are **6-DOF**:
+  `hip_yaw` was added in the 2026-10-27 design revision (it was 13 joints and
+  5-DOF legs before; the walking controllers hold hip yaw at 0 and do not use
+  it yet). `ankle_roll` in
   particular was first actuated because simulation found the walking
   controllers have no lateral feedback and a passive spring-centered
   ankle_roll left the gait unstable; a session of lateral push-recovery
@@ -122,7 +125,8 @@ rendered docs didn't even source it from YAML; both were fixed together.)
   hardware), even though the control software doesn't yet exploit it well.
   A passive spring-centered ankle_roll remains a possible future
   simplification, not a committed plan.
-  - Per leg (×2): `hip_pitch`, `hip_roll`, `knee_pitch`, `ankle_pitch`, `ankle_roll`
+  - Per leg (×2): `hip_yaw`, `hip_roll`, `hip_pitch`, `knee_pitch`, `ankle_pitch`, `ankle_roll`
+    (chain order from the pelvis outward)
   - Torso: `torso_pitch`, `torso_roll`, `torso_yaw`
 - **Actuator:** 775 brushed DC motors, 24V
 - **Control mode:** ZMP-based

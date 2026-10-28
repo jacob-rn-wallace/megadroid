@@ -56,6 +56,7 @@ import numpy as np
 import mujoco
 
 HINGE_JOINTS = (
+    "left_hip_yaw", "right_hip_yaw",
     "left_hip_roll", "right_hip_roll",
     "left_hip_pitch", "right_hip_pitch",
     "left_knee_pitch", "right_knee_pitch",

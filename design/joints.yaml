@@ -12,9 +12,34 @@
 #   and for joints that aren't installed at all.
 
 meta:
-  mvs_dof_total: 13    # declared expected total; validator checks counted value against this
+  mvs_dof_total: 15    # declared expected total; validator checks counted value against this
+                       # 2026-10-27 design revision: 13 -> 15. Legs go from 5 to 6 actuated DOF
+                       # each (hip_yaw added, ahead of hip_roll in the chain). See hip_yaw below.
 
 joints:
+  hip_yaw:
+    type: revolute
+    axis: yaw
+    location: hip
+    actuated: true    # DESIGN REVISION 2026-10-27: the MVS leg is 6-DOF from the start.
+                       # Before this the legs had 5 actuated DOF (hip_pitch, hip_roll,
+                       # knee_pitch, ankle_pitch, ankle_roll) and MECH.md described hip yaw
+                       # as "structurally present but locked". It is now an actuated MVS
+                       # joint. Chain order is hip_yaw -> hip_roll -> hip_pitch (Hubo
+                       # order); the three hip axes meet at one point, as hip_roll and
+                       # hip_pitch already did. The walking controllers do NOT use it yet:
+                       # they hold it at 0, so the validated gaits keep their planar leg
+                       # model. Turning, foot placement yaw and hip-yaw reaction torque
+                       # are future work (tools/CLAUDE.md, 2026-10-27).
+    variants:
+      MVS: true
+      FULL: true
+    angle_reference: neutral_upright
+    limits_deg:
+      min: -30   # PLACEHOLDER -- nominal range estimate, not yet engineered.
+      max: 30    # Sized to the other hip axes (hip_roll is +-30). Revise at P6.
+    nominal_stand_deg: 0
+
   hip_pitch:
     type: revolute
     axis: pitch

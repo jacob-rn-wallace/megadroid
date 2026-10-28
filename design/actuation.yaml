@@ -17,7 +17,7 @@ meta:
 motor:
   model: "775 brushed DC motors"
   voltage_nominal_v: 24
-  count_mvs: 13
+  count_mvs: 15                # 13 before the 2026-10-27 hip_yaw revision (legs 5 -> 6 DOF)
   stall_torque_nm: 0.20        # PLACEHOLDER -- representative 775-class figure at
                                 # 24V, NOT a datasheet value for a selected part.
                                 # 775 motors vary widely between vendors. Must be
@@ -155,7 +155,7 @@ estimate_ranges:
       24.5 A stall), 0.84 N-m (119.43 oz-in, 12600 rpm, 59 A stall). The current
       nominal (0.20) sits BELOW this whole range, i.e. it is an implicit derate.
       Datasheet stall is not usable peak: 25-60 A stall current exceeds what the
-      motor driver or the shared DC/DC (BOM) can deliver on 13 joints at once,
+      motor driver or the shared DC/DC (BOM) can deliver on 15 joints at once,
       and is thermally instantaneous. Usable fraction is a separate unknown.
   motor.no_load_speed_rpm:
     low: 3800

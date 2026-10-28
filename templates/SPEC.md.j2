@@ -58,6 +58,11 @@ authoritative joint model defined in `design/joints.yaml`.
 **Total actuated DOF:** **{{ dof.total }}**
 <!-- END AUTO-GENERATED: DOF -->
 
+Each leg is a six-DOF leg: a three-axis hip (yaw, roll and pitch axes meeting at one point),
+a knee, and a two-axis ankle. Hip yaw was added by the 2026-10-27 design revision; the legs
+previously had five actuated DOF. The walking controllers do not yet use it (they hold it at
+zero), so yaw steering and turning are not yet demonstrated in simulation.
+
 ### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
 
 The robot supports modular lower-leg assemblies. The MVS lower-leg module includes both ankle pitch and ankle roll as actuated joints — see Section 5 for the reasoning. A passive, spring-centered ankle roll remains a possible future simplification, not a committed plan; the module boundary is kept compatible with it without requiring redesign of the pelvis, thigh, knee, or control stack.

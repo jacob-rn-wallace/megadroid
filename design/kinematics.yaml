@@ -27,11 +27,15 @@ base_frame:
     Robot base frame is located at the geometric center of the pelvis structure
     in the nominal standing pose, with axes aligned to the global coordinate system.
   location:
-    description: "Midpoint between left and right hip roll joint centers"
+    description: "Midpoint between left and right hip joint centers (the hip yaw, roll and pitch axes of one leg meet at that leg's hip joint center)"
   orientation:
     description: "Aligned with global frame in nominal standing pose"
 
 joint_axes:
+  hip_yaw:
+    axis_direction: "z"  # rotation around the vertical axis; first axis of the hip chain
+    positive_direction: "leg rotates counter-clockwise seen from above (toe turns toward the left)"
+
   hip_pitch:
     axis_direction: "y"  # rotation around lateral axis
     positive_direction: "forward leg swing"

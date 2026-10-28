@@ -48,6 +48,14 @@ sim_measured_loads:
   # committed 11.2 N.m cap, 175 mm hip spacing, 9.6 kg, compliant sole.
   # A floor on real loads: the contact model is smoother than a real heel strike, and
   # the controller only walks at ~0.4-0.5 km/h.
+  #
+  # RE-LOGGED 2026-10-27 on the 6-DOF-leg model (hip_yaw added, 10.6 kg, re-tuned gains; only
+  # 11 of 24 pushes survive, so fewer runs are pooled). Peak: fx 49.8, fy 40.7, fz 171.4,
+  # mx 6.8, my 10.8, mz 4.0. p99: fx 28.6, fy 26.4, fz 124.5, mx 4.9, my 7.8, mz 2.9.
+  # Against the values below: fy -13%, mz -20%, my +8%, the rest within 2%. NOT adopted here: peak is the design basis that sizing.py and
+  # design_synthesis.py (and so the build candidate and its checks) were computed from, and
+  # swapping it silently would leave them stale. Re-run both with the new values before
+  # changing it.
   peak:  {fx_n: 49.9, fy_n: 46.7, fz_n: 174.6, mx_nm: 6.9, my_nm: 10.0, mz_nm: 5.0}
   p99:   {fx_n: 27.2, fy_n: 23.1, fz_n: 112.2, mx_nm: 4.5, my_nm: 7.0, mz_nm: 2.6}
   vs_assumed_peak: >

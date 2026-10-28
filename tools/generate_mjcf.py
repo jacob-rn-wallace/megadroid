@@ -160,7 +160,7 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data, actuation_data, sens
                   friction="0.8 0.02 0.01")
 
     # ── Pelvis (floating base) ─────────────────────────────────────────────
-    # Collision half-width in y must stay inside the hip roll spacing (hip_y)
+    # Collision half-width in y must stay inside the hip spacing (hip_y)
     # minus the hip_roll_link sphere radius (0.03) plus clearance, or the
     # pelvis box overlaps the thigh cylinders and injects spurious contacts.
     pelvis_hy = max(0.02, hip_y - 0.035)
@@ -186,11 +186,32 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data, actuation_data, sens
         s = side.lower()
         y = y_sign * hip_y
 
+        # Hip yaw (first axis of the hip chain: yaw -> roll -> pitch). The three
+        # hip axes meet at one point, so the roll link below sits at this
+        # body's origin (pos "0 0 0"), the same co-located compound-axis
+        # convention used for the torso and the ankle. The yaw link carries the
+        # hip roll motor assembly (design/mass.yaml hip_yaw_link). Its sphere is
+        # visual only (contype/conaffinity 0): a colliding sphere would touch
+        # the grandchild thigh cylinder at the hip.
+        lo, hi = get_range(joints_data, "hip_yaw")
+        hy = ET.SubElement(parent_body, "body",
+                           name=f"{s}_hip_yaw_link",
+                           pos=f"0 {y:.4f} 0")
+        ET.SubElement(hy, "joint",
+                      name=f"{s}_hip_yaw", type="hinge",
+                      axis=get_axis(kin_data, "hip_yaw"),
+                      range=f"{lo:.6f} {hi:.6f}")
+        i3 = sphere_inertia(masses["hip_yaw_link"], 0.03)
+        add_inertial(hy, masses["hip_yaw_link"], (0, 0, 0), *i3)
+        ET.SubElement(hy, "geom",
+                      name=f"{s}_hip_yaw_geom", type="sphere", size="0.03",
+                      contype="0", conaffinity="0", rgba="0.8 0.4 0.1 1")
+
         # Hip roll
         lo, hi = get_range(joints_data, "hip_roll")
-        hr = ET.SubElement(parent_body, "body",
+        hr = ET.SubElement(hy, "body",
                            name=f"{s}_hip_roll_link",
-                           pos=f"0 {y:.4f} 0")
+                           pos="0 0 0")
         ET.SubElement(hr, "joint",
                       name=f"{s}_hip_roll", type="hinge",
                       axis=get_axis(kin_data, "hip_roll"),
@@ -328,6 +349,11 @@ def create_mjcf(joints_data, geo_data, kin_data, mass_data, actuation_data, sens
     for side in ("left", "right"):
         ET.SubElement(contact, "exclude",
                       body1="pelvis", body2=f"{side}_thigh")
+        # hip_roll_link is a grandchild of the pelvis since hip_yaw_link was
+        # inserted between them (2026-10-27); it used to be a direct child and
+        # so auto-excluded.
+        ET.SubElement(contact, "exclude",
+                      body1="pelvis", body2=f"{side}_hip_roll_link")
 
     # ── Torso chain ───────────────────────────────────────────────────────
     # torso_pitch_link, torso_roll_link, and torso all sit at the same

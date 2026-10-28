@@ -876,8 +876,17 @@ def _selftest_stage2(model):
 # n=25 fall. Verified this does NOT regress sagittal push recovery
 # (4/5 forces still survive). Does NOT fix lateral push recovery --
 # kept for the nominal-walking-quality gain alone.
-K_DCM_RECEDE = -0.77
+# (value was -0.77 until 2026-10-27 -- see the re-tune note below)
 
+# RE-TUNED 2026-10-27 after hip_yaw was added (legs 5 -> 6 DOF, +1.0 kg, z_c
+# 0.5355 -> 0.5486m). The -0.77 / 1.5 / 5000 point above fell to a 6-step clean
+# range (8.46deg at n=4/6, 12.9deg at n=8, falls from n=10) on the heavier
+# model, from 16 steps clean (7.36deg) on the same code before the change.
+# Coordinate-descent re-sweep (tools/CLAUDE.md, 2026-10-27): -0.92 / 1.1 / 7500
+# is flat 9.1deg from n=8 through n=40. Same caveat as every gain here: it is
+# a narrow ridge (K_DCM_Y_SCALE 1.05 and 1.15 and K_ADM_RECEDE <= 6000 all fall
+# by n=30), not a robust optimum.
+K_DCM_RECEDE = -0.92
 # K_DCM_Y_SCALE: the lateral DCM gain, as a multiple of K_DCM_RECEDE.
 #
 # Until 2026-09-10 K_DCM_RECEDE was applied to BOTH axes with a single value.
@@ -899,7 +908,7 @@ K_DCM_RECEDE = -0.77
 # 8.76 -> 6.27deg, and the clean step range DOUBLES from 8 to 16 at the real
 # 80:1 torque envelope. Verified across four independent step counts
 # (8/10/12/16), all deterministic no-push runs.
-K_DCM_Y_SCALE = 1.5
+K_DCM_Y_SCALE = 1.1    # was 1.5 until 2026-10-27, see K_DCM_RECEDE
 
 # K_ADM_RECEDE: this file's own admittance gain -- deliberately NOT lw.K_ADM,
 # same rationale as K_DCM_RECEDE above (this file's receding-horizon loop
@@ -922,7 +931,7 @@ K_DCM_Y_SCALE = 1.5
 # other gain in this stack, not a robustness improvement, just a nominal-
 # walking one. NOT shared back into lw.K_ADM -- lw.run_walk's own stability
 # margin for this value was not re-verified this pass.
-K_ADM_RECEDE = 5000
+K_ADM_RECEDE = 7500    # was 5000 until 2026-10-27, see K_DCM_RECEDE
 
 # Slow outer loop cadence -- footstep retarget + short-horizon replan. Not
 # every physics tick (dt=0.002s, 500Hz): the DCM/CoM trajectory only needs
@@ -1482,7 +1491,10 @@ def run_walk_recede(model, n_steps=None, duration=None, render_path=None,
             data.ctrl[act_index[f"act_{side}_knee_pitch"]] = knee
             data.ctrl[act_index[f"act_{side}_ankle_pitch"]] = ankle
 
-        for jn in ("torso_pitch", "torso_roll", "torso_yaw"):
+        # hip_yaw (added 2026-10-27, legs 5 -> 6 DOF) is held at 0: these gaits
+        # plan in the sagittal/frontal planes and do not use it yet.
+        for jn in ("torso_pitch", "torso_roll", "torso_yaw",
+                   "left_hip_yaw", "right_hip_yaw"):
             data.ctrl[act_index[f"act_{jn}"]] = 0.0
 
         mujoco.mj_step(model, data)

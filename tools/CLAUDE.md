@@ -140,14 +140,15 @@ before concluding nothing exists on a topic.
 **Simulation framework:** MuJoCo (installed: `pip install mujoco`).
 
 **What exists and works:**
-- `design/mass.yaml` — authoritative link mass estimates (9.60 kg total)
+- `design/mass.yaml` — authoritative link mass estimates (10.60 kg total as of 2026-10-27; 9.60 kg before hip_yaw)
 - `tools/generate_mjcf.py` — generates `simulation/mujoco/megadroid_mvs.xml`;
   also excludes self-collision pairs (pelvis↔thigh, and the non-adjacent
   pairs among the stacked torso_pitch/torso_roll/torso links) where
   collision-proxy geometry inevitably overlaps by construction
-- `tools/sim_load_test.py` — model loads cleanly (17 bodies, 13 actuators — the
-  usual 11 plus ankle_roll, now temporarily actuated on both legs; see the
-  dated entry below `sim_walk_recede.py`) ✓
+- `tools/sim_load_test.py` — model loads cleanly (21 bodies, 15 actuators — 6 per
+  leg including hip_yaw, added 2026-10-27, plus 3 torso; the earlier 13 were the
+  usual 11 plus ankle_roll, now actuated on both legs; see the dated entries
+  below) ✓
 - `tools/sim_static_pose.py` — **P3 fixed-base milestone, passing.** Welds
   the pelvis to the world (like a test-stand bolt), holds the nominal
   standing pose (knees bent 12°), and validates the weld's vertical
@@ -2945,3 +2946,45 @@ Against the layout study's assumed peaks (Fz 300, shear 150, Mx/My 15, Mz 3) eve
 EXCEPT Mz, which was under-assumed. Scored on these wrenches, the worst cell sits at 25-41% of a
 75 kg rating (rating unverified). Peaks are a floor: the contact model is smoother than a real
 heel strike and the gait is slow. Values recorded in `design/ft_sensor.yaml`.
+
+### 2026-10-27 -- Design revision: legs go from 5 to 6 actuated DOF (hip_yaw added), 13 -> 15 joints
+
+**Decision (user's):** commit to 6-DOF legs from the start. The chain is hip_yaw -> hip_roll -> hip_pitch
+(Hubo order), the three hip axes meeting at one point, so leg kinematics at hip_yaw = 0 are unchanged. Before
+this the simulation did NOT have a sixth leg DOF either: `joints.yaml` had no hip_yaw, the URDF/MJCF had
+5 joints per leg, and `MECH.md` only said hip yaw was "structurally present but locked". (The "[6 DOF each]"
+in `sim_load_test.py` is the floating base's free joint.) So this added the joint to the model, not just the docs.
+
+**Changed:** `design/joints.yaml` (hip_yaw, +-30 deg PLACEHOLDER, `mvs_dof_total` 15), `kinematics.yaml`
+(axis z), `mass.yaml` (`hip_yaw_link` 0.5 kg per side = the hip roll motor, which moves onto the yaw link, plus
+a 0.3 kg pivot link; pelvis stays 1.5 kg because it now holds the yaw motors instead; total 9.6 -> 10.6 kg),
+`actuation.yaml` (`count_mvs` 15), `geometry.yaml` (wording), `BOM.csv` (15 motors, gearboxes, belts and encoders:
+$1,345 -> $1,471 on the lines that count, against the $800-1,500 target), `CLAUDE.md`, the SPEC/MECH templates
+(rehydrated), `generate_urdf.py`, `generate_mjcf.py` (visual-only hip_yaw sphere, pelvis<->hip_roll_link contact
+exclude since that pair is no longer parent/child), `state_estimator.py` (HINGE_JOINTS), `check_joints.py` (its
+expected total was a stale literal, 11; it now reads `mvs_dof_total`). The gaits hold hip_yaw at 0 (kp 150, same
+servo as every joint); they do not use it.
+
+**What moved (measured, 5-DOF = HEAD before this change):**
+- whole-body CoM `z_c` 0.5355 -> 0.5486 m, `Tc` 0.2336 -> 0.2365 s. The gate's stage-0 assertion in
+  `sim_walk_lipm.py` caught it. Its expected values were updated, with the cause recorded there.
+- with the OLD gains `sim_walk_recede` went from clean to 16 steps (7.36 deg; falls at 20) to clean only to 6 steps
+  (8.46 deg), 12.9 deg at n=8, falling from n=10. The locked-yaw variant (yaw joint welded to 0, same mass) was
+  worse (23.6 deg at n=8), so this is the mass and CoM shift, not yaw compliance.
+- push survival with the old gains: 4/24 (lateral and sagittal, 5 and 10 N, 6 timings, `log_ft_loads` battery),
+  against 19/24 on the 5-DOF legs.
+
+**Re-tune (same method as the 2026-09-08 and 2026-09-10 entries):** coordinate descent on K_DCM_RECEDE x
+K_DCM_Y_SCALE x K_ADM_RECEDE, scored on peak tilt at n = 8..40 first, then on the push battery. New values
+-0.92 / 1.1 / 7500 (were -0.77 / 1.5 / 5000): flat 9.1 deg from n=8 through n=40. This is a narrow ridge, like
+every earlier optimum: K_DCM_Y_SCALE 1.05 or 1.15, or K_ADM_RECEDE <= 6000, fall by n=30. 19 gain sets were scored
+on the push battery and the best was 12/24 at -0.94 / 1.1 / 7500, which falls by n=25, so -0.92 (11/24, clean to n=40) was kept; the rest scored 2-11, the old gains 4. So the
+retune recovers nominal walking (clean range 16 -> at least 40 steps) but NOT push survival: 11/24 against 19/24
+on the 5-DOF legs. That is the number to beat. Candidates were chosen for nominal walking first and ranked by
+pushes second; a push-first search was not run.
+
+**Not done:** `sweep_estimates.py` and `sweep_sole.py` (7 and 15 min) were not re-run, so the robustness of the
+conclusions to the placeholder ranges is unchecked on the 6-DOF model. `log_ft_loads` was re-run; its numbers are
+noted in `design/ft_sensor.yaml` but not adopted as the design basis (hardware sizing was computed from the old
+ones). Hip-yaw use (turning, foot yaw at placement, yaw reaction torque) is future work; the walkers are planar.
+The locked-yaw and old-gain comparisons were run once each: deterministic but, as ever, knife-edge.
