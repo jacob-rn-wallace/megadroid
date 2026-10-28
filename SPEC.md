@@ -8,7 +8,7 @@ authority: authoritative
 
 **Status:** Authoritative  
 **Scope:** Minimum Viable System (MVS)  
-**Last rehydrated:** 2026-10-21
+**Last rehydrated:** 2026-10-27
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -46,6 +46,7 @@ authoritative joint model defined in `design/joints.yaml`.
 
 <!-- BEGIN AUTO-GENERATED: DOF -->
 **Legs (×2):**
+- Hip Yaw (yaw)
 - Hip Pitch (pitch)
 - Hip Roll (roll)
 - Knee Pitch (pitch)
@@ -57,8 +58,13 @@ authoritative joint model defined in `design/joints.yaml`.
 - Torso Roll (roll)
 - Torso Yaw (yaw)
 
-**Total actuated DOF:** **13**
+**Total actuated DOF:** **15**
 <!-- END AUTO-GENERATED: DOF -->
+
+Each leg is a six-DOF leg: a three-axis hip (yaw, roll and pitch axes meeting at one point),
+a knee, and a two-axis ankle. Hip yaw was added by the 2026-10-27 design revision; the legs
+previously had five actuated DOF. The walking controllers do not yet use it (they hold it at
+zero), so yaw steering and turning are not yet demonstrated in simulation.
 
 ### 3.2 Modular / Swappable Lower-Leg Assemblies (MVS vs Full System)
 
@@ -105,7 +111,7 @@ Overall body proportions are humanoid and sized to comfortably navigate resident
 - All actuators use **775 brushed DC motors**
 - Nominal motor voltage: **24 V**
 - Motors mounted as proximally as possible to minimize distal inertia
-- Total motor count (MVS): **13**
+- Total motor count (MVS): **15**
 
 ### 6.2 Gear Reduction
 - Standardized gearbox classes reused across joints

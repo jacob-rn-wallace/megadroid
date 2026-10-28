@@ -8,7 +8,7 @@ authority: derived
 
 **Status:** Authoritative (MVS)  
 **Scope:** Mechanical implementation details for the Minimum Viable System  
-**Last rehydrated:** 2026-10-21
+**Last rehydrated:** 2026-10-27
 
 > **Note:** This document is a derived view of authoritative design data
 > defined in `design/*.yaml`. See `REHYDRATE.md` for the rehydration process.
@@ -47,14 +47,18 @@ roll is kept actuated deliberately for the time being (see Section 5.4).
 
 ### 3.1 Degrees of Freedom per Leg
 
-Each leg implements **five actuated DOF**:
-- Hip pitch
+Each leg implements **six actuated DOF**:
+- Hip yaw
 - Hip roll
+- Hip pitch
 - Knee pitch
 - Ankle pitch
 - Ankle roll — **interim actuation** (see Section 5.4): temporarily motorized rather
   than passive/spring-centered, pending walking-controller work. See
   `design/joints.yaml` (`ankle_roll`).
+
+Hip yaw was added in the 2026-10-27 design revision, taking the legs from five to six
+actuated DOF. See Section 5.2.
 
 The lower-leg module's knee-to-module mechanical interface is preserved, so a future
 variant can return ankle roll to a passive, spring-centered joint without redesigning
@@ -88,7 +92,7 @@ Where beneficial, thin cover plates or printed skins may be added to form a clos
 - Length (hip → knee): defined in `design/geometry.yaml`
 - Contains:
   - Hip pitch output shaft
-  - Hip roll output shaft
+  - Hip roll output shaft (carried on the hip yaw link above the thigh, Section 5.2)
   - Proximal portion of knee actuator (if applicable)
 
 Motors are mounted as proximally as possible to reduce distal inertia.
@@ -136,17 +140,23 @@ encoder.
 
 ### 5.2 Hip Joint Assembly
 
-The hip consists of **two orthogonal rotational axes**:
+The hip consists of **three orthogonal rotational axes** that meet at one point, in this
+chain order from the pelvis outward:
 
+- **Hip yaw** (turning the leg about the vertical axis)
 - **Hip roll** (lateral balance)
 - **Hip pitch** (sagittal plane motion)
 
 Key characteristics:
-- Motors mounted proximally (pelvis or upper thigh)
+- Motors mounted proximally (pelvis, hip yaw link or upper thigh)
+- The hip yaw motors sit in the pelvis. The hip roll motor rides on the hip yaw link and
+  turns with it, so the hip yaw output shaft carries the roll motor's weight
 - Gearboxes coupled directly to joint output shafts
 - Bearings sized for combined radial and moment loads
 
-Hip yaw is structurally present but **locked** in the MVS.
+Hip yaw is an actuated MVS joint (design revision 2026-10-27; it was previously described
+here as present but locked). The current walking controllers hold it at zero, so turning is
+not yet demonstrated in simulation.
 
 Hip joint output shafts use standardized shafting as defined in `design/geometry.yaml` (locked) to standardize bearings, hubs, and pulley bores.
 
