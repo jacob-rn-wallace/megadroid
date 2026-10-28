@@ -85,6 +85,29 @@
     <axis xyz="0 0 1"/>
     <limit lower="-0.7853981633974483" upper="0.7853981633974483" effort="11.2" velocity="19.6"/>
   </joint>
+  <link name="left_hip_yaw_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="orange">
+        <color rgba="0.8 0.4 0.1 1.0"/>
+      </material>
+    </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.00018000" iyy="0.00018000" izz="0.00018000" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
+  </link>
+  <joint name="left_hip_yaw_joint" type="revolute">
+    <parent link="pelvis"/>
+    <child link="left_hip_yaw_link"/>
+    <origin xyz="0 0.0875 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="11.2" velocity="19.6"/>
+  </joint>
   <link name="left_hip_roll_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -102,9 +125,9 @@
     </inertial>
   </link>
   <joint name="left_hip_roll_joint" type="revolute">
-    <parent link="pelvis"/>
+    <parent link="left_hip_yaw_link"/>
     <child link="left_hip_roll_link"/>
-    <origin xyz="0 0.0875 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <axis xyz="1 0 0"/>
     <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="11.2" velocity="19.6"/>
   </joint>
@@ -221,6 +244,29 @@
     <child link="left_foot"/>
     <origin xyz="0.05 0 -0.08" rpy="0 0 0"/>
   </joint>
+  <link name="right_hip_yaw_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="orange">
+        <color rgba="0.8 0.4 0.1 1.0"/>
+      </material>
+    </visual>
+    <inertial>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.00018000" iyy="0.00018000" izz="0.00018000" ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+    </inertial>
+  </link>
+  <joint name="right_hip_yaw_joint" type="revolute">
+    <parent link="pelvis"/>
+    <child link="right_hip_yaw_link"/>
+    <origin xyz="0 -0.0875 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="11.2" velocity="19.6"/>
+  </joint>
   <link name="right_hip_roll_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -238,9 +284,9 @@
     </inertial>
   </link>
   <joint name="right_hip_roll_joint" type="revolute">
-    <parent link="pelvis"/>
+    <parent link="right_hip_yaw_link"/>
     <child link="right_hip_roll_link"/>
-    <origin xyz="0 -0.0875 0" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <axis xyz="1 0 0"/>
     <limit lower="-0.5235987755982988" upper="0.5235987755982988" effort="11.2" velocity="19.6"/>
   </joint>

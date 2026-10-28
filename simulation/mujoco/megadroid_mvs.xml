@@ -17,31 +17,36 @@
       <inertial mass="1.5" pos="0.000000 0.000000 0.000000" diaginertia="0.00419062 0.00781250 0.00637813"/>
       <geom name="pelvis_geom" type="box" size="0.10 0.0525 0.075" pos="0 0 0" rgba="0.5 0.5 0.5 1"/>
       <site name="imu_site" pos="0 0 0" size="0.005"/>
-      <body name="left_hip_roll_link" pos="0 0.0875 0">
-        <joint name="left_hip_roll" type="hinge" axis="1 0 0" range="-0.523599 0.523599"/>
-        <inertial mass="0.3" pos="0.000000 0.000000 0.000000" diaginertia="0.00010800 0.00010800 0.00010800"/>
-        <geom name="left_hip_roll_geom" type="sphere" size="0.03" rgba="0.8 0.4 0.1 1"/>
-        <body name="left_thigh" pos="0 0 0">
-          <joint name="left_hip_pitch" type="hinge" axis="0 1 0" range="-0.523599 1.919862"/>
-          <inertial mass="0.9" pos="0.000000 0.000000 -0.150000" diaginertia="0.00711000 0.00711000 0.00072000"/>
-          <geom name="left_thigh_geom" type="cylinder" size="0.040 0.1500" pos="0 0 -0.1500" rgba="0.2 0.2 0.8 1"/>
-          <body name="left_shin" pos="0 0 -0.3000">
-            <joint name="left_knee_pitch" type="hinge" axis="0 1 0" range="0.000000 2.443461"/>
-            <inertial mass="0.7" pos="0.000000 0.000000 -0.150000" diaginertia="0.00546437 0.00546437 0.00042875"/>
-            <geom name="left_shin_geom" type="cylinder" size="0.035 0.1500" pos="0 0 -0.1500" rgba="0.2 0.2 0.8 1"/>
-            <body name="left_ankle" pos="0 0 -0.3000">
-              <joint name="left_ankle_pitch" type="hinge" axis="0 1 0" range="-0.523599 0.523599"/>
-              <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00008750 0.00008750 0.00008750"/>
-              <geom name="left_ankle_geom" type="sphere" size="0.025" rgba="0.8 0.4 0.1 1"/>
-              <body name="left_ankle_roll" pos="0 0 0">
-                <joint name="left_ankle_roll" type="hinge" axis="1 0 0" range="-0.261799 0.261799"/>
-                <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00005600 0.00005600 0.00005600"/>
-                <geom name="left_ankle_roll_geom" type="sphere" size="0.020" rgba="0.8 0.4 0.1 1"/>
-                <body name="left_ft_sensor" pos="0 0 0">
-                  <body name="left_foot" pos="0.05 0 -0.0800">
-                    <site name="left_ft_site" pos="0 0 0"/>
-                    <inertial mass="0.15" pos="0.000000 0.000000 0.000000" diaginertia="0.00010000 0.00030125 0.00036125"/>
-                    <geom name="left_foot_geom" type="box" size="0.075 0.040 0.020" pos="0 0 0.020" solref="0.05 1.0" rgba="0.1 0.1 0.1 1"/>
+      <body name="left_hip_yaw_link" pos="0 0.0875 0">
+        <joint name="left_hip_yaw" type="hinge" axis="0 0 1" range="-0.523599 0.523599"/>
+        <inertial mass="0.5" pos="0.000000 0.000000 0.000000" diaginertia="0.00018000 0.00018000 0.00018000"/>
+        <geom name="left_hip_yaw_geom" type="sphere" size="0.03" contype="0" conaffinity="0" rgba="0.8 0.4 0.1 1"/>
+        <body name="left_hip_roll_link" pos="0 0 0">
+          <joint name="left_hip_roll" type="hinge" axis="1 0 0" range="-0.523599 0.523599"/>
+          <inertial mass="0.3" pos="0.000000 0.000000 0.000000" diaginertia="0.00010800 0.00010800 0.00010800"/>
+          <geom name="left_hip_roll_geom" type="sphere" size="0.03" rgba="0.8 0.4 0.1 1"/>
+          <body name="left_thigh" pos="0 0 0">
+            <joint name="left_hip_pitch" type="hinge" axis="0 1 0" range="-0.523599 1.919862"/>
+            <inertial mass="0.9" pos="0.000000 0.000000 -0.150000" diaginertia="0.00711000 0.00711000 0.00072000"/>
+            <geom name="left_thigh_geom" type="cylinder" size="0.040 0.1500" pos="0 0 -0.1500" rgba="0.2 0.2 0.8 1"/>
+            <body name="left_shin" pos="0 0 -0.3000">
+              <joint name="left_knee_pitch" type="hinge" axis="0 1 0" range="0.000000 2.443461"/>
+              <inertial mass="0.7" pos="0.000000 0.000000 -0.150000" diaginertia="0.00546437 0.00546437 0.00042875"/>
+              <geom name="left_shin_geom" type="cylinder" size="0.035 0.1500" pos="0 0 -0.1500" rgba="0.2 0.2 0.8 1"/>
+              <body name="left_ankle" pos="0 0 -0.3000">
+                <joint name="left_ankle_pitch" type="hinge" axis="0 1 0" range="-0.523599 0.523599"/>
+                <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00008750 0.00008750 0.00008750"/>
+                <geom name="left_ankle_geom" type="sphere" size="0.025" rgba="0.8 0.4 0.1 1"/>
+                <body name="left_ankle_roll" pos="0 0 0">
+                  <joint name="left_ankle_roll" type="hinge" axis="1 0 0" range="-0.261799 0.261799"/>
+                  <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00005600 0.00005600 0.00005600"/>
+                  <geom name="left_ankle_roll_geom" type="sphere" size="0.020" rgba="0.8 0.4 0.1 1"/>
+                  <body name="left_ft_sensor" pos="0 0 0">
+                    <body name="left_foot" pos="0.05 0 -0.0800">
+                      <site name="left_ft_site" pos="0 0 0"/>
+                      <inertial mass="0.15" pos="0.000000 0.000000 0.000000" diaginertia="0.00010000 0.00030125 0.00036125"/>
+                      <geom name="left_foot_geom" type="box" size="0.075 0.040 0.020" pos="0 0 0.020" solref="0.05 1.0" rgba="0.1 0.1 0.1 1"/>
+                    </body>
                   </body>
                 </body>
               </body>
@@ -49,31 +54,36 @@
           </body>
         </body>
       </body>
-      <body name="right_hip_roll_link" pos="0 -0.0875 0">
-        <joint name="right_hip_roll" type="hinge" axis="1 0 0" range="-0.523599 0.523599"/>
-        <inertial mass="0.3" pos="0.000000 0.000000 0.000000" diaginertia="0.00010800 0.00010800 0.00010800"/>
-        <geom name="right_hip_roll_geom" type="sphere" size="0.03" rgba="0.8 0.4 0.1 1"/>
-        <body name="right_thigh" pos="0 0 0">
-          <joint name="right_hip_pitch" type="hinge" axis="0 1 0" range="-0.523599 1.919862"/>
-          <inertial mass="0.9" pos="0.000000 0.000000 -0.150000" diaginertia="0.00711000 0.00711000 0.00072000"/>
-          <geom name="right_thigh_geom" type="cylinder" size="0.040 0.1500" pos="0 0 -0.1500" rgba="0.2 0.2 0.8 1"/>
-          <body name="right_shin" pos="0 0 -0.3000">
-            <joint name="right_knee_pitch" type="hinge" axis="0 1 0" range="0.000000 2.443461"/>
-            <inertial mass="0.7" pos="0.000000 0.000000 -0.150000" diaginertia="0.00546437 0.00546437 0.00042875"/>
-            <geom name="right_shin_geom" type="cylinder" size="0.035 0.1500" pos="0 0 -0.1500" rgba="0.2 0.2 0.8 1"/>
-            <body name="right_ankle" pos="0 0 -0.3000">
-              <joint name="right_ankle_pitch" type="hinge" axis="0 1 0" range="-0.523599 0.523599"/>
-              <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00008750 0.00008750 0.00008750"/>
-              <geom name="right_ankle_geom" type="sphere" size="0.025" rgba="0.8 0.4 0.1 1"/>
-              <body name="right_ankle_roll" pos="0 0 0">
-                <joint name="right_ankle_roll" type="hinge" axis="1 0 0" range="-0.261799 0.261799"/>
-                <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00005600 0.00005600 0.00005600"/>
-                <geom name="right_ankle_roll_geom" type="sphere" size="0.020" rgba="0.8 0.4 0.1 1"/>
-                <body name="right_ft_sensor" pos="0 0 0">
-                  <body name="right_foot" pos="0.05 0 -0.0800">
-                    <site name="right_ft_site" pos="0 0 0"/>
-                    <inertial mass="0.15" pos="0.000000 0.000000 0.000000" diaginertia="0.00010000 0.00030125 0.00036125"/>
-                    <geom name="right_foot_geom" type="box" size="0.075 0.040 0.020" pos="0 0 0.020" solref="0.05 1.0" rgba="0.1 0.1 0.1 1"/>
+      <body name="right_hip_yaw_link" pos="0 -0.0875 0">
+        <joint name="right_hip_yaw" type="hinge" axis="0 0 1" range="-0.523599 0.523599"/>
+        <inertial mass="0.5" pos="0.000000 0.000000 0.000000" diaginertia="0.00018000 0.00018000 0.00018000"/>
+        <geom name="right_hip_yaw_geom" type="sphere" size="0.03" contype="0" conaffinity="0" rgba="0.8 0.4 0.1 1"/>
+        <body name="right_hip_roll_link" pos="0 0 0">
+          <joint name="right_hip_roll" type="hinge" axis="1 0 0" range="-0.523599 0.523599"/>
+          <inertial mass="0.3" pos="0.000000 0.000000 0.000000" diaginertia="0.00010800 0.00010800 0.00010800"/>
+          <geom name="right_hip_roll_geom" type="sphere" size="0.03" rgba="0.8 0.4 0.1 1"/>
+          <body name="right_thigh" pos="0 0 0">
+            <joint name="right_hip_pitch" type="hinge" axis="0 1 0" range="-0.523599 1.919862"/>
+            <inertial mass="0.9" pos="0.000000 0.000000 -0.150000" diaginertia="0.00711000 0.00711000 0.00072000"/>
+            <geom name="right_thigh_geom" type="cylinder" size="0.040 0.1500" pos="0 0 -0.1500" rgba="0.2 0.2 0.8 1"/>
+            <body name="right_shin" pos="0 0 -0.3000">
+              <joint name="right_knee_pitch" type="hinge" axis="0 1 0" range="0.000000 2.443461"/>
+              <inertial mass="0.7" pos="0.000000 0.000000 -0.150000" diaginertia="0.00546437 0.00546437 0.00042875"/>
+              <geom name="right_shin_geom" type="cylinder" size="0.035 0.1500" pos="0 0 -0.1500" rgba="0.2 0.2 0.8 1"/>
+              <body name="right_ankle" pos="0 0 -0.3000">
+                <joint name="right_ankle_pitch" type="hinge" axis="0 1 0" range="-0.523599 0.523599"/>
+                <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00008750 0.00008750 0.00008750"/>
+                <geom name="right_ankle_geom" type="sphere" size="0.025" rgba="0.8 0.4 0.1 1"/>
+                <body name="right_ankle_roll" pos="0 0 0">
+                  <joint name="right_ankle_roll" type="hinge" axis="1 0 0" range="-0.261799 0.261799"/>
+                  <inertial mass="0.35" pos="0.000000 0.000000 0.000000" diaginertia="0.00005600 0.00005600 0.00005600"/>
+                  <geom name="right_ankle_roll_geom" type="sphere" size="0.020" rgba="0.8 0.4 0.1 1"/>
+                  <body name="right_ft_sensor" pos="0 0 0">
+                    <body name="right_foot" pos="0.05 0 -0.0800">
+                      <site name="right_ft_site" pos="0 0 0"/>
+                      <inertial mass="0.15" pos="0.000000 0.000000 0.000000" diaginertia="0.00010000 0.00030125 0.00036125"/>
+                      <geom name="right_foot_geom" type="box" size="0.075 0.040 0.020" pos="0 0 0.020" solref="0.05 1.0" rgba="0.1 0.1 0.1 1"/>
+                    </body>
                   </body>
                 </body>
               </body>
@@ -100,12 +110,16 @@
   </worldbody>
   <contact>
     <exclude body1="pelvis" body2="left_thigh"/>
+    <exclude body1="pelvis" body2="left_hip_roll_link"/>
     <exclude body1="pelvis" body2="right_thigh"/>
+    <exclude body1="pelvis" body2="right_hip_roll_link"/>
     <exclude body1="pelvis" body2="torso_roll_link"/>
     <exclude body1="pelvis" body2="torso"/>
     <exclude body1="torso_pitch_link" body2="torso"/>
   </contact>
   <actuator>
+    <position name="act_left_hip_yaw" joint="left_hip_yaw" kp="150" forcerange="-11.200000 11.200000" ctrlrange="-0.523599 0.523599"/>
+    <position name="act_right_hip_yaw" joint="right_hip_yaw" kp="150" forcerange="-11.200000 11.200000" ctrlrange="-0.523599 0.523599"/>
     <position name="act_left_hip_pitch" joint="left_hip_pitch" kp="150" forcerange="-11.200000 11.200000" ctrlrange="-0.523599 1.919862"/>
     <position name="act_right_hip_pitch" joint="right_hip_pitch" kp="150" forcerange="-11.200000 11.200000" ctrlrange="-0.523599 1.919862"/>
     <position name="act_left_hip_roll" joint="left_hip_roll" kp="150" forcerange="-11.200000 11.200000" ctrlrange="-0.523599 0.523599"/>
