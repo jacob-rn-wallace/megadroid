@@ -2976,12 +2976,20 @@ servo as every joint); they do not use it.
 
 **Re-tune (same method as the 2026-09-08 and 2026-09-10 entries):** coordinate descent on K_DCM_RECEDE x
 K_DCM_Y_SCALE x K_ADM_RECEDE, scored on peak tilt at n = 8..40 first, then on the push battery. New values
--0.92 / 1.1 / 7500 (were -0.77 / 1.5 / 5000): flat 9.1 deg from n=8 through n=40. This is a narrow ridge, like
+-0.92 / 1.1 / 7500 first (were -0.77 / 1.5 / 5000; superseded by the push-first result below): flat 9.1 deg from n=8 through n=40. This is a narrow ridge, like
 every earlier optimum: K_DCM_Y_SCALE 1.05 or 1.15, or K_ADM_RECEDE <= 6000, fall by n=30. 19 gain sets were scored
 on the push battery and the best was 12/24 at -0.94 / 1.1 / 7500, which falls by n=25, so -0.92 (11/24, clean to n=40) was kept; the rest scored 2-11, the old gains 4. So the
-retune recovers nominal walking (clean range 16 -> at least 40 steps) but NOT push survival: 11/24 against 19/24
-on the 5-DOF legs. That is the number to beat. Candidates were chosen for nominal walking first and ranked by
-pushes second; a push-first search was not run.
+coordinate-descent retune recovered nominal walking (clean range 16 -> at least 40 steps) but NOT push survival
+(11/24 against 19/24 on the 5-DOF legs).
+
+**Push-first search (same day):** a random search over K_DCM_RECEDE x K_DCM_Y_SCALE x K_ADM_RECEDE x K_IC (60
+points, then 40 around the best; 108 gain sets scored in total including the earlier ones) ranked by the 24-run push
+battery first. Lower K_DCM_Y_SCALE (~0.7 rather than 1.1) is what helps. Adopted -0.89 / 0.69 / 5000: 17/24 pushes
+(lat5 6, lat10 6, sag5 2, sag10 3), clean unpushed through n=25, falls at n=40. Neighbours scored 16-17/24 (e.g.
+-0.93 / 0.71 / 3500 at 17, -0.88 / 0.70 / 4000 at 16), so it is not a single lucky point, but none of the high-push
+sets walks clean to n=40: this is a trade of nominal range (40 -> 25 steps; 5-DOF baseline 16) for push survival
+(11 -> 17 of 24; 5-DOF baseline 19). Pushes are scored at 12 steps, which every candidate walks clean. K_IC > 0 did
+not help the winners.
 
 **Not done:** `sweep_estimates.py` and `sweep_sole.py` (7 and 15 min) were not re-run, so the robustness of the
 conclusions to the placeholder ranges is unchecked on the 6-DOF model. `log_ft_loads` was re-run; its numbers are

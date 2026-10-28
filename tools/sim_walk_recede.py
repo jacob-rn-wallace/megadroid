@@ -882,11 +882,13 @@ def _selftest_stage2(model):
 # 0.5355 -> 0.5486m). The -0.77 / 1.5 / 5000 point above fell to a 6-step clean
 # range (8.46deg at n=4/6, 12.9deg at n=8, falls from n=10) on the heavier
 # model, from 16 steps clean (7.36deg) on the same code before the change.
-# Coordinate-descent re-sweep (tools/CLAUDE.md, 2026-10-27): -0.92 / 1.1 / 7500
-# is flat 9.1deg from n=8 through n=40. Same caveat as every gain here: it is
-# a narrow ridge (K_DCM_Y_SCALE 1.05 and 1.15 and K_ADM_RECEDE <= 6000 all fall
-# by n=30), not a robust optimum.
-K_DCM_RECEDE = -0.92
+# A first coordinate-descent re-sweep chose -0.92 / 1.1 / 7500 (clean through
+# n=40, but only 11/24 pushes). A push-first random search then found
+# -0.89 / 0.69 / 5000: 17/24 pushes (5-DOF legs: 19/24), clean through n=25,
+# falls at n=40 (tools/CLAUDE.md, 2026-10-27). That is a trade of nominal range
+# for push survival, chosen deliberately. Same caveat as every gain here: a
+# narrow ridge, not a robust optimum.
+K_DCM_RECEDE = -0.89
 # K_DCM_Y_SCALE: the lateral DCM gain, as a multiple of K_DCM_RECEDE.
 #
 # Until 2026-09-10 K_DCM_RECEDE was applied to BOTH axes with a single value.
@@ -908,7 +910,7 @@ K_DCM_RECEDE = -0.92
 # 8.76 -> 6.27deg, and the clean step range DOUBLES from 8 to 16 at the real
 # 80:1 torque envelope. Verified across four independent step counts
 # (8/10/12/16), all deterministic no-push runs.
-K_DCM_Y_SCALE = 1.1    # was 1.5 until 2026-10-27, see K_DCM_RECEDE
+K_DCM_Y_SCALE = 0.69   # was 1.5 until 2026-10-27, see K_DCM_RECEDE
 
 # K_ADM_RECEDE: this file's own admittance gain -- deliberately NOT lw.K_ADM,
 # same rationale as K_DCM_RECEDE above (this file's receding-horizon loop
@@ -931,7 +933,7 @@ K_DCM_Y_SCALE = 1.1    # was 1.5 until 2026-10-27, see K_DCM_RECEDE
 # other gain in this stack, not a robustness improvement, just a nominal-
 # walking one. NOT shared back into lw.K_ADM -- lw.run_walk's own stability
 # margin for this value was not re-verified this pass.
-K_ADM_RECEDE = 7500    # was 5000 until 2026-10-27, see K_DCM_RECEDE
+K_ADM_RECEDE = 5000    # re-tuned 2026-10-27, see K_DCM_RECEDE
 
 # Slow outer loop cadence -- footstep retarget + short-horizon replan. Not
 # every physics tick (dt=0.002s, 500Hz): the DCM/CoM trajectory only needs
