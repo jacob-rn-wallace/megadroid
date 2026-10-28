@@ -49,13 +49,17 @@ sim_measured_loads:
   # A floor on real loads: the contact model is smoother than a real heel strike, and
   # the controller only walks at ~0.4-0.5 km/h.
   #
-  # RE-LOGGED 2026-10-27 on the 6-DOF-leg model (hip_yaw added, 10.6 kg, re-tuned gains; only
-  # 11 of 24 pushes survive, so fewer runs are pooled). Peak: fx 49.8, fy 40.7, fz 171.4,
-  # mx 6.8, my 10.8, mz 4.0. p99: fx 28.6, fy 26.4, fz 124.5, mx 4.9, my 7.8, mz 2.9.
-  # Against the values below: fy -13%, mz -20%, my +8%, the rest within 2%. NOT adopted here: peak is the design basis that sizing.py and
-  # design_synthesis.py (and so the build candidate and its checks) were computed from, and
-  # swapping it silently would leave them stale. Re-run both with the new values before
-  # changing it.
+  # RE-LOGGED 2026-10-27 on the 6-DOF-leg model (hip_yaw added, 10.6 kg, push-first re-tuned
+  # gains -0.89 / 0.69 / 5000; 17 of 24 pushes survive, so fewer runs are pooled). Peak: fx 48.6,
+  # fy 36.9, fz 205.8, mx 8.2, my 10.0, mz 4.7. p99: fx 26.4, fy 25.1, fz 124.1, mx 5.0, my 7.6,
+  # mz 2.9. Against the values below: fz +18% (the worst case is the lateral 10 N push), mx +19%,
+  # fy -21%, mz -6%, the rest within 3%. NOT adopted here: peak is the design basis that sizing.py
+  # and design_synthesis.py (and so the build candidate and its checks) were computed from.
+  # sizing.py WAS re-run with these values (2026-10-27, scratch copy of this file): worst member
+  # sensing-range load 523 -> 546 N (74% of the 75 kg rating), abuse 1045 -> 1092 N (148%), joint
+  # still holds (7.7 kN preload needed of 11.7 kN; opens above ~825 N), the chosen 2.4 x 4.5 mm neck
+  # still passes but buckling margin over 2x abuse shrinks to ~10% (2.4 kN against 2.2 kN).
+  # design_synthesis.py (layout search) was NOT re-run.
   peak:  {fx_n: 49.9, fy_n: 46.7, fz_n: 174.6, mx_nm: 6.9, my_nm: 10.0, mz_nm: 5.0}
   p99:   {fx_n: 27.2, fy_n: 23.1, fz_n: 112.2, mx_nm: 4.5, my_nm: 7.0, mz_nm: 2.6}
   vs_assumed_peak: >
