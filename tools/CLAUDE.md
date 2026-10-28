@@ -2991,8 +2991,19 @@ sets walks clean to n=40: this is a trade of nominal range (40 -> 25 steps; 5-DO
 (11 -> 17 of 24; 5-DOF baseline 19). Pushes are scored at 12 steps, which every candidate walks clean. K_IC > 0 did
 not help the winners.
 
-**Not done:** `sweep_estimates.py` and `sweep_sole.py` (7 and 15 min) were not re-run, so the robustness of the
-conclusions to the placeholder ranges is unchecked on the 6-DOF model. `log_ft_loads` was re-run; its numbers are
-noted in `design/ft_sensor.yaml` but not adopted as the design basis (hardware sizing was computed from the old
-ones). Hip-yaw use (turning, foot yaw at placement, yaw reaction torque) is future work; the walkers are planar.
+**Follow-up checks (2026-10-28, after the push-first gains).**
+- `sweep_estimates.py` on the 6-DOF model: standing 16/16 robust; 8-step recede 15/16 (fails only at the stiffest
+  sole, tc 0.005); 16-step recede only 2/16 (was 10/16 on the 5-DOF legs), though the current nominal point is
+  clean (7.67 deg); both pushes still flip (0-11 of 12). **`sim_walk_lipm.py --steps 10` now FALLS at all 16 points,
+  including the nominal one (94.6 deg; it was 6.82 on 5-DOF legs).** The gate does not catch this: it only runs
+  the lipm selftest. A coarse grid of 36 K_DCM x K_DCM_Y_SCALE x K_ADM settings (n=10 and 16) rescued none, so the
+  lipm walker is left un-retuned; it is superseded by `sim_walk_recede.py`, which is the walker that is tuned.
+- `sweep_sole.py`: the passing window (stands, walks 8 and 16, survives >= half of 5 N and 10 N) has 5 points
+  (damp 0.5 tc 0.060; 1.0 at 0.040, 0.050, 0.080; 2.0 at 0.060). The nominal (damp 1.0, tc 0.050) is inside it.
+  Damp 4.0 has none.
+- F/T loads re-logged with the final gains and sizing re-run: see the comment block in `design/ft_sensor.yaml`.
+  Fz peak 205.8 N (+18%); the build candidate still passes with less buckling margin. Not adopted as the design
+  basis, and the layout search (`design_synthesis.py`) was not re-run.
+
+**Not done:** hip-yaw use (turning, foot yaw at placement, yaw reaction torque) is future work; the walkers are planar.
 The locked-yaw and old-gain comparisons were run once each: deterministic but, as ever, knife-edge.
